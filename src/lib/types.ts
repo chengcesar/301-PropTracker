@@ -1,0 +1,144 @@
+/**
+ * Shared domain types — align with PROPFLOW_CONTEXT.md when migrating
+ * the rental-manager.html prototype.
+ */
+
+export type ContractStatus = 'active' | 'archived' | 'draft'
+
+export type IncrementType = 'ipc+' | 'ipc' | 'fixed' | 'none'
+
+export interface Contract {
+  id: number
+  status: ContractStatus
+  tenant: string
+  contractManager: string
+  monthlyRent: number
+  startDate: string
+  endDate: string
+  paymentDay: number
+  deposit: number
+  increment: IncrementType
+  ipcExtra: number
+  adminFee: number
+  notes: string
+}
+
+export interface MonthData {
+  status: 'rented' | 'vacant'
+  incomeOverride: number | null
+  expenses: Record<string, number | { label: string; amount: number }>
+}
+
+export interface CapexItem {
+  id: number
+  date: string
+  desc: string
+  cat: 'Improvement' | 'Equipment' | 'Repair' | 'Other'
+  amount: number
+}
+
+export type OccupantRelation = 'Owner' | 'Family' | 'Caretaker' | 'Other'
+
+export interface Occupant {
+  name: string
+  relation: OccupantRelation
+  since?: string
+  notes?: string
+}
+
+export type TaxStatus = 'paid' | 'pending'
+
+export interface TaxItem {
+  id: number
+  taxId: string
+  amount: number
+  dueDate: string
+  status: TaxStatus
+}
+
+export interface ServiceEntry {
+  id: number
+  provider: string
+  type: string
+  accountNumber: string
+  monthlyCost: number
+  notes: string
+}
+
+export interface OwnershipEntry {
+  id: number
+  name: string
+  idNumber: string
+  equityPct: number
+  notes: string
+}
+
+export interface MortgageInfo {
+  hasMortgage: boolean
+  lender: string
+  loanNumber: string
+  originalAmount: number | null
+  outstandingBalance: number | null
+  monthlyPayment: number | null
+  interestRate: number | null
+  rateType: 'fixed' | 'variable' | ''
+  termMonths: number | null
+  startDate: string
+  endDate: string
+}
+
+export interface FactSheet {
+  propertyType: string
+  estrato: number | null
+  yearBuilt: number | null
+  lastRenovation: number | null
+  floor: number | null
+  matriculaInmobiliaria: string
+  cedulaCatastral: string
+  chip: string
+  customId: string
+  purchasePrice: number | null
+  purchaseDate: string
+  currentValue: number | null
+  valuationDate: string
+  photos: string[]
+  owners?: OwnershipEntry[]
+  mortgage?: MortgageInfo
+  contacts: PropertyContact[]
+  notes: string
+}
+
+export interface PropertyContact {
+  id: number
+  name: string
+  role: string
+  phone: string
+  email: string
+}
+
+export interface Property {
+  id: number
+  owner: string
+  name: string
+  address: string
+  neighbourhood: string
+  city: string
+  area: number
+  bedrooms: number
+  bathrooms: number
+  parking: number
+  storageUnits: number
+  concierge: boolean
+  terrace: number
+  balcony: number
+  year: number
+  occupant?: Occupant
+  customExpenseCats?: Record<number, string[]>
+  hiddenExpenseCats?: Record<number, string[]>
+  contracts: Contract[]
+  months: Record<number, Record<number, MonthData>>
+  capex: CapexItem[]
+  taxes: { items: TaxItem[] }
+  services?: Record<number, ServiceEntry[]>
+  factSheet?: FactSheet
+}

@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+@theme {
+  --font-heading: 'Fraunces', serif;
+  --font-data:    'DM Mono', monospace;
+}

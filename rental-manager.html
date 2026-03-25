@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PropFlow — Rental Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #F7F6F2; --surface: #FFFFFF; --surface2: #F0EEE8;
+    --border: #E2DED6; --border2: #CBC7BE; --text: #1A1917;
+    --text2: #6B6860; --text3: #9E9C97;
+    --accent-bg: #1A1917; --accent-text: #F7F6F2;
+    --green: #1A6B47; --green-bg: #E8F5EE;
+    --red: #9B2020; --red-bg: #FCEAEA;
+    --amber: #8A5A00; --amber-bg: #FEF3DC;
+    --purple: #4A3FA0; --purple-bg: #EEEDF8;
+    --radius: 10px; --radius-sm: 6px;
+    --font: 'DM Sans', sans-serif; --mono: 'DM Mono', monospace;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  html, body { height: 100%; font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+  #root { height: 100%; display: flex; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  input[type=text], input[type=number], input[type=date], select, textarea {
+    width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--text); font-family: var(--font); font-size: 13px;
+    outline: none; transition: border-color 0.15s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--border2); }
+  input[type=checkbox] { width: auto; accent-color: var(--accent-bg); cursor: pointer; }
+  button {
+    padding: 7px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--text); font-family: var(--font); font-size: 13px;
+    cursor: pointer; transition: all 0.12s; white-space: nowrap;
+  }
+  button:hover { background: var(--surface2); border-color: var(--border2); }
+  button.primary { background: var(--accent-bg); color: var(--accent-text); border-color: var(--accent-bg); }
+  button.primary:hover { opacity: 0.88; }
+  button.ghost { background: transparent; border-color: transparent; color: var(--text2); padding: 5px 10px; }
+  button.ghost:hover { background: var(--surface2); border-color: transparent; color: var(--text); }
+  button.danger { color: var(--red); border-color: transparent; background: transparent; }
+  button.danger:hover { background: var(--red-bg); }
+  button.warning { color: var(--amber); border-color: var(--amber); background: transparent; }
+  button.warning:hover { background: var(--amber-bg); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .sidebar {
+    width: 220px; min-width: 220px; background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; height: 100vh; position: sticky; top: 0; overflow-y: auto;
+  }
+  .sidebar-logo { padding: 20px 18px 16px; border-bottom: 1px solid var(--border); }
+  .sidebar-logo .logo-mark { font-size: 16px; font-weight: 600; letter-spacing: -0.02em; }
+  .sidebar-logo .logo-sub { font-size: 11px; color: var(--text3); margin-top: 1px; font-family: var(--mono); }
+  .sidebar-section { padding: 12px 10px 4px; font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }
+  .sidebar-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm); margin: 1px 8px; cursor: pointer; color: var(--text2); font-size: 13px; transition: all 0.1s; }
+  .sidebar-item:hover { background: var(--surface2); color: var(--text); }
+  .sidebar-item.active { background: var(--accent-bg); color: var(--accent-text); }
+  .sidebar-item .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot.rented { background: #1A6B47; } .dot.vacant { background: #8A5A00; }
+  .sidebar-add { margin: 8px; }
+  .sidebar-footer { margin-top: auto; padding: 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text3); }
+  .main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; min-width: 0; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 28px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 10; }
+  .topbar-title { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+  .topbar-sub { font-size: 12px; color: var(--text3); }
+  .year-btn { padding: 5px 10px; font-size: 12px; }
+  .year-btn.active { background: var(--accent-bg); color: var(--accent-text); border-color: var(--accent-bg); }
+  .tabs { display: flex; gap: 2px; padding: 16px 28px 0; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .tab-btn { padding: 8px 16px; font-size: 13px; background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0; color: var(--text2); cursor: pointer; transition: all 0.12s; margin-bottom: -1px; }
+  .tab-btn:hover { color: var(--text); background: transparent; }
+  .tab-btn.active { color: var(--text); border-bottom-color: var(--text); font-weight: 500; }
+  .content { padding: 28px; flex: 1; }
+  .kpi-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+  .kpi-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; font-family: var(--mono); }
+  .kpi-value { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+  .kpi-value.green { color: var(--green); } .kpi-value.red { color: var(--red); } .kpi-value.purple { color: var(--purple); }
+  .kpi-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .sec-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .sec-title { font-size: 12px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; font-family: var(--mono); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .card-inner { padding: 18px 20px; }
+  .card + .card { margin-top: 16px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 11px; color: var(--text2); font-weight: 500; }
+  .hint { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .contract-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+  .month-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
+  .month-tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; cursor: pointer; transition: all 0.12s; }
+  .month-tile:hover { border-color: var(--border2); box-shadow: var(--shadow); transform: translateY(-1px); }
+  .month-tile.vacant { border-color: #D4A843; background: #FFFBF0; }
+  .month-tile.has-override { border-color: #9590C8; }
+  .month-tile.pending { border-left: 3px solid var(--amber); }
+  .month-tile.complete { border-left: 3px solid var(--green); }
+  .month-tile.no-contract { border: 1px dashed var(--border2); opacity: 0.65; cursor: default; }
+  .mt-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .mt-month { font-size: 13px; font-weight: 600; }
+  .mt-income { font-size: 15px; font-weight: 600; color: var(--green); margin-bottom: 2px; font-family: var(--mono); }
+  .mt-expense { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+  .mt-footer { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .mt-net { font-size: 12px; font-weight: 500; font-family: var(--mono); }
+  .mt-net.pos { color: var(--green); } .mt-net.neg { color: var(--red); }
+  .badge { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 500; font-family: var(--mono); }
+  .badge.rented { background: var(--green-bg); color: var(--green); }
+  .badge.vacant { background: var(--amber-bg); color: var(--amber); }
+  .badge.override { background: var(--purple-bg); color: var(--purple); }
+  .badge.pending { background: var(--amber-bg); color: var(--amber); }
+  .badge.auto { background: var(--green-bg); color: var(--green); }
+  .badge.active-c { background: var(--green-bg); color: var(--green); }
+  .badge.draft-c { background: var(--surface2); color: var(--text3); border: 1px solid var(--border); }
+  .badge.archived-c { background: var(--surface2); color: var(--text3); }
+  .wf-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .wf-table th { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; padding: 8px 14px; text-align: right; border-bottom: 1px solid var(--border); font-family: var(--mono); font-weight: 400; background: var(--surface); }
+  .wf-table th:first-child { text-align: left; }
+  .wf-table td { padding: 9px 14px; text-align: right; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12px; }
+  .wf-table td:first-child { text-align: left; font-family: var(--font); font-size: 13px; }
+  .wf-table tr.indent td:first-child { padding-left: 30px; color: var(--text2); font-size: 12px; }
+  .wf-table tr.subtotal td { background: var(--surface2); font-weight: 500; }
+  .wf-table tr.subtotal td:first-child { font-family: var(--font); }
+  .wf-table tr.total-row td { background: var(--accent-bg); color: var(--accent-text); font-weight: 600; border-bottom: none; }
+  .wf-table tr.total-row td:first-child { font-family: var(--font); }
+  .wf-table tr.section-hdr td { background: var(--surface2); color: var(--text3); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 5px 14px; font-family: var(--mono); }
+  .wf-bar { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+  .wf-bar-fill { height: 100%; border-radius: 2px; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .modal { background: var(--surface); border-radius: var(--radius); width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+  .modal-sm { max-width: 420px; }
+  .modal-header { padding: 18px 20px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; }
+  .modal-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .modal-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .modal-body { padding: 18px 20px; }
+  .modal-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface2); border-radius: 0 0 var(--radius) var(--radius); }
+  .exp-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  .exp-table th { font-size: 10px; color: var(--text3); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.05em; }
+  .exp-table th:last-child { text-align: right; }
+  .exp-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .exp-table td:last-child { width: 130px; text-align: right; }
+  .exp-auto { font-size: 12px; color: var(--text3); font-family: var(--mono); text-align: right; }
+  .capex-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .capex-item:last-child { border-bottom: none; }
+  .filter-row { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .filter-pill { font-size: 11px; padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; transition: all 0.1s; color: var(--text2); }
+  .filter-pill:hover { border-color: var(--border2); color: var(--text); }
+  .filter-pill.active { background: var(--accent-bg); color: var(--accent-text); border-color: var(--accent-bg); }
+  .cf-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .cf-table th { padding: 8px 12px; text-align: right; font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); font-family: var(--mono); font-weight: 400; background: var(--surface); white-space: nowrap; }
+  .cf-table th:first-child { text-align: left; }
+  .cf-table td { padding: 9px 12px; text-align: right; border-bottom: 1px solid var(--border); font-family: var(--mono); white-space: nowrap; }
+  .cf-table td:first-child { text-align: left; font-family: var(--font); font-weight: 500; }
+  .cf-table tr.vacant-row td { background: #FFFBF0; }
+  .cf-table tr.no-contract-row td { background: var(--surface2); color: var(--text3); }
+  .cf-table tr.total-row td { background: var(--accent-bg); color: var(--accent-text); font-weight: 600; border-bottom: none; }
+  /* Contract timeline */
+  .contract-timeline { position: relative; padding-left: 28px; }
+  .ct-line { position: absolute; left: 10px; top: 8px; bottom: 8px; width: 1px; background: var(--border); }
+  .ct-item { position: relative; margin-bottom: 14px; }
+  .ct-dot { position: absolute; left: -22px; top: 16px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border); background: var(--surface); }
+  .ct-dot.active { background: var(--green); border-color: var(--green); }
+  .ct-dot.archived { background: var(--surface2); border-color: var(--border2); }
+  .ct-dot.draft { background: var(--surface); border-color: var(--border2); }
+  .ct-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+  .ct-card.active-card { border-color: var(--green); border-width: 1.5px; }
+  .ct-card.draft-card { border-style: dashed; }
+  .ct-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  .ct-tenant { font-size: 14px; font-weight: 600; }
+  .ct-dates { font-size: 11px; color: var(--text3); margin-top: 2px; font-family: var(--mono); }
+  .ct-fields { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px 16px; }
+  .ct-field-label { font-size: 10px; color: var(--text3); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .ct-field-val { font-size: 12px; font-weight: 500; font-family: var(--mono); }
+  .ct-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .ct-gap { margin-bottom: 14px; padding: 8px 12px; border: 1px dashed var(--border2); border-radius: var(--radius-sm); display: flex; align-items: center; gap: 8px; }
+  .month-bar-row { display: flex; gap: 2px; }
+  .month-bar-seg { flex: 1; height: 6px; border-radius: 3px; }
+  .stepper { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; }
+  .step-pill { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text3); }
+  .step-num { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; flex-shrink: 0; }
+  .step-pill.active .step-num { background: var(--accent-bg); color: var(--accent-text); border-color: var(--accent-bg); }
+  .step-pill.active { color: var(--text); font-weight: 500; }
+  .step-pill.done .step-num { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+  .step-sep { flex: 1; height: 1px; background: var(--border); min-width: 16px; }
+  .flex { display: flex; } .flex-col { display: flex; flex-direction: column; }
+  .gap4{gap:4px} .gap8{gap:8px} .gap12{gap:12px} .gap16{gap:16px}
+  .mt8{margin-top:8px} .mt12{margin-top:12px} .mt16{margin-top:16px} .mt24{margin-top:24px}
+  .mb8{margin-bottom:8px} .mb12{margin-bottom:12px} .mb16{margin-bottom:16px} .mb24{margin-bottom:24px}
+  .text2{color:var(--text2)} .text3{color:var(--text3)} .mono{font-family:var(--mono)}
+  .fw5{font-weight:500} .fw6{font-weight:600} .fs11{font-size:11px} .fs12{font-size:12px} .fs13{font-size:13px}
+  .info-box { background: var(--surface2); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 12px; color: var(--text2); }
+  .warn-box { background: var(--amber-bg); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 12px; color: var(--amber); }
+  .divider { height: 1px; background: var(--border); margin: 16px 0; }
+  .align-center{align-items:center} .justify-between{justify-content:space-between}
+  .input-sm { font-size: 12px; padding: 5px 8px; }
+  .empty-state { text-align: center; padding: 40px 24px; color: var(--text3); }
+  .empty-title { font-size: 14px; font-weight: 500; color: var(--text2); margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTHS_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const EXPENSE_CATS = [
+  { key: 'admin', label: 'Admin / mgmt', type: 'auto' },
+  { key: 'electricity', label: 'Electricity', type: 'manual' },
+  { key: 'water', label: 'Water', type: 'manual' },
+  { key: 'gas', label: 'Gas', type: 'manual' },
+  { key: 'internet', label: 'Internet', type: 'auto' },
+  { key: 'cleaning', label: 'Cleaning', type: 'manual' },
+  { key: 'maintenance', label: 'Maintenance', type: 'manual' },
+];
+const CAPEX_CATS = ['Improvement','Equipment','Repair','Other'];
+const INCREMENT_OPTS = [{value:'ipc+',label:'IPC + fixed %'},{value:'ipc',label:'IPC only'},{value:'fixed',label:'Fixed %'},{value:'none',label:'None'}];
+
+const fmt = (n) => {
+  if (n === null || n === undefined || n === '') return '—';
+  return (n < 0 ? '−' : '') + Math.abs(Math.round(n)).toLocaleString('es-CO');
+};
+const fmtM = (n) => !n && n !== 0 ? '—' : (Math.round(n/1000000*10)/10)+'M';
+const parseNum = (s) => parseFloat(String(s).replace(/[,.\s]/g,'').replace(/(\d{3})$/,'.$1'))||parseFloat(String(s).replace(/[^\d]/g,''))||0;
+
+function contractForMonth(contracts, year, mIdx) {
+  const d = new Date(year, mIdx, 15);
+  return contracts.find(c => {
+    if (c.status === 'draft') return false;
+    return d >= new Date(c.startDate) && d <= new Date(c.endDate);
+  }) || null;
+}
+
+function getMonthData(prop, mIdx) {
+  const contract = contractForMonth(prop.contracts, prop.year, mIdx);
+  const m = prop.months[mIdx] || { status: 'rented', incomeOverride: null, expenses: {} };
+  const rent = contract ? contract.monthlyRent : 0;
+  const income = !contract ? 0 : m.status === 'vacant' ? 0 : (m.incomeOverride !== null ? m.incomeOverride : rent);
+  const autoExp = contract ? { admin: contract.adminFee||0, internet: contract.internet||0 } : {};
+  const manExp = { ...m.expenses };
+  const totalOpex = Object.values(autoExp).reduce((a,b)=>a+b,0) + Object.values(manExp).filter(v=>typeof v==='number').reduce((a,b)=>a+b,0);
+  return { income, manExp, autoExp, totalOpex, noi: income - totalOpex, status: m.status, incomeOverride: m.incomeOverride, contract };
+}
+
+function calcAnnual(prop) {
+  let gpi=0, vacancy=0, totalOpex=0;
+  for (let i=0;i<12;i++) {
+    const c = contractForMonth(prop.contracts, prop.year, i);
+    const m = getMonthData(prop, i);
+    if (c) gpi += c.monthlyRent;
+    if (c && m.status === 'vacant') vacancy += c.monthlyRent;
+    else if (c && m.incomeOverride !== null && m.incomeOverride < c.monthlyRent) vacancy += c.monthlyRent - m.incomeOverride;
+    totalOpex += m.totalOpex;
+  }
+  const totalCapex = prop.capex.reduce((a,b)=>a+b.amount,0);
+  const taxes = (prop.taxes.predial||0) + (prop.taxes.incomeTax||0);
+  const egi = gpi - vacancy;
+  const noi = egi - totalOpex;
+  return { gpi, vacancy, egi, totalOpex, noi, totalCapex, taxes, netCf: noi - totalCapex - taxes };
+}
+
+const activeContract = (prop) => prop.contracts.find(c => c.status === 'active') || null;
+
+// ── Initial data ─────────────────────────────────────────────────────────────
+const initProps = () => [
+  {
+    id: 1, name: 'Apto 102', address: 'Calle 78 #5-32', type: '2-bed', ref: 'AAA0093HHNN', year: 2026,
+    contracts: [
+      { id: 101, status: 'archived', tenant: 'Carlos Mejía', monthlyRent: 1650000, startDate: '2025-02-01', endDate: '2025-12-31', paymentDay: 2, deposit: 2, increment: 'ipc+', ipcExtra: 1, adminFee: 1200000, internet: 100000, notes: 'First tenant. Left on good terms.' },
+      { id: 102, status: 'active', tenant: 'Empresa S.A.S.', monthlyRent: 1808629, startDate: '2026-02-01', endDate: '2027-01-31', paymentDay: 2, deposit: 2, increment: 'ipc+', ipcExtra: 1, adminFee: 1320099, internet: 100000, notes: '' },
+    ],
+    months: {
+      0: { status: 'rented', incomeOverride: null, expenses: { electricity: 247140, water: 175000, gas: 0, cleaning: 0, maintenance: 0 } },
+      1: { status: 'rented', incomeOverride: null, expenses: { electricity: 279000, water: 175000, gas: 0, cleaning: 0, maintenance: 0 } },
+      2: { status: 'rented', incomeOverride: null, expenses: { electricity: 300000, water: 199000, gas: 0, cleaning: 0, maintenance: 0 } },
+      3: { status: 'rented', incomeOverride: null, expenses: { electricity: 300000, water: 0, gas: 0, cleaning: 0, maintenance: 0 } },
+    },
+    capex: [{ id: 1, date: '2026-03-15', desc: 'Bathroom fixtures replacement', cat: 'Improvement', amount: 2400000 }],
+    taxes: { predial: 3966000, incomeTax: 0 },
+  },
+  {
+    id: 2, name: 'Apto 103', address: 'Calle 78 #5-32', type: '2-bed', ref: 'AAA0093HH0E', year: 2026,
+    contracts: [
+      { id: 201, status: 'active', tenant: 'Juan Pérez', monthlyRent: 2360100, startDate: '2026-01-01', endDate: '2026-12-31', paymentDay: 1, deposit: 1, increment: 'ipc+', ipcExtra: 1, adminFee: 2360100, internet: 0, notes: '' },
+    ],
+    months: { 0: { status: 'rented', incomeOverride: null, expenses: { electricity: 0, water: 0, gas: 0, cleaning: 0, maintenance: 0 } } },
+    capex: [], taxes: { predial: 6674000, incomeTax: 0 },
+  },
+];
+
+// ── Contract Form ─────────────────────────────────────────────────────────────
+function ContractForm({ value, onChange }) {
+  const set = (k,v) => onChange({...value,[k]:v});
+  return (
+    <div className="contract-grid">
+      <div className="field" style={{gridColumn:'1/-1'}}><label>Tenant name</label><input value={value.tenant||''} onChange={e=>set('tenant',e.target.value)} placeholder="Name or company" /></div>
+      <div className="field"><label>Monthly rent (COP)</label><input type="text" value={value.monthlyRent||''} onChange={e=>set('monthlyRent',e.target.value)} /></div>
+      <div className="field"><label>Start date</label><input type="date" value={value.startDate||''} onChange={e=>set('startDate',e.target.value)} /></div>
+      <div className="field"><label>End date</label><input type="date" value={value.endDate||''} onChange={e=>set('endDate',e.target.value)} /></div>
+      <div className="field"><label>Payment day</label><input type="number" min="1" max="28" value={value.paymentDay||1} onChange={e=>set('paymentDay',parseInt(e.target.value))} /></div>
+      <div className="field"><label>Deposit (months)</label><select value={value.deposit||2} onChange={e=>set('deposit',parseInt(e.target.value))}>{[1,2,3].map(n=><option key={n}>{n}</option>)}</select></div>
+      <div className="field"><label>Annual increment</label><select value={value.increment||'ipc+'} onChange={e=>set('increment',e.target.value)}>{INCREMENT_OPTS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
+      {(value.increment==='ipc+'||!value.increment) && <div className="field"><label>% over IPC</label><input type="number" step="0.1" value={value.ipcExtra||1} onChange={e=>set('ipcExtra',parseFloat(e.target.value))} /></div>}
+      <div className="divider" style={{gridColumn:'1/-1'}} />
+      <div className="field"><label>Admin / mgmt fee (COP)</label><input type="text" value={value.adminFee||''} onChange={e=>set('adminFee',e.target.value)} /></div>
+      <div className="field"><label>Internet (COP)</label><input type="text" value={value.internet||0} onChange={e=>set('internet',e.target.value)} /></div>
+      <div className="field" style={{gridColumn:'1/-1'}}><label>Notes</label><textarea rows="2" value={value.notes||''} onChange={e=>set('notes',e.target.value)} placeholder="Optional" style={{resize:'vertical'}} /></div>
+    </div>
+  );
+}
+
+// ── New Contract Wizard ───────────────────────────────────────────────────────
+function NewContractModal({ prop, onSave, onClose }) {
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState({ tenant:'', monthlyRent:'', startDate:'', endDate:'', paymentDay:1, deposit:2, increment:'ipc+', ipcExtra:1, adminFee:'', internet:0, notes:'', activateNow:true });
+  const active = activeContract(prop);
+  const hasOverlap = active && form.startDate && active.status === 'active' && new Date(form.startDate) <= new Date(active.endDate);
+  const valid1 = form.tenant && form.monthlyRent && form.startDate && form.endDate;
+
+  const save = () => {
+    const newC = { ...form, id: Date.now(), status: form.activateNow ? 'active' : 'draft', monthlyRent: parseNum(form.monthlyRent), adminFee: parseNum(form.adminFee), internet: parseNum(form.internet) };
+    let contracts = [...prop.contracts];
+    if (form.activateNow) contracts = contracts.map(c => c.status === 'active' ? {...c, status:'archived'} : c);
+    contracts.push(newC);
+    onSave(contracts);
+    onClose();
+  };
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal">
+        <div className="modal-header">
+          <div><div className="modal-title">New contract — {prop.name}</div><div className="modal-sub">Set up a new rental agreement</div></div>
+          <button className="ghost" onClick={onClose} style={{fontSize:'18px',padding:'4px 8px'}}>×</button>
+        </div>
+        <div className="modal-body">
+          <div className="stepper">
+            {[['Contract details',1],['Review & activate',2]].map(([label,n],i)=>(
+              <React.Fragment key={n}>
+                {i>0&&<div className="step-sep"/>}
+                <div className={`step-pill${step===n?' active':step>n?' done':''}`}>
+                  <div className="step-num">{step>n?'✓':n}</div>{label}
+                </div>
+              </React.Fragment>
+            ))}
+          </div>
+          {step===1 && <ContractForm value={form} onChange={setForm} />}
+          {step===2 && (
+            <div>
+              {hasOverlap && <div className="warn-box mb16"><strong>Date overlap.</strong> Activating this contract will archive the current one with {active.tenant} (ends {active.endDate}).</div>}
+              <div className="card mb16"><div className="card-inner">
+                <div className="sec-title mb12">Summary</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px 20px'}}>
+                  {[['Tenant',form.tenant],['Rent','COP '+parseNum(form.monthlyRent).toLocaleString('es-CO')],['Period',form.startDate+' → '+form.endDate],['Increment',form.increment==='ipc+'?`IPC+${form.ipcExtra}%`:form.increment],['Admin fee','COP '+parseNum(form.adminFee).toLocaleString('es-CO')],['Deposit',form.deposit+' months']].map(([l,v])=>(
+                    <div key={l}><div className="fs11 text3 mb4">{l}</div><div className="fs13 fw5">{v}</div></div>
+                  ))}
+                </div>
+              </div></div>
+              <label className="flex gap8 align-center fs13" style={{cursor:'pointer'}}>
+                <input type="checkbox" checked={form.activateNow} onChange={e=>setForm(p=>({...p,activateNow:e.target.checked}))} />
+                Activate immediately {active?`(archives ${active.tenant})`:''}
+              </label>
+              {!form.activateNow && <div className="info-box mt8">Saved as draft — activate later from the Contracts tab.</div>}
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <div>{step>1&&<button className="ghost" onClick={()=>setStep(s=>s-1)}>← Back</button>}</div>
+          <div className="flex gap8">
+            <button onClick={onClose}>Cancel</button>
+            {step<2
+              ? <button className="primary" onClick={()=>setStep(2)} disabled={!valid1}>Review →</button>
+              : <button className="primary" onClick={save}>{form.activateNow?'Activate contract':'Save as draft'}</button>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Edit Contract Modal ───────────────────────────────────────────────────────
+function EditContractModal({ contract, onSave, onClose }) {
+  const [form, setForm] = useState({...contract});
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal">
+        <div className="modal-header">
+          <div><div className="modal-title">Edit — {contract.tenant}</div><div className="modal-sub">{contract.status==='archived'?'Archived contract (historical record)':'Active contract'}</div></div>
+          <button className="ghost" onClick={onClose} style={{fontSize:'18px',padding:'4px 8px'}}>×</button>
+        </div>
+        <div className="modal-body">
+          {contract.status==='archived'&&<div className="warn-box mb16">Editing an archived contract updates the historical record only.</div>}
+          <ContractForm value={form} onChange={setForm} />
+        </div>
+        <div className="modal-footer">
+          <span/>
+          <div className="flex gap8"><button onClick={onClose}>Cancel</button><button className="primary" onClick={()=>{onSave(form);onClose();}}>Save changes</button></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Contracts Tab ─────────────────────────────────────────────────────────────
+function ContractsTab({ prop, onUpdateProp }) {
+  const [newModal, setNewModal] = useState(false);
+  const [editModal, setEditModal] = useState(null);
+  const [confirmArchive, setConfirmArchive] = useState(null);
+
+  const sorted = [...prop.contracts].sort((a,b)=>new Date(b.startDate)-new Date(a.startDate));
+
+  const archiveContract = (id) => { onUpdateProp(p=>({...p,contracts:p.contracts.map(c=>c.id===id?{...c,status:'archived'}:c)})); setConfirmArchive(null); };
+  const activateContract = (id) => onUpdateProp(p=>({...p,contracts:p.contracts.map(c=>c.id===id?{...c,status:'active'}:c.status==='active'?{...c,status:'archived'}:c)}));
+  const deleteContract = (id) => { if(window.confirm('Delete this draft?')) onUpdateProp(p=>({...p,contracts:p.contracts.filter(c=>c.id!==id)})); };
+  const saveNew = (contracts) => onUpdateProp(p=>({...p,contracts}));
+  const saveEdit = (updated) => onUpdateProp(p=>({...p,contracts:p.contracts.map(c=>c.id===updated.id?{...updated,monthlyRent:parseNum(updated.monthlyRent),adminFee:parseNum(updated.adminFee)}:c)}));
+
+  const coverage = MONTHS.map((name,i)=>({ name, contract: contractForMonth(prop.contracts, prop.year, i) }));
+
+  return (
+    <div>
+      <div className="sec-hdr mb8">
+        <span className="sec-title">Coverage — {prop.year}</span>
+        <button className="primary" style={{fontSize:'12px',padding:'5px 14px'}} onClick={()=>setNewModal(true)}>+ New contract</button>
+      </div>
+      <div className="card mb24"><div className="card-inner">
+        <div className="month-bar-row mb8">
+          {coverage.map(({name,contract},i)=>(
+            <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+              <div className="month-bar-seg" style={{background:contract?'#1A6B47':'#E2DED6'}}/>
+              <span className="fs11 text3">{name}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap16">
+          <span className="fs11 text3 flex gap4 align-center"><span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:'#1A6B47'}}></span>Covered</span>
+          <span className="fs11 text3 flex gap4 align-center"><span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:'#E2DED6'}}></span>Vacant / no contract</span>
+          <span className="fs11 text3 mono" style={{marginLeft:'auto'}}>{coverage.filter(c=>c.contract).length} / 12 months covered</span>
+        </div>
+      </div></div>
+
+      <div className="sec-hdr mb12"><span className="sec-title">Contract history</span></div>
+      <div className="contract-timeline">
+        <div className="ct-line"/>
+        {sorted.length === 0 && (
+          <div className="empty-state"><div className="empty-title">No contracts yet</div><div className="fs12 text3 mt4">Add a contract to start tracking this property</div><button className="primary mt12" onClick={()=>setNewModal(true)}>+ Add first contract</button></div>
+        )}
+        {sorted.map((c, idx) => {
+          const prev = sorted[idx-1];
+          const gapExists = prev && new Date(c.endDate) < new Date(prev.startDate);
+          return (
+            <React.Fragment key={c.id}>
+              {gapExists && (
+                <div className="ct-gap">
+                  <span className="dot vacant" style={{flexShrink:0}}/>
+                  <div><div className="fs12 fw5" style={{color:'var(--amber)'}}>Vacancy gap</div><div className="fs11 text3">{c.endDate} → {prev.startDate}</div></div>
+                </div>
+              )}
+              <div className="ct-item">
+                <div className={`ct-dot ${c.status}`}/>
+                <div className={`ct-card ${c.status==='active'?'active-card':c.status==='draft'?'draft-card':''}`}>
+                  <div className="ct-header">
+                    <div>
+                      <div className="ct-tenant">{c.tenant||'—'}</div>
+                      <div className="ct-dates">{c.startDate} → {c.endDate}</div>
+                    </div>
+                    <span className={`badge ${c.status==='active'?'active-c':c.status==='draft'?'draft-c':'archived-c'}`}>{c.status==='active'?'Active':c.status==='draft'?'Draft':'Archived'}</span>
+                  </div>
+                  <div className="ct-fields mb8">
+                    <div><div className="ct-field-label">Rent</div><div className="ct-field-val">{c.monthlyRent?(c.monthlyRent).toLocaleString('es-CO'):'—'}</div></div>
+                    <div><div className="ct-field-label">Admin fee</div><div className="ct-field-val">{c.adminFee?(c.adminFee).toLocaleString('es-CO'):'—'}</div></div>
+                    <div><div className="ct-field-label">Increment</div><div className="ct-field-val">{c.increment==='ipc+'?`IPC+${c.ipcExtra}%`:c.increment}</div></div>
+                    <div><div className="ct-field-label">Deposit</div><div className="ct-field-val">{c.deposit} mo.</div></div>
+                  </div>
+                  {c.notes && <div className="info-box mb8 fs11">{c.notes}</div>}
+                  <div className="ct-actions">
+                    <button className="ghost fs12" onClick={()=>setEditModal(c)}>Edit</button>
+                    {c.status==='active' && <button className="warning fs12" onClick={()=>setConfirmArchive(c.id)}>Archive</button>}
+                    {c.status==='draft' && <>
+                      <button className="primary" style={{fontSize:'12px',padding:'4px 12px'}} onClick={()=>activateContract(c.id)}>Activate</button>
+                      <button className="danger fs12" onClick={()=>deleteContract(c.id)}>Delete draft</button>
+                    </>}
+                    {c.status==='archived' && <button className="ghost fs12" onClick={()=>activateContract(c.id)}>Reactivate</button>}
+                  </div>
+                </div>
+              </div>
+            </React.Fragment>
+          );
+        })}
+      </div>
+
+      {confirmArchive && (
+        <div className="modal-overlay" onClick={()=>setConfirmArchive(null)}>
+          <div className="modal modal-sm" onClick={e=>e.stopPropagation()}>
+            <div className="modal-header"><div><div className="modal-title">Archive contract?</div><div className="modal-sub">Property will show vacant until a new contract is added</div></div></div>
+            <div className="modal-body"><div className="warn-box">Historical expense data linked to this contract is preserved.</div></div>
+            <div className="modal-footer"><button className="ghost" onClick={()=>setConfirmArchive(null)}>Cancel</button><button className="warning" onClick={()=>archiveContract(confirmArchive)}>Archive contract</button></div>
+          </div>
+        </div>
+      )}
+      {newModal && <NewContractModal prop={prop} onSave={saveNew} onClose={()=>setNewModal(false)} />}
+      {editModal && <EditContractModal contract={editModal} onSave={saveEdit} onClose={()=>setEditModal(null)} />}
+    </div>
+  );
+}
+
+// ── Month Modal ───────────────────────────────────────────────────────────────
+function MonthModal({ prop, mIdx, onSave, onClose }) {
+  const contract = contractForMonth(prop.contracts, prop.year, mIdx);
+  const orig = prop.months[mIdx] || { status:'rented', incomeOverride:null, expenses:{} };
+  const [status, setStatus] = useState(orig.status||'rented');
+  const [incOverride, setIncOverride] = useState(orig.incomeOverride!==null?String(orig.incomeOverride):'');
+  const [expenses, setExpenses] = useState({electricity:0,water:0,gas:0,cleaning:0,maintenance:0,...orig.expenses});
+  const [extras, setExtras] = useState([]);
+
+  const autoExp = contract ? {admin:contract.adminFee||0,internet:contract.internet||0} : {};
+  const income = !contract?0:status==='vacant'?0:(incOverride!==''?parseNum(incOverride):contract.monthlyRent);
+  const totalOpex = Object.values(autoExp).reduce((a,b)=>a+b,0)+Object.values(expenses).reduce((a,b)=>a+(parseFloat(b)||0),0)+extras.reduce((a,b)=>a+(parseFloat(b.amount)||0),0);
+  const net = income - totalOpex;
+
+  const save = () => {
+    const parsed = {};
+    Object.entries(expenses).forEach(([k,v])=>{parsed[k]=parseFloat(String(v).replace(/[^\d.-]/g,''))||0;});
+    extras.forEach(e=>{if(e.label) parsed['extra_'+e.id]={label:e.label,amount:parseFloat(e.amount)||0};});
+    onSave(mIdx,{status,incomeOverride:incOverride!==''?parseNum(incOverride):null,expenses:parsed});
+    onClose();
+  };
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal">
+        <div className="modal-header">
+          <div><div className="modal-title">{MONTHS_FULL[mIdx]} {prop.year} — {prop.name}</div><div className="modal-sub">{contract?`Contract: ${contract.tenant}`:'No contract this month'}</div></div>
+          <button className="ghost" onClick={onClose} style={{fontSize:'18px',padding:'4px 8px'}}>×</button>
+        </div>
+        <div className="modal-body">
+          {!contract && <div className="warn-box mb16">No contract covers this month. Add a contract first.</div>}
+          <div className="flex gap8 align-center mb16">
+            <span className="fs11 text2 fw5">Status:</span>
+            {['rented','vacant'].map(s=><button key={s} onClick={()=>setStatus(s)} className={status===s?'primary':''} style={{fontSize:'12px',padding:'4px 12px',borderRadius:'20px',textTransform:'capitalize'}}>{s}</button>)}
+          </div>
+          {contract && status!=='vacant' && (
+            <div className="field mb16">
+              <label>Income override (leave blank for contract amount)</label>
+              <div className="flex gap8 align-center">
+                <input type="text" value={incOverride} onChange={e=>setIncOverride(e.target.value)} placeholder={contract.monthlyRent.toLocaleString('es-CO')} className="input-sm" />
+                {incOverride && <button className="ghost fs11" onClick={()=>setIncOverride('')}>Reset</button>}
+              </div>
+            </div>
+          )}
+          <div className="sec-title mb8">Expenses</div>
+          <table className="exp-table">
+            <thead><tr><th>Category</th><th>Type</th><th style={{textAlign:'right'}}>Amount</th></tr></thead>
+            <tbody>
+              {Object.entries(autoExp).map(([k,v])=>(<tr key={k}><td style={{fontSize:'12px',fontWeight:500}}>{k==='admin'?'Admin / mgmt':'Internet'}</td><td><span className="badge auto">Auto</span></td><td className="exp-auto">{v.toLocaleString('es-CO')}</td></tr>))}
+              {EXPENSE_CATS.filter(c=>c.type==='manual').map(cat=>(<tr key={cat.key}><td style={{fontSize:'12px',fontWeight:500}}>{cat.label}</td><td><span className="badge pending">Manual</span></td><td><input type="text" value={expenses[cat.key]||''} onChange={e=>setExpenses(p=>({...p,[cat.key]:e.target.value}))} placeholder="0" className="input-sm" style={{textAlign:'right'}} /></td></tr>))}
+              {extras.map(e=>(<tr key={e.id}><td><input type="text" value={e.label} onChange={ev=>setExtras(p=>p.map(x=>x.id===e.id?{...x,label:ev.target.value}:x))} placeholder="Description" className="input-sm"/></td><td><span className="badge" style={{background:'var(--red-bg)',color:'var(--red)'}}>One-off</span></td><td className="flex gap4"><input type="text" value={e.amount} onChange={ev=>setExtras(p=>p.map(x=>x.id===e.id?{...x,amount:ev.target.value}:x))} placeholder="0" className="input-sm" style={{textAlign:'right'}}/><button className="ghost danger" onClick={()=>setExtras(p=>p.filter(x=>x.id!==e.id))} style={{padding:'4px 6px',flexShrink:0}}>×</button></td></tr>))}
+            </tbody>
+          </table>
+          <button className="ghost fs12" onClick={()=>setExtras(p=>[...p,{id:Date.now(),label:'',amount:''}])} style={{color:'var(--purple)'}}>+ One-off expense</button>
+        </div>
+        <div className="modal-footer">
+          <div style={{fontSize:'14px',fontWeight:600,fontFamily:'var(--mono)'}}><span className="text3 fs11">Net: </span><span className={net>=0?'pos':'neg'}>{net>=0?'+':''}{fmt(net)}</span></div>
+          <div className="flex gap8"><button onClick={onClose}>Cancel</button><button className="primary" onClick={save}>Save month</button></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Overview Tab ──────────────────────────────────────────────────────────────
+function OverviewTab({ prop, onUpdateProp }) {
+  const ann = calcAnnual(prop);
+  const [monthModal, setMonthModal] = useState(null);
+  const [filter, setFilter] = useState('all');
+  const active = activeContract(prop);
+  const saveMonth = (mIdx,data) => onUpdateProp(p=>({...p,months:{...p.months,[mIdx]:data}}));
+
+  const months = MONTHS.map((name,i)=>{
+    const d = getMonthData(prop,i);
+    const m = prop.months[i];
+    return { name, i, ...d, hasData:!!m, hasOverride:m?.incomeOverride!=null, hasExpenses:m&&Object.values(m.expenses||{}).some(v=>v>0) };
+  });
+  const filtered = filter==='all'?months:filter==='vacant'?months.filter(m=>m.status==='vacant'):filter==='override'?months.filter(m=>m.hasOverride):months.filter(m=>!m.hasExpenses&&m.status!=='vacant'&&m.contract);
+
+  return (
+    <div>
+      <div className="kpi-row mb24">
+        <div className="kpi-card"><div className="kpi-label">GPI</div><div className="kpi-value">{fmtM(ann.gpi)}</div><div className="kpi-sub">Gross potential</div></div>
+        <div className="kpi-card"><div className="kpi-label">Vacancy</div><div className="kpi-value red">{ann.vacancy>0?'−':''}{fmtM(ann.vacancy)}</div></div>
+        <div className="kpi-card"><div className="kpi-label">NOI</div><div className="kpi-value purple">{fmtM(ann.noi)}</div><div className="kpi-sub">After OPEX</div></div>
+        <div className="kpi-card"><div className="kpi-label">CAPEX</div><div className="kpi-value red">{ann.totalCapex>0?'−':''}{fmtM(ann.totalCapex)}</div></div>
+        <div className="kpi-card"><div className="kpi-label">Net cashflow</div><div className="kpi-value green">{fmtM(ann.netCf)}</div></div>
+      </div>
+
+      {active ? (
+        <div className="card mb24"><div className="card-inner">
+          <div className="flex justify-between align-center mb12">
+            <div className="flex align-center gap8"><span className="badge active-c">Active contract</span><span className="fs13 fw6">{active.tenant}</span></div>
+            <span className="fs11 text3 mono">{active.startDate} → {active.endDate}</span>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:'8px 20px'}}>
+            {[['Rent','COP '+(active.monthlyRent||0).toLocaleString('es-CO')],['Admin fee','COP '+(active.adminFee||0).toLocaleString('es-CO')],['Increment',active.increment==='ipc+'?`IPC+${active.ipcExtra}%`:active.increment],['Deposit',`${active.deposit} months`]].map(([l,v])=>(<div key={l}><div className="fs11 text3 mb4">{l}</div><div className="fs13 fw5">{v}</div></div>))}
+          </div>
+        </div></div>
+      ) : (
+        <div className="warn-box mb24">No active contract — all months show as vacant. Go to the Contracts tab to add one.</div>
+      )}
+
+      <div className="sec-hdr mb8"><span className="sec-title">Monthly entry</span><span className="fs11 text3">Click a month to log expenses</span></div>
+      <div className="filter-row">
+        {[['all','All'],['pending','Pending'],['vacant','Vacant'],['override','Override']].map(([v,l])=>(
+          <button key={v} className={`filter-pill${filter===v?' active':''}`} onClick={()=>setFilter(v)}>{l}</button>
+        ))}
+      </div>
+      <div className="month-grid mb24">
+        {filtered.map(m => {
+          if (!m.contract) return (
+            <div key={m.i} className="month-tile no-contract">
+              <div className="mt-header"><span className="mt-month">{m.name}</span><span className="badge archived-c">No contract</span></div>
+              <div className="mt-income" style={{color:'var(--text3)'}}>—</div>
+              <div className="mt-expense fs11 text3">No coverage</div>
+            </div>
+          );
+          const cls = ['month-tile',m.status==='vacant'?'vacant':m.hasOverride?'has-override':'',m.hasExpenses||m.status==='vacant'?'complete':'pending'].filter(Boolean).join(' ');
+          return (
+            <div key={m.i} className={cls} onClick={()=>setMonthModal(m.i)}>
+              <div className="mt-header"><span className="mt-month">{m.name}</span><span className={`badge ${m.status==='vacant'?'vacant':m.hasOverride?'override':'rented'}`}>{m.status==='vacant'?'Vacant':m.hasOverride?'Override':'Rented'}</span></div>
+              <div className="mt-income">{m.status==='vacant'?'—':'+'+fmt(m.income)}</div>
+              <div className="mt-expense">OPEX −{fmt(m.totalOpex)}</div>
+              <div className="mt-footer"><span className={`mt-net ${m.noi>=0?'pos':'neg'}`}>{m.noi>=0?'+':''}{fmt(m.noi)}</span><span className="fs11 text3">{m.hasExpenses?'Logged':'Pending'}</span></div>
+            </div>
+          );
+        })}
+      </div>
+      {monthModal!==null && <MonthModal prop={prop} mIdx={monthModal} onSave={saveMonth} onClose={()=>setMonthModal(null)} />}
+    </div>
+  );
+}
+
+// ── Cashflow Tab ──────────────────────────────────────────────────────────────
+function CashflowTab({ prop }) {
+  const ann = calcAnnual(prop);
+  let cumulative = 0;
+  return (
+    <div>
+      <div className="kpi-row mb24">
+        <div className="kpi-card"><div className="kpi-label">Year income</div><div className="kpi-value green">{fmtM(ann.egi)}</div></div>
+        <div className="kpi-card"><div className="kpi-label">Year OPEX</div><div className="kpi-value red">−{fmtM(ann.totalOpex)}</div></div>
+        <div className="kpi-card"><div className="kpi-label">NOI</div><div className="kpi-value purple">{fmtM(ann.noi)}</div></div>
+        <div className="kpi-card"><div className="kpi-label">Taxes</div><div className="kpi-value red">−{fmtM(ann.taxes)}</div></div>
+        <div className="kpi-card"><div className="kpi-label">Net cashflow</div><div className="kpi-value green">{fmtM(ann.netCf)}</div></div>
+      </div>
+      <div className="sec-hdr mb12"><span className="sec-title">P&L waterfall</span></div>
+      <div className="card mb24" style={{overflow:'hidden'}}>
+        <table className="wf-table">
+          <thead><tr><th style={{width:'220px'}}>Line item</th><th style={{width:'100px'}}></th><th>Annual</th><th>Avg/month</th><th>% GPI</th></tr></thead>
+          <tbody>
+            <tr><td>Gross potential income</td><td><div className="wf-bar"><div className="wf-bar-fill" style={{width:'100%',background:'#1A6B47'}}></div></div></td><td className="pos">{fmt(ann.gpi)}</td><td>{fmt(ann.gpi/12)}</td><td>100%</td></tr>
+            <tr className="indent"><td>− Vacancy &amp; credit loss</td><td><div className="wf-bar"><div className="wf-bar-fill" style={{width:ann.gpi?Math.round(ann.vacancy/ann.gpi*100)+'%':'0%',background:'#9B2020'}}></div></div></td><td className={ann.vacancy?'neg':'text3'}>{ann.vacancy?'−'+fmt(ann.vacancy):'—'}</td><td className="text3">—</td><td>{ann.gpi?Math.round(ann.vacancy/ann.gpi*100)+'%':'0%'}</td></tr>
+            <tr className="subtotal"><td>Effective gross income (EGI)</td><td><div className="wf-bar"><div className="wf-bar-fill" style={{width:ann.gpi?Math.round(ann.egi/ann.gpi*100)+'%':'0%',background:'#1A6B47'}}></div></div></td><td className="pos">{fmt(ann.egi)}</td><td>{fmt(ann.egi/12)}</td><td>{ann.gpi?Math.round(ann.egi/ann.gpi*100)+'%':'—'}</td></tr>
+            <tr className="section-hdr"><td colSpan="5">Operating expenses</td></tr>
+            {['electricity','water','gas','cleaning','maintenance'].map(cat=>{
+              const total=Object.values(prop.months).reduce((a,m)=>a+(parseFloat(m.expenses?.[cat])||0),0);
+              if(!total) return null;
+              return <tr key={cat} className="indent"><td>− {EXPENSE_CATS.find(c=>c.key===cat)?.label}</td><td><div className="wf-bar"><div className="wf-bar-fill" style={{width:ann.gpi?Math.max(1,Math.round(total/ann.gpi*100))+'%':'0%',background:'#4A3FA0'}}></div></div></td><td className="neg">−{fmt(total)}</td><td>{fmt(total/12)}</td><td>{ann.gpi?Math.round(total/ann.gpi*100)+'%':'—'}</td></tr>;
+            })}
+            <tr className="subtotal"><td>NOI</td><td><div className="wf-bar"><div className="wf-bar-fill" style={{width:ann.gpi?Math.max(0,Math.round(ann.noi/ann.gpi*100))+'%':'0%',background:ann.noi>=0?'#1A6B47':'#9B2020'}}></div></div></td><td className={ann.noi>=0?'pos':'neg'}>{fmt(ann.noi)}</td><td>{fmt(ann.noi/12)}</td><td>{ann.gpi?Math.round(ann.noi/ann.gpi*100)+'%':'—'}</td></tr>
+            <tr className="section-hdr"><td colSpan="5">Below the line</td></tr>
+            <tr className="indent"><td>− CAPEX</td><td><div className="wf-bar"><div className="wf-bar-fill" style={{width:ann.gpi&&ann.totalCapex?Math.max(1,Math.round(ann.totalCapex/ann.gpi*100))+'%':'0%',background:'#8A5A00'}}></div></div></td><td className={ann.totalCapex?'neg':'text3'}>{ann.totalCapex?'−'+fmt(ann.totalCapex):'—'}</td><td className="text3">—</td><td>{ann.gpi&&ann.totalCapex?Math.round(ann.totalCapex/ann.gpi*100)+'%':'0%'}</td></tr>
+            <tr className="indent"><td>− Taxes</td><td><div className="wf-bar"><div className="wf-bar-fill" style={{width:ann.gpi&&ann.taxes?Math.max(1,Math.round(ann.taxes/ann.gpi*100))+'%':'0%',background:'#9B2020'}}></div></div></td><td className={ann.taxes?'neg':'text3'}>{ann.taxes?'−'+fmt(ann.taxes):'—'}</td><td className="text3">—</td><td>{ann.gpi&&ann.taxes?Math.round(ann.taxes/ann.gpi*100)+'%':'—'}</td></tr>
+            <tr className="total-row"><td>Net cashflow</td><td></td><td>{ann.netCf>=0?'+':''}{fmt(ann.netCf)}</td><td>{fmt(ann.netCf/12)}</td><td>{ann.gpi?Math.round(ann.netCf/ann.gpi*100)+'%':'—'}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div className="sec-hdr mb12"><span className="sec-title">Monthly schedule</span></div>
+      <div className="card" style={{overflow:'hidden'}}>
+        <table className="cf-table">
+          <thead><tr><th>Month</th><th>Contract</th><th>Status</th><th>Income</th><th>OPEX</th><th>CAPEX</th><th>NOI</th><th>Taxes</th><th>Net CF</th><th>Cumulative</th></tr></thead>
+          <tbody>
+            {MONTHS.map((name,i)=>{
+              const d=getMonthData(prop,i);
+              const mCapex=prop.capex.filter(c=>new Date(c.date).getMonth()===i).reduce((a,b)=>a+b.amount,0);
+              const mTax=i===11?ann.taxes:0;
+              const net=d.noi-mCapex-mTax;
+              cumulative+=net;
+              return (<tr key={i} className={!d.contract?'no-contract-row':d.status==='vacant'?'vacant-row':''}>
+                <td>{MONTHS_FULL[i]}</td>
+                <td className="fs11 text3">{d.contract?.tenant||'—'}</td>
+                <td><span className={`badge ${!d.contract?'archived-c':d.status==='vacant'?'vacant':'rented'}`}>{!d.contract?'None':d.status==='vacant'?'Vacant':'Rented'}</span></td>
+                <td className={d.income?'pos':'text3'}>{d.income?'+'+fmt(d.income):'—'}</td>
+                <td className={d.totalOpex?'neg':'text3'}>{d.totalOpex?'−'+fmt(d.totalOpex):'—'}</td>
+                <td className={mCapex?'neg':'text3'}>{mCapex?'−'+fmt(mCapex):'—'}</td>
+                <td className={d.noi>0?'pos':d.noi<0?'neg':'text3'}>{d.noi!==0?fmt(d.noi):'—'}</td>
+                <td className={mTax?'neg':'text3'}>{mTax?'−'+fmt(mTax):'—'}</td>
+                <td className={net>0?'pos':net<0?'neg':'text3'}>{net!==0?fmt(net):'—'}</td>
+                <td className="mono">{fmt(cumulative)}</td>
+              </tr>);
+            })}
+            <tr className="total-row"><td>Total</td><td></td><td></td><td>{fmt(ann.egi)}</td><td>−{fmt(ann.totalOpex)}</td><td>{ann.totalCapex?'−'+fmt(ann.totalCapex):'—'}</td><td>{fmt(ann.noi)}</td><td>{ann.taxes?'−'+fmt(ann.taxes):'—'}</td><td>{ann.netCf>=0?'+':''}{fmt(ann.netCf)}</td><td>{fmt(ann.netCf)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── OPEX/CAPEX Tab ────────────────────────────────────────────────────────────
+function OpexCapexTab({ prop, onUpdateProp }) {
+  const [newCapex, setNewCapex] = useState({date:'',desc:'',cat:'Improvement',amount:''});
+  const addCapex = () => {
+    if(!newCapex.desc||!newCapex.amount) return;
+    onUpdateProp(p=>({...p,capex:[...p.capex,{id:Date.now(),...newCapex,amount:parseNum(newCapex.amount)}]}));
+    setNewCapex({date:'',desc:'',cat:'Improvement',amount:''});
+  };
+  return (
+    <div>
+      <div className="sec-hdr mb12"><span className="sec-title">OPEX by month</span></div>
+      <div className="card mb24" style={{overflow:'hidden'}}>
+        <table className="cf-table">
+          <thead><tr><th>Month</th><th>Admin</th><th>Electricity</th><th>Water</th><th>Gas</th><th>Internet</th><th>Cleaning</th><th>Maintenance</th><th>Total</th></tr></thead>
+          <tbody>{MONTHS.map((name,i)=>{
+            const c=contractForMonth(prop.contracts,prop.year,i);
+            const exp=prop.months[i]?.expenses||{};
+            const total=(c?.adminFee||0)+(c?.internet||0)+Object.values(exp).filter(v=>typeof v==='number').reduce((a,b)=>a+b,0);
+            return (<tr key={i} className={!c?'no-contract-row':''}>
+              <td>{name}</td>
+              <td className={c?.adminFee?'':'text3'}>{c?.adminFee?fmt(c.adminFee):'—'}</td>
+              <td className={exp.electricity?'':'text3'}>{exp.electricity?fmt(exp.electricity):'—'}</td>
+              <td className={exp.water?'':'text3'}>{exp.water?fmt(exp.water):'—'}</td>
+              <td className={exp.gas?'':'text3'}>{exp.gas?fmt(exp.gas):'—'}</td>
+              <td className={c?.internet?'':'text3'}>{c?.internet?fmt(c.internet):'—'}</td>
+              <td className={exp.cleaning?'':'text3'}>{exp.cleaning?fmt(exp.cleaning):'—'}</td>
+              <td className={exp.maintenance?'':'text3'}>{exp.maintenance?fmt(exp.maintenance):'—'}</td>
+              <td className="fw5">−{fmt(total)}</td>
+            </tr>);
+          })}</tbody>
+        </table>
+      </div>
+      <div className="sec-hdr mb12"><span className="sec-title">CAPEX log</span><span className="fs11 text3">Total: {fmt(prop.capex.reduce((a,b)=>a+b.amount,0))}</span></div>
+      <div className="card mb16"><div className="card-inner">
+        {prop.capex.length===0 && <div className="empty-state" style={{padding:'24px'}}><div className="empty-title">No CAPEX this year</div></div>}
+        {prop.capex.map(c=>(<div key={c.id} className="capex-item">
+          <div style={{width:'110px',flexShrink:0}}><div className="fs11 text3">Date</div><div className="fs13 mono">{c.date}</div></div>
+          <div style={{flex:1}}><div className="fs11 text3">Description</div><div className="fs13 fw5">{c.desc}</div></div>
+          <span className={`badge ${c.cat==='Improvement'?'rented':c.cat==='Equipment'?'override':'pending'}`}>{c.cat}</span>
+          <div style={{width:'130px',textAlign:'right'}}><div className="fs11 text3">Amount</div><div className="fs13 fw6 neg">−{fmt(c.amount)}</div></div>
+          <button className="ghost danger" onClick={()=>onUpdateProp(p=>({...p,capex:p.capex.filter(x=>x.id!==c.id)}))} style={{padding:'4px 8px'}}>×</button>
+        </div>))}
+      </div></div>
+      <div className="card"><div className="card-inner">
+        <div className="sec-title mb12">Add CAPEX</div>
+        <div style={{display:'grid',gridTemplateColumns:'130px 1fr 130px 140px auto',gap:'10px',alignItems:'end'}}>
+          <div className="field"><label>Date</label><input type="date" value={newCapex.date} onChange={e=>setNewCapex(p=>({...p,date:e.target.value}))}/></div>
+          <div className="field"><label>Description</label><input type="text" value={newCapex.desc} placeholder="Renovation" onChange={e=>setNewCapex(p=>({...p,desc:e.target.value}))}/></div>
+          <div className="field"><label>Category</label><select value={newCapex.cat} onChange={e=>setNewCapex(p=>({...p,cat:e.target.value}))}>{CAPEX_CATS.map(c=><option key={c}>{c}</option>)}</select></div>
+          <div className="field"><label>Amount (COP)</label><input type="text" value={newCapex.amount} placeholder="0" onChange={e=>setNewCapex(p=>({...p,amount:e.target.value}))}/></div>
+          <button className="primary" onClick={addCapex}>Add</button>
+        </div>
+      </div></div>
+    </div>
+  );
+}
+
+// ── Taxes Tab ─────────────────────────────────────────────────────────────────
+function TaxesTab({ prop, onUpdateProp }) {
+  const [taxes, setTaxes] = useState(prop.taxes);
+  const set = (k,v) => { const t={...taxes,[k]:parseFloat(v)||0}; setTaxes(t); onUpdateProp(p=>({...p,taxes:t})); };
+  const ann = calcAnnual(prop);
+  return (
+    <div>
+      <div className="card mb24"><div className="card-inner">
+        <div className="contract-grid">
+          <div className="field"><label>Predial (property tax) COP</label><input type="text" value={taxes.predial||''} placeholder="0" onChange={e=>set('predial',e.target.value.replace(/[^\d]/g,''))}/><span className="hint">Annual · posted to December</span></div>
+          <div className="field"><label>Income tax on rental COP</label><input type="text" value={taxes.incomeTax||''} placeholder="0" onChange={e=>set('incomeTax',e.target.value.replace(/[^\d]/g,''))}/><span className="hint">Renta · persona natural</span></div>
+          <div className="field"><label>Effective rate</label><div style={{padding:'8px 10px',background:'var(--surface2)',borderRadius:'var(--radius-sm)',fontSize:'18px',fontWeight:600,fontFamily:'var(--mono)'}}>{ann.egi>0?((ann.taxes/ann.egi)*100).toFixed(1):0}%</div></div>
+        </div>
+      </div></div>
+      <div className="card" style={{overflow:'hidden'}}>
+        <table className="wf-table">
+          <thead><tr><th>Tax item</th><th></th><th>Amount</th><th>% of EGI</th></tr></thead>
+          <tbody>
+            <tr><td>Predial</td><td></td><td className="neg">{taxes.predial?'−'+fmt(taxes.predial):'—'}</td><td>{ann.egi&&taxes.predial?(taxes.predial/ann.egi*100).toFixed(1)+'%':'—'}</td></tr>
+            <tr><td>Income tax</td><td></td><td className="neg">{taxes.incomeTax?'−'+fmt(taxes.incomeTax):'—'}</td><td>{ann.egi&&taxes.incomeTax?(taxes.incomeTax/ann.egi*100).toFixed(1)+'%':'—'}</td></tr>
+            <tr className="total-row"><td>Net post-tax income</td><td></td><td>{fmt(ann.egi-ann.taxes)}</td><td>{ann.egi?((ann.egi-ann.taxes)/ann.egi*100).toFixed(1)+'%':'—'}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Property Page ─────────────────────────────────────────────────────────────
+function PropertyPage({ prop, onUpdateProp }) {
+  const [tab, setTab] = useState('overview');
+  const active = activeContract(prop);
+  const tabs = [['overview','Overview'],['contracts','Contracts'],['cashflow','Cashflow'],['opex','OPEX / CAPEX'],['taxes','Taxes']];
+  return (
+    <div className="flex-col" style={{flex:1,minWidth:0}}>
+      <div className="topbar">
+        <div><div className="topbar-title">{prop.name} — {prop.address}</div><div className="topbar-sub">{prop.type} · {prop.ref} · {active?active.tenant:'No active contract'}</div></div>
+        <div className="flex gap8 align-center">{[2025,2026,2027].map(y=><button key={y} className={`year-btn${prop.year===y?' active':''}`} onClick={()=>onUpdateProp(p=>({...p,year:y}))}>{y}</button>)}</div>
+      </div>
+      <div className="tabs">{tabs.map(([v,l])=><button key={v} className={`tab-btn${tab===v?' active':''}`} onClick={()=>setTab(v)}>{l}</button>)}</div>
+      <div className="content">
+        {tab==='overview'&&<OverviewTab prop={prop} onUpdateProp={onUpdateProp}/>}
+        {tab==='contracts'&&<ContractsTab prop={prop} onUpdateProp={onUpdateProp}/>}
+        {tab==='cashflow'&&<CashflowTab prop={prop}/>}
+        {tab==='opex'&&<OpexCapexTab prop={prop} onUpdateProp={onUpdateProp}/>}
+        {tab==='taxes'&&<TaxesTab prop={prop} onUpdateProp={onUpdateProp}/>}
+      </div>
+    </div>
+  );
+}
+
+// ── Portfolio ─────────────────────────────────────────────────────────────────
+function PortfolioPage({ props }) {
+  const totals = props.reduce((acc,p)=>{const a=calcAnnual(p);return{gpi:acc.gpi+a.gpi,egi:acc.egi+a.egi,noi:acc.noi+a.noi,capex:acc.capex+a.totalCapex,taxes:acc.taxes+a.taxes,net:acc.net+a.netCf};},{gpi:0,egi:0,noi:0,capex:0,taxes:0,net:0});
+  return (
+    <div className="flex-col" style={{flex:1,minWidth:0}}>
+      <div className="topbar"><div><div className="topbar-title">Portfolio</div><div className="topbar-sub">{props.length} properties</div></div></div>
+      <div className="content">
+        <div className="kpi-row mb24">
+          <div className="kpi-card"><div className="kpi-label">Total GPI</div><div className="kpi-value">{fmtM(totals.gpi)}</div></div>
+          <div className="kpi-card"><div className="kpi-label">Total EGI</div><div className="kpi-value green">{fmtM(totals.egi)}</div></div>
+          <div className="kpi-card"><div className="kpi-label">Total NOI</div><div className="kpi-value purple">{fmtM(totals.noi)}</div></div>
+          <div className="kpi-card"><div className="kpi-label">Total CAPEX</div><div className="kpi-value red">{totals.capex?'−':''}{fmtM(totals.capex)}</div></div>
+          <div className="kpi-card"><div className="kpi-label">Net cashflow</div><div className="kpi-value green">{fmtM(totals.net)}</div></div>
+        </div>
+        <div className="sec-hdr mb12"><span className="sec-title">Properties</span></div>
+        <div className="card" style={{overflow:'hidden'}}>
+          <table className="wf-table">
+            <thead><tr><th>Property</th><th></th><th>GPI</th><th>EGI</th><th>OPEX</th><th>NOI</th><th>CAPEX</th><th>Taxes</th><th>Net CF</th><th>Margin</th></tr></thead>
+            <tbody>
+              {props.map(p=>{const a=calcAnnual(p);const ac=activeContract(p);return(<tr key={p.id}><td><div className="fw5">{p.name}</div><div className="fs11 text3">{p.address}</div></td><td><span className={`badge ${ac?'active-c':'vacant'}`}>{ac?'Rented':'Vacant'}</span></td><td>{fmtM(a.gpi)}</td><td className="pos">{fmtM(a.egi)}</td><td className="neg">−{fmtM(a.totalOpex)}</td><td className={a.noi>=0?'pos':'neg'}>{fmtM(a.noi)}</td><td className={a.totalCapex?'neg':'text3'}>{a.totalCapex?'−'+fmtM(a.totalCapex):'—'}</td><td className={a.taxes?'neg':'text3'}>{a.taxes?'−'+fmtM(a.taxes):'—'}</td><td className={a.netCf>=0?'pos':'neg fw5'}>{a.netCf>=0?'+':''}{fmtM(a.netCf)}</td><td>{a.gpi?Math.round(a.netCf/a.gpi*100)+'%':'—'}</td></tr>);})}
+              <tr className="total-row"><td>Total</td><td></td><td>{fmtM(totals.gpi)}</td><td>{fmtM(totals.egi)}</td><td></td><td>{fmtM(totals.noi)}</td><td>{totals.capex?'−'+fmtM(totals.capex):'—'}</td><td>{totals.taxes?'−'+fmtM(totals.taxes):'—'}</td><td>{totals.net>=0?'+':''}{fmtM(totals.net)}</td><td>{totals.gpi?Math.round(totals.net/totals.gpi*100)+'%':'—'}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Add Property ──────────────────────────────────────────────────────────────
+function AddPropertyModal({ onSave, onClose }) {
+  const [form, setForm] = useState({name:'',address:'',type:'2-bed',ref:'',tenant:'',monthlyRent:'',startDate:'2026-01-01',endDate:'2026-12-31',adminFee:'',internet:'0'});
+  const set = (k,v) => setForm(p=>({...p,[k]:v}));
+  const save = () => {
+    if(!form.name||!form.monthlyRent) return;
+    const rent = parseNum(form.monthlyRent);
+    onSave({id:Date.now(),name:form.name,address:form.address,type:form.type,ref:form.ref,year:2026,contracts:form.tenant?[{id:Date.now()+1,status:'active',tenant:form.tenant,monthlyRent:rent,startDate:form.startDate,endDate:form.endDate,paymentDay:1,deposit:2,increment:'ipc+',ipcExtra:1,adminFee:parseNum(form.adminFee),internet:parseNum(form.internet),notes:''}]:[],months:{},capex:[],taxes:{predial:0,incomeTax:0}});
+    onClose();
+  };
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal">
+        <div className="modal-header"><div><div className="modal-title">Add property</div><div className="modal-sub">Unit details and first contract</div></div><button className="ghost" onClick={onClose} style={{fontSize:'18px',padding:'4px 8px'}}>×</button></div>
+        <div className="modal-body">
+          <div className="contract-grid">
+            <div className="field"><label>Unit name *</label><input placeholder="Apto 104" value={form.name} onChange={e=>set('name',e.target.value)}/></div>
+            <div className="field" style={{gridColumn:'span 2'}}><label>Address</label><input placeholder="Calle 78 #5-32" value={form.address} onChange={e=>set('address',e.target.value)}/></div>
+            <div className="field"><label>Type</label><select value={form.type} onChange={e=>set('type',e.target.value)}><option>Studio</option><option>1-bed</option><option value="2-bed">2-bed</option><option>3-bed</option></select></div>
+            <div className="field" style={{gridColumn:'span 2'}}><label>Matricula / reference</label><input value={form.ref} onChange={e=>set('ref',e.target.value)}/></div>
+            <div className="divider" style={{gridColumn:'1/-1'}}/>
+            <div className="field" style={{gridColumn:'span 2'}}><label>Tenant (optional)</label><input value={form.tenant} onChange={e=>set('tenant',e.target.value)}/></div>
+            <div className="field"><label>Monthly rent *</label><input value={form.monthlyRent} onChange={e=>set('monthlyRent',e.target.value)} placeholder="1,800,000"/></div>
+            <div className="field"><label>Start date</label><input type="date" value={form.startDate} onChange={e=>set('startDate',e.target.value)}/></div>
+            <div className="field"><label>End date</label><input type="date" value={form.endDate} onChange={e=>set('endDate',e.target.value)}/></div>
+            <div className="field"><label>Admin fee</label><input value={form.adminFee} onChange={e=>set('adminFee',e.target.value)} placeholder="0"/></div>
+          </div>
+        </div>
+        <div className="modal-footer"><span/><div className="flex gap8"><button onClick={onClose}>Cancel</button><button className="primary" onClick={save}>Add property</button></div></div>
+      </div>
+    </div>
+  );
+}
+
+// ── App ───────────────────────────────────────────────────────────────────────
+function App() {
+  const [props, setProps] = useState(initProps);
+  const [selected, setSelected] = useState('portfolio');
+  const [addModal, setAddModal] = useState(false);
+  const updateProp = (id,fn) => setProps(ps=>ps.map(p=>p.id===id?fn(p):p));
+  const addProp = (p) => { setProps(ps=>[...ps,p]); setSelected(p.id); };
+  const activeProp = props.find(p=>p.id===selected);
+  return (
+    <>
+      <div className="sidebar">
+        <div className="sidebar-logo"><div className="logo-mark">PropFlow</div><div className="logo-sub">rental manager</div></div>
+        <div className="sidebar-section">Portfolio</div>
+        <div className={`sidebar-item${selected==='portfolio'?' active':''}`} onClick={()=>setSelected('portfolio')}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" fill="currentColor"/><rect x="8" y="1" width="5" height="5" rx="1" fill="currentColor"/><rect x="1" y="8" width="5" height="5" rx="1" fill="currentColor"/><rect x="8" y="8" width="5" height="5" rx="1" fill="currentColor"/></svg>
+          All properties
+        </div>
+        <div className="sidebar-section">Properties</div>
+        {props.map(p=>{const ac=activeContract(p);return(<div key={p.id} className={`sidebar-item${selected===p.id?' active':''}`} onClick={()=>setSelected(p.id)}><span className={`dot ${ac?'rented':'vacant'}`}/><span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span></div>);})}
+        <div className="sidebar-add"><button style={{width:'100%',fontSize:'12px',color:'var(--text3)'}} onClick={()=>setAddModal(true)}>+ Add property</button></div>
+        <div className="sidebar-footer"><div>{props.length} properties</div><div style={{marginTop:'2px'}}>{props.filter(p=>!activeContract(p)).length} without active contract</div></div>
+      </div>
+      {selected==='portfolio'?<PortfolioPage props={props}/>:activeProp?<PropertyPage key={activeProp.id} prop={activeProp} onUpdateProp={(fn)=>updateProp(activeProp.id,fn)}/>:null}
+      {addModal&&<AddPropertyModal onSave={addProp} onClose={()=>setAddModal(false)}/>}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
