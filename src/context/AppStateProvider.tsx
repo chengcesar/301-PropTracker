@@ -18,12 +18,19 @@ function migrateTaxes(p: any): Property {
   return p as Property
 }
 
+/** Migrate properties without currency / country fields */
+function migrateCurrency(p: any): Property {
+  if (!p.currency) p.currency = 'COP'
+  if (!p.country) p.country = 'Colombia'
+  return p as Property
+}
+
 function loadProperties(): Property[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed.map(migrateTaxes)
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed.map(migrateTaxes).map(migrateCurrency)
     }
   } catch { /* ignore corrupted data */ }
   return seedProperties()

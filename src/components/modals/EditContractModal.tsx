@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import type { Contract } from '../../lib/types'
+import type { CurrencyCode } from '../../lib/currency'
 import { parseNum } from '../../lib/format'
 import { ContractForm, type ContractFormState } from './ContractForm'
 
 type Props = {
   contract: Contract
+  currency?: CurrencyCode
   onSave: (c: Contract) => void
   onClose: () => void
 }
 
-export function EditContractModal({ contract, onSave, onClose }: Props) {
+export function EditContractModal({ contract, currency, onSave, onClose }: Props) {
   const [form, setForm] = useState<ContractFormState>({
     tenant: contract.tenant,
     contractManager: contract.contractManager ?? '',
@@ -53,7 +55,7 @@ export function EditContractModal({ contract, onSave, onClose }: Props) {
           {contract.status === 'archived' && (
             <div className="warn-box mb16">Editing an archived contract updates the historical record only.</div>
           )}
-          <ContractForm value={form} onChange={setForm} />
+          <ContractForm value={form} onChange={setForm} currency={currency} />
         </div>
         <div className="modal-footer">
           <span />

@@ -2,6 +2,7 @@ import { Fragment, useState } from 'react'
 import { MONTHS } from '../../lib/constants'
 import type { Contract, Property } from '../../lib/types'
 import { contractForMonth } from '../../lib/finance'
+import { fmtCurrency } from '../../lib/format'
 import { EditContractModal } from '../modals/EditContractModal'
 import { NewContractModal } from '../modals/NewContractModal'
 
@@ -141,11 +142,11 @@ export function ContractsTab({ prop, onUpdateProp }: Props) {
                   <div className="ct-fields mb8">
                     <div>
                       <div className="ct-field-label">Rent</div>
-                      <div className="ct-field-val">{c.monthlyRent ? c.monthlyRent.toLocaleString('es-CO') : '—'}</div>
+                      <div className="ct-field-val">{c.monthlyRent ? fmtCurrency(c.monthlyRent, prop.currency) : '—'}</div>
                     </div>
                     <div>
                       <div className="ct-field-label">Admin fee</div>
-                      <div className="ct-field-val">{c.adminFee ? c.adminFee.toLocaleString('es-CO') : '—'}</div>
+                      <div className="ct-field-val">{c.adminFee ? fmtCurrency(c.adminFee, prop.currency) : '—'}</div>
                     </div>
                     <div>
                       <div className="ct-field-label">Increment</div>
@@ -239,7 +240,7 @@ export function ContractsTab({ prop, onUpdateProp }: Props) {
         </div>
       )}
       {newModal && <NewContractModal prop={prop} onSave={saveNew} onClose={() => setNewModal(false)} />}
-      {editModal && <EditContractModal contract={editModal} onSave={saveEdit} onClose={() => setEditModal(null)} />}
+      {editModal && <EditContractModal contract={editModal} currency={prop.currency} onSave={saveEdit} onClose={() => setEditModal(null)} />}
     </div>
   )
 }

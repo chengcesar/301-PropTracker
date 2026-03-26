@@ -103,7 +103,7 @@ export function MonthModal({ prop, mIdx, onSave, onClose }: Props) {
                   type="text"
                   value={incOverride}
                   onChange={(e) => setIncOverride(e.target.value)}
-                  placeholder={contract.monthlyRent.toLocaleString('es-CO')}
+                  placeholder={fmt(contract.monthlyRent)}
                   className="input-sm"
                 />
                 {incOverride && (

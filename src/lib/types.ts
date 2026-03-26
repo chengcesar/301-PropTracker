@@ -3,6 +3,8 @@
  * the rental-manager.html prototype.
  */
 
+import type { CurrencyCode } from './currency'
+
 export type ContractStatus = 'active' | 'archived' | 'draft'
 
 export type IncrementType = 'ipc+' | 'ipc' | 'fixed' | 'none'
@@ -123,6 +125,8 @@ export interface Property {
   address: string
   neighbourhood: string
   city: string
+  country: string
+  currency: CurrencyCode
   area: number
   bedrooms: number
   bathrooms: number

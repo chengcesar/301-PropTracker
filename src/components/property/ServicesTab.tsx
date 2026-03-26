@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import type { Property, ServiceEntry } from '../../lib/types'
+import type { CurrencyCode } from '../../lib/currency'
 import { fmt } from '../../lib/format'
 
 const IconCopy = () => (
@@ -30,6 +31,8 @@ const SERVICE_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
 type Props = {
   prop: Property
   onUpdateProp: (fn: (p: Property) => Property) => void
+  cx?: (n: number) => number
+  displayCurrency?: CurrencyCode
 }
 
 /** Find the closest year that has at least one service entry */
@@ -42,7 +45,7 @@ function nearestYear(all: Record<number, ServiceEntry[]>, year: number): number 
   return years[0]
 }
 
-export function ServicesTab({ prop, onUpdateProp }: Props) {
+export function ServicesTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
   const all = prop.services ?? {}
   const own = all[prop.year]
   const hasOwn = own !== undefined
@@ -157,13 +160,13 @@ export function ServicesTab({ prop, onUpdateProp }: Props) {
   const handleCopy = useCallback(() => {
     const headers = ['Provider', 'Type', 'Account #', 'Monthly cost', 'Year est.', 'Notes']
     const rows = services.map((s) =>
-      [s.provider, s.type, s.accountNumber || '—', s.monthlyCost ? fmt(s.monthlyCost) : '—', s.monthlyCost ? fmt(s.monthlyCost * 12) : '—', s.notes || '—'].join('\t')
+      [s.provider, s.type, s.accountNumber || '—', s.monthlyCost ? fmt(cx(s.monthlyCost)) : '—', s.monthlyCost ? fmt(cx(s.monthlyCost * 12)) : '—', s.notes || '—'].join('\t')
     )
-    rows.push(['Total', '', '', fmt(totalMonthlyCost), fmt(totalMonthlyCost * 12), ''].join('\t'))
+    rows.push(['Total', '', '', fmt(cx(totalMonthlyCost)), fmt(cx(totalMonthlyCost * 12)), ''].join('\t'))
     navigator.clipboard.writeText([headers.join('\t'), ...rows].join('\n'))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
-  }, [services, totalMonthlyCost])
+  }, [services, totalMonthlyCost, cx])
 
   return (
     <div>
@@ -257,8 +260,8 @@ export function ServicesTab({ prop, onUpdateProp }: Props) {
                     </span>
                   </td>
                   <td style={{ textAlign: 'left', fontFamily: 'var(--mono)', fontSize: 12 }}>{s.accountNumber || '—'}</td>
-                  <td style={{ textAlign: 'right' }}>{s.monthlyCost ? fmt(s.monthlyCost) : '—'}</td>
-                  <td style={{ textAlign: 'right', color: 'var(--text3)' }}>{s.monthlyCost ? fmt(s.monthlyCost * 12) : '—'}</td>
+                  <td style={{ textAlign: 'right' }}>{s.monthlyCost ? fmt(cx(s.monthlyCost)) : '—'}</td>
+                  <td style={{ textAlign: 'right', color: 'var(--text3)' }}>{s.monthlyCost ? fmt(cx(s.monthlyCost * 12)) : '—'}</td>
                   <td style={{ textAlign: 'left', color: 'var(--text3)', fontSize: 12 }}>{s.notes || '—'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button
@@ -286,8 +289,8 @@ export function ServicesTab({ prop, onUpdateProp }: Props) {
                 <td style={{ textAlign: 'left' }}>Total</td>
                 <td />
                 <td />
-                <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(totalMonthlyCost)}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(totalMonthlyCost * 12)}</td>
+                <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(cx(totalMonthlyCost))}</td>
+                <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(cx(totalMonthlyCost * 12))}</td>
                 <td />
                 <td />
               </tr>
@@ -318,7 +321,7 @@ export function ServicesTab({ prop, onUpdateProp }: Props) {
                 <input type="text" placeholder="12634590" value={form.accountNumber} onChange={(e) => set('accountNumber', e.target.value)} />
               </div>
               <div className="field">
-                <label>Monthly cost (COP)</label>
+                <label>Monthly cost ({prop.currency})</label>
                 <input type="text" placeholder="175,000" value={form.monthlyCost} onChange={(e) => set('monthlyCost', e.target.value)} />
               </div>
               <div className="field" style={{ gridColumn: 'span 2' }}>

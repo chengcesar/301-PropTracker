@@ -1,15 +1,19 @@
 import { useMemo } from 'react'
 import { MONTHS_FULL } from '../../lib/constants'
 import type { Property } from '../../lib/types'
+import type { CurrencyCode } from '../../lib/currency'
 import { calcAnnual, expenseRowsForYear, getMonthData, yearMonths } from '../../lib/finance'
-import { fmt, fmtM } from '../../lib/format'
+import { fmt, fmtCurrencyM } from '../../lib/format'
 import { KpiInfoIcon } from '../KpiInfoIcon'
 
 type Props = {
   prop: Property
+  cx?: (n: number) => number
+  displayCurrency?: CurrencyCode
 }
 
-export function CashflowTab({ prop }: Props) {
+export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
+  const dc = displayCurrency ?? prop.currency
   const ann = calcAnnual(prop)
 
   const scheduleRows = useMemo(() => {
@@ -53,23 +57,23 @@ export function CashflowTab({ prop }: Props) {
       <div className="kpi-row mb24">
         <div className="kpi-card">
           <div className="kpi-label">Year income <KpiInfoIcon tip="Effective Gross Income — actual rent collected this year" /></div>
-          <div className="kpi-value green">{fmtM(ann.egi)}</div>
+          <div className="kpi-value green">{fmtCurrencyM(cx(ann.egi), dc)}</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Year OPEX <KpiInfoIcon tip="Operating expenses — admin, maintenance, insurance, etc." /></div>
-          <div className="kpi-value red">−{fmtM(ann.totalOpex)}</div>
+          <div className="kpi-value red">−{fmtCurrencyM(cx(ann.totalOpex), dc)}</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">NOI <KpiInfoIcon tip="Net Operating Income — income minus operating expenses" /></div>
-          <div className="kpi-value purple">{fmtM(ann.noi)}</div>
+          <div className="kpi-value purple">{fmtCurrencyM(cx(ann.noi), dc)}</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Taxes <KpiInfoIcon tip="Annual property and income taxes" /></div>
-          <div className="kpi-value red">−{fmtM(ann.taxes)}</div>
+          <div className="kpi-value red">−{fmtCurrencyM(cx(ann.taxes), dc)}</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Net cashflow <KpiInfoIcon tip="Final cashflow after all income and expenses" /></div>
-          <div className="kpi-value green">{fmtM(ann.netCf)}</div>
+          <div className="kpi-value green">{fmtCurrencyM(cx(ann.netCf), dc)}</div>
         </div>
       </div>
       <div className="sec-hdr mb12">
@@ -94,8 +98,8 @@ export function CashflowTab({ prop }: Props) {
                   <div className="wf-bar-fill" style={{ width: '100%', background: '#1A6B47' }} />
                 </div>
               </td>
-              <td className="pos">{fmt(ann.gpi)}</td>
-              <td>{fmt(ann.gpi / 12)}</td>
+              <td className="pos">{fmt(cx(ann.gpi))}</td>
+              <td>{fmt(cx(ann.gpi / 12))}</td>
               <td>100%</td>
             </tr>
             <tr className="indent">
@@ -111,7 +115,7 @@ export function CashflowTab({ prop }: Props) {
                   />
                 </div>
               </td>
-              <td className={ann.vacancy ? 'neg' : 'text3'}>{ann.vacancy ? `−${fmt(ann.vacancy)}` : '—'}</td>
+              <td className={ann.vacancy ? 'neg' : 'text3'}>{ann.vacancy ? `−${fmt(cx(ann.vacancy))}` : '—'}</td>
               <td className="text3">—</td>
               <td>{ann.gpi ? `${Math.round((ann.vacancy / ann.gpi) * 100)}%` : '0%'}</td>
             </tr>
@@ -128,8 +132,8 @@ export function CashflowTab({ prop }: Props) {
                   />
                 </div>
               </td>
-              <td className="pos">{fmt(ann.egi)}</td>
-              <td>{fmt(ann.egi / 12)}</td>
+              <td className="pos">{fmt(cx(ann.egi))}</td>
+              <td>{fmt(cx(ann.egi / 12))}</td>
               <td>{ann.gpi ? `${Math.round((ann.egi / ann.gpi) * 100)}%` : '—'}</td>
             </tr>
             <tr className="section-hdr">
@@ -156,8 +160,8 @@ export function CashflowTab({ prop }: Props) {
                       />
                     </div>
                   </td>
-                  <td className="neg">−{fmt(total)}</td>
-                  <td>{fmt(total / 12)}</td>
+                  <td className="neg">−{fmt(cx(total))}</td>
+                  <td>{fmt(cx(total / 12))}</td>
                   <td>{ann.gpi ? `${Math.round((total / ann.gpi) * 100)}%` : '—'}</td>
                 </tr>
               )
@@ -175,8 +179,8 @@ export function CashflowTab({ prop }: Props) {
                   />
                 </div>
               </td>
-              <td className={ann.noi >= 0 ? 'pos' : 'neg'}>{fmt(ann.noi)}</td>
-              <td>{fmt(ann.noi / 12)}</td>
+              <td className={ann.noi >= 0 ? 'pos' : 'neg'}>{fmt(cx(ann.noi))}</td>
+              <td>{fmt(cx(ann.noi / 12))}</td>
               <td>{ann.gpi ? `${Math.round((ann.noi / ann.gpi) * 100)}%` : '—'}</td>
             </tr>
             <tr className="section-hdr">
@@ -195,7 +199,7 @@ export function CashflowTab({ prop }: Props) {
                   />
                 </div>
               </td>
-              <td className={ann.totalCapex ? 'neg' : 'text3'}>{ann.totalCapex ? `−${fmt(ann.totalCapex)}` : '—'}</td>
+              <td className={ann.totalCapex ? 'neg' : 'text3'}>{ann.totalCapex ? `−${fmt(cx(ann.totalCapex))}` : '—'}</td>
               <td className="text3">—</td>
               <td>{ann.gpi && ann.totalCapex ? `${Math.round((ann.totalCapex / ann.gpi) * 100)}%` : '0%'}</td>
             </tr>
@@ -212,7 +216,7 @@ export function CashflowTab({ prop }: Props) {
                   />
                 </div>
               </td>
-              <td className={ann.taxes ? 'neg' : 'text3'}>{ann.taxes ? `−${fmt(ann.taxes)}` : '—'}</td>
+              <td className={ann.taxes ? 'neg' : 'text3'}>{ann.taxes ? `−${fmt(cx(ann.taxes))}` : '—'}</td>
               <td className="text3">—</td>
               <td>{ann.gpi && ann.taxes ? `${Math.round((ann.taxes / ann.gpi) * 100)}%` : '—'}</td>
             </tr>
@@ -221,9 +225,9 @@ export function CashflowTab({ prop }: Props) {
               <td />
               <td>
                 {ann.netCf >= 0 ? '+' : ''}
-                {fmt(ann.netCf)}
+                {fmt(cx(ann.netCf))}
               </td>
-              <td>{fmt(ann.netCf / 12)}</td>
+              <td>{fmt(cx(ann.netCf / 12))}</td>
               <td>{ann.gpi ? `${Math.round((ann.netCf / ann.gpi) * 100)}%` : '—'}</td>
             </tr>
           </tbody>
@@ -263,13 +267,13 @@ export function CashflowTab({ prop }: Props) {
                       {!d.contract ? 'None' : d.status === 'vacant' ? 'Vacant' : 'Rented'}
                     </span>
                   </td>
-                  <td className={d.income ? 'pos' : 'text3'}>{d.income ? `+${fmt(d.income)}` : '—'}</td>
-                  <td className={d.totalOpex ? 'neg' : 'text3'}>{d.totalOpex ? `−${fmt(d.totalOpex)}` : '—'}</td>
-                  <td className={mCapex ? 'neg' : 'text3'}>{mCapex ? `−${fmt(mCapex)}` : '—'}</td>
-                  <td className={d.noi > 0 ? 'pos' : d.noi < 0 ? 'neg' : 'text3'}>{d.noi !== 0 ? fmt(d.noi) : '—'}</td>
-                  <td className={mTax ? 'neg' : 'text3'}>{mTax ? `−${fmt(mTax)}` : '—'}</td>
-                  <td className={net > 0 ? 'pos' : net < 0 ? 'neg' : 'text3'}>{net !== 0 ? fmt(net) : '—'}</td>
-                  <td className="mono">{fmt(cumulative)}</td>
+                  <td className={d.income ? 'pos' : 'text3'}>{d.income ? `+${fmt(cx(d.income))}` : '—'}</td>
+                  <td className={d.totalOpex ? 'neg' : 'text3'}>{d.totalOpex ? `−${fmt(cx(d.totalOpex))}` : '—'}</td>
+                  <td className={mCapex ? 'neg' : 'text3'}>{mCapex ? `−${fmt(cx(mCapex))}` : '—'}</td>
+                  <td className={d.noi > 0 ? 'pos' : d.noi < 0 ? 'neg' : 'text3'}>{d.noi !== 0 ? fmt(cx(d.noi)) : '—'}</td>
+                  <td className={mTax ? 'neg' : 'text3'}>{mTax ? `−${fmt(cx(mTax))}` : '—'}</td>
+                  <td className={net > 0 ? 'pos' : net < 0 ? 'neg' : 'text3'}>{net !== 0 ? fmt(cx(net)) : '—'}</td>
+                  <td className="mono">{fmt(cx(cumulative))}</td>
                 </tr>
               )
             })}
@@ -277,16 +281,16 @@ export function CashflowTab({ prop }: Props) {
               <td>Total</td>
               <td />
               <td />
-              <td>{fmt(ann.egi)}</td>
-              <td>−{fmt(ann.totalOpex)}</td>
-              <td>{ann.totalCapex ? `−${fmt(ann.totalCapex)}` : '—'}</td>
-              <td>{fmt(ann.noi)}</td>
-              <td>{ann.taxes ? `−${fmt(ann.taxes)}` : '—'}</td>
+              <td>{fmt(cx(ann.egi))}</td>
+              <td>−{fmt(cx(ann.totalOpex))}</td>
+              <td>{ann.totalCapex ? `−${fmt(cx(ann.totalCapex))}` : '—'}</td>
+              <td>{fmt(cx(ann.noi))}</td>
+              <td>{ann.taxes ? `−${fmt(cx(ann.taxes))}` : '—'}</td>
               <td>
                 {ann.netCf >= 0 ? '+' : ''}
-                {fmt(ann.netCf)}
+                {fmt(cx(ann.netCf))}
               </td>
-              <td>{fmt(ann.netCf)}</td>
+              <td>{fmt(cx(ann.netCf))}</td>
             </tr>
           </tbody>
         </table>

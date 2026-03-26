@@ -2,7 +2,8 @@ import { useRef, useState } from 'react'
 import { MONTHS, MONTHS_FULL } from '../../lib/constants'
 import type { MonthData, Occupant, Property } from '../../lib/types'
 import { activeContract, calcAnnual, contractForMonth, expenseRowsForYear, getMonthData, resolveServices, yearMonths } from '../../lib/finance'
-import { fmt, fmtM, parseNum } from '../../lib/format'
+import { type CurrencyCode } from '../../lib/currency'
+import { fmt, fmtCurrency, fmtCurrencyM, parseNum } from '../../lib/format'
 import { MonthModal } from '../modals/MonthModal'
 import { OccupantModal } from '../modals/OccupantModal'
 import { KpiInfoIcon } from '../KpiInfoIcon'
@@ -10,6 +11,8 @@ import { KpiInfoIcon } from '../KpiInfoIcon'
 type Props = {
   prop: Property
   onUpdateProp: (fn: (p: Property) => Property) => void
+  cx?: (n: number) => number
+  displayCurrency?: CurrencyCode
 }
 
 function formatDate(dateStr: string): string {
@@ -25,7 +28,8 @@ function formatIncrement(c: { increment: string; ipcExtra: number }): string {
   return 'None'
 }
 
-export function OverviewTab({ prop, onUpdateProp }: Props) {
+export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency }: Props) {
+  const dc = displayCurrency ?? prop.currency
   const ann = calcAnnual(prop)
   const [monthModal, setMonthModal] = useState<number | null>(null)
   const [view, setView] = useState<'cards' | 'table'>('cards')
@@ -238,31 +242,31 @@ export function OverviewTab({ prop, onUpdateProp }: Props) {
       <div className="kpi-row mb24">
         <div className="kpi-card">
           <div className="kpi-label">GPI <KpiInfoIcon tip="Gross Potential Income — total rent if fully occupied" /></div>
-          <div className="kpi-value">{fmtM(ann.gpi)}</div>
+          <div className="kpi-value">{fmtCurrencyM(cx(ann.gpi), dc)}</div>
           <div className="kpi-sub">Gross potential</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Vacancy <KpiInfoIcon tip="Income lost from unoccupied periods" /></div>
           <div className="kpi-value red">
             {ann.vacancy > 0 ? '−' : ''}
-            {fmtM(ann.vacancy)}
+            {fmtCurrencyM(cx(ann.vacancy), dc)}
           </div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">NOI <KpiInfoIcon tip="Net Operating Income — income minus operating expenses" /></div>
-          <div className="kpi-value purple">{fmtM(ann.noi)}</div>
+          <div className="kpi-value purple">{fmtCurrencyM(cx(ann.noi), dc)}</div>
           <div className="kpi-sub">After OPEX</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">CAPEX <KpiInfoIcon tip="Capital Expenditures — major repairs & improvements" /></div>
           <div className="kpi-value red">
             {ann.totalCapex > 0 ? '−' : ''}
-            {fmtM(ann.totalCapex)}
+            {fmtCurrencyM(cx(ann.totalCapex), dc)}
           </div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Net cashflow <KpiInfoIcon tip="Final cashflow after all income and expenses" /></div>
-          <div className="kpi-value green">{fmtM(ann.netCf)}</div>
+          <div className="kpi-value green">{fmtCurrencyM(cx(ann.netCf), dc)}</div>
         </div>
       </div>
 
@@ -279,7 +283,7 @@ export function OverviewTab({ prop, onUpdateProp }: Props) {
                   </tr>
                   <tr>
                     <td className="cdt-label">Monthly rent</td>
-                    <td className="cdt-value">${(active.monthlyRent ?? 0).toLocaleString('es-CO')} COP</td>
+                    <td className="cdt-value">{fmtCurrency(cx(active.monthlyRent ?? 0), displayCurrency ?? prop.currency)}</td>
                   </tr>
                   <tr>
                     <td className="cdt-label">Start date</td>
@@ -353,15 +357,15 @@ export function OverviewTab({ prop, onUpdateProp }: Props) {
         <div className="card">
           <div className="card-inner">
             <div className="fw6 mb12" style={{ fontSize: '14px' }}>
-              Income vs expenses — {prop.year} monthly (COP M)
+              Income vs expenses — {prop.year} monthly ({displayCurrency ?? prop.currency})
             </div>
             <div className="ie-chart">
               <div className="ie-axis">
-                <span>{fmtM(maxVal)}</span>
-                <span>{fmtM(maxVal / 2)}</span>
-                <span>0M</span>
-                <span>−{fmtM(maxVal / 2)}</span>
-                <span>−{fmtM(maxVal)}</span>
+                <span>{fmtCurrencyM(cx(maxVal), dc)}</span>
+                <span>{fmtCurrencyM(cx(maxVal / 2), dc)}</span>
+                <span>0</span>
+                <span>−{fmtCurrencyM(cx(maxVal / 2), dc)}</span>
+                <span>−{fmtCurrencyM(cx(maxVal), dc)}</span>
               </div>
               <div className="ie-bars">
                 {monthlyData.map((d, i) => {
@@ -393,10 +397,10 @@ export function OverviewTab({ prop, onUpdateProp }: Props) {
                       <span className="ie-label">{MONTHS[i]}</span>
                       <div className="ie-tip">
                         <div style={{ fontWeight: 600, marginBottom: 4 }}>{MONTHS_FULL[i]}</div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#86efac' }}>Income</span><span>{fmt(d.income)}</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#fca5a5' }}>OPEX</span><span>{fmt(d.expense)}</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#c4b5fd' }}>Taxes</span><span>{fmt(d.tax)}</span></div>
-                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: 4, paddingTop: 4, display: 'flex', justifyContent: 'space-between', gap: 12, fontWeight: 600 }}><span>Net</span><span>{fmt(d.income - d.expense - d.tax)}</span></div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#86efac' }}>Income</span><span>{fmt(cx(d.income))}</span></div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#fca5a5' }}>OPEX</span><span>{fmt(cx(d.expense))}</span></div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#c4b5fd' }}>Taxes</span><span>{fmt(cx(d.tax))}</span></div>
+                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: 4, paddingTop: 4, display: 'flex', justifyContent: 'space-between', gap: 12, fontWeight: 600 }}><span>Net</span><span>{fmt(cx(d.income - d.expense - d.tax))}</span></div>
                       </div>
                     </div>
                   )
@@ -486,7 +490,7 @@ export function OverviewTab({ prop, onUpdateProp }: Props) {
                       —
                     </div>
                     {m.hasExpenses ? (
-                      <div className="mt-expense" style={{ color: '#b91c1c' }}>OPEX −{fmt(m.totalOpex)}</div>
+                      <div className="mt-expense" style={{ color: '#b91c1c' }}>OPEX −{fmt(cx(m.totalOpex))}</div>
                     ) : (
                       <div className="mt-expense fs11 text3">Click to add expenses</div>
                     )}
@@ -511,12 +515,12 @@ export function OverviewTab({ prop, onUpdateProp }: Props) {
                       {m.status === 'vacant' ? 'Vacant' : m.hasOverride ? 'Override' : 'Rented'}
                     </span>
                   </div>
-                  <div className="mt-income">{m.status === 'vacant' ? '—' : `+${fmt(m.income)}`}</div>
-                  <div className="mt-expense" style={{ color: '#b91c1c' }}>OPEX −{fmt(m.totalOpex)}</div>
+                  <div className="mt-income">{m.status === 'vacant' ? '—' : `+${fmt(cx(m.income))}`}</div>
+                  <div className="mt-expense" style={{ color: '#b91c1c' }}>OPEX −{fmt(cx(m.totalOpex))}</div>
                   <div className="mt-footer">
                     <span className={`mt-net ${m.noi >= 0 ? 'pos' : 'neg'}`}>
                       {m.noi >= 0 ? '+' : ''}
-                      {fmt(m.noi)}
+                      {fmt(cx(m.noi))}
                     </span>
                     <span className="fs11 text3">{m.hasExpenses ? 'Logged' : 'Pending'}</span>
                   </div>
@@ -695,15 +699,15 @@ export function OverviewTab({ prop, onUpdateProp }: Props) {
                             title={hasOverride ? 'Overridden' : undefined}
                             onClick={() => startIncomeEdit(i, v)}
                           >
-                            {v ? `+${fmt(v)}` : ''}
+                            {v ? `+${fmt(cx(v))}` : ''}
                           </td>
                         )
                       })}
                       <td style={{ ...summaryCell, borderBottom: '1px solid var(--border)', background: '#e8f5e9', color: '#1A6B47', fontWeight: 700 }}>
-                        {incTotal ? `+${fmt(incTotal)}` : ''}
+                        {incTotal ? `+${fmt(cx(incTotal))}` : ''}
                       </td>
                       <td style={{ ...summaryCell, borderBottom: '1px solid var(--border)', background: '#e8f5e9', color: 'var(--text3)', fontWeight: 500 }}>
-                        {incFilled ? `+${fmt(Math.round(incTotal / incFilled))}` : ''}
+                        {incFilled ? `+${fmt(cx(Math.round(incTotal / incFilled)))}` : ''}
                       </td>
                     </tr>
                   </tbody>
@@ -798,15 +802,15 @@ export function OverviewTab({ prop, onUpdateProp }: Props) {
                           }}
                           onClick={() => row.editable && startEdit(row.key, i, v)}
                         >
-                          {v ? fmt(v) : ''}
+                          {v ? fmt(cx(v)) : ''}
                         </td>
                       )
                     })}
                     <td style={{ ...summaryCell, borderBottom: '1px solid var(--border)', background: rowIdx % 2 === 0 ? '#f7f9fc' : '#f0f2f5' }}>
-                      {row.total ? fmt(row.total) : ''}
+                      {row.total ? fmt(cx(row.total)) : ''}
                     </td>
                     <td style={{ ...summaryCell, borderBottom: '1px solid var(--border)', background: rowIdx % 2 === 0 ? '#f7f9fc' : '#f0f2f5', color: 'var(--text3)', fontWeight: 500 }}>
-                      {row.avg ? fmt(Math.round(row.avg)) : ''}
+                      {row.avg ? fmt(cx(Math.round(row.avg))) : ''}
                     </td>
                   </tr>
                 ))}
@@ -862,14 +866,14 @@ export function OverviewTab({ prop, onUpdateProp }: Props) {
                   </td>
                   {totals.map((v, i) => (
                     <td key={i} style={{ ...cellStyle, color: '#b91c1c', fontWeight: 600 }}>
-                      {v ? fmt(v) : ''}
+                      {v ? fmt(cx(v)) : ''}
                     </td>
                   ))}
                   <td style={{ ...cellStyle, color: '#b91c1c', fontWeight: 700, background: '#fee2e2' }}>
-                    {grandTotal ? fmt(grandTotal) : ''}
+                    {grandTotal ? fmt(cx(grandTotal)) : ''}
                   </td>
                   <td style={{ ...cellStyle, color: '#991b1b', fontWeight: 600, background: '#fee2e2' }}>
-                    {filledMonths ? fmt(Math.round(grandTotal / filledMonths)) : ''}
+                    {filledMonths ? fmt(cx(Math.round(grandTotal / filledMonths))) : ''}
                   </td>
                 </tr>
                 {(() => {
@@ -891,14 +895,14 @@ export function OverviewTab({ prop, onUpdateProp }: Props) {
                       </td>
                       {taxByMonth.map((v, i) => (
                         <td key={i} style={{ ...cellStyle, color: v ? '#7c3aed' : 'var(--text3)', fontWeight: v ? 600 : 400 }}>
-                          {v ? `−${fmt(v)}` : ''}
+                          {v ? `−${fmt(cx(v))}` : ''}
                         </td>
                       ))}
                       <td style={{ ...cellStyle, color: '#7c3aed', fontWeight: 700, background: '#ede9fe' }}>
-                        {taxTotal ? `−${fmt(taxTotal)}` : ''}
+                        {taxTotal ? `−${fmt(cx(taxTotal))}` : ''}
                       </td>
                       <td style={{ ...cellStyle, color: '#6d28d9', fontWeight: 500, background: '#ede9fe' }}>
-                        {taxFilled ? fmt(Math.round(taxTotal / taxFilled)) : ''}
+                        {taxFilled ? fmt(cx(Math.round(taxTotal / taxFilled))) : ''}
                       </td>
                     </tr>
                   )
@@ -923,14 +927,14 @@ export function OverviewTab({ prop, onUpdateProp }: Props) {
                   </td>
                   {netAfterTax.map((v, i) => (
                     <td key={i} style={{ ...cellStyle, fontWeight: 600, color: v >= 0 ? '#1A6B47' : '#b91c1c' }}>
-                      {v ? `${v >= 0 ? '+' : ''}${fmt(v)}` : ''}
+                      {v ? `${v >= 0 ? '+' : ''}${fmt(cx(v))}` : ''}
                     </td>
                   ))}
                   <td style={{ ...summaryCell, background: '#e8f5e9', fontWeight: 700, color: netAfterTaxTotal >= 0 ? '#1A6B47' : '#b91c1c' }}>
-                    {netAfterTaxTotal ? `${netAfterTaxTotal >= 0 ? '+' : ''}${fmt(netAfterTaxTotal)}` : ''}
+                    {netAfterTaxTotal ? `${netAfterTaxTotal >= 0 ? '+' : ''}${fmt(cx(netAfterTaxTotal))}` : ''}
                   </td>
                   <td style={{ ...summaryCell, background: '#e8f5e9', fontWeight: 500, color: 'var(--text3)' }}>
-                    {netAfterTaxFilled ? fmt(Math.round(netAfterTaxTotal / netAfterTaxFilled)) : ''}
+                    {netAfterTaxFilled ? fmt(cx(Math.round(netAfterTaxTotal / netAfterTaxFilled))) : ''}
                   </td>
                 </tr>
                   )

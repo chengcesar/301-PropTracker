@@ -16,7 +16,7 @@
   #root { height: 100%; display: flex; flex-direction: column; }
   .app-header { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; position: sticky; top: 0; z-index: 20; }
   .app-header-logo { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; letter-spacing: -0.3px; color: var(--text); }
-  .app-header-logo-mark { width: 28px; height: 28px; background: #0539FF; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 13px; font-weight: 700; }
+  .app-header-logo svg { flex-shrink: 0; color: #0539FF; }
   .app-header-right { display: flex; align-items: center; gap: 12px; }
   .app-header-user { font-size: 13px; color: var(--text3); }
   .app-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; min-width: 0; background: #F7F9FC; }
@@ -85,6 +85,28 @@
   .kpi-value { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
   .kpi-value.green { color: var(--green); } .kpi-value.red { color: var(--red); } .kpi-value.purple { color: var(--purple); }
   .kpi-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .kpi-delta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-top: 4px;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    width: fit-content;
+    line-height: 1.2;
+  }
+  .kpi-delta-pill svg { flex-shrink: 0; display: block; }
+  .kpi-delta-pill--down {
+    background: #fce7e7;
+    color: #b91c1c;
+  }
+  .kpi-delta-pill--up {
+    background: #dcfce7;
+    color: #15803d;
+  }
 
   /* Filter bar */
   .filter-bar {
@@ -230,6 +252,8 @@
   .wf-table td { padding: 9px 14px; text-align: right; border-bottom: 1px solid var(--border); font-size: 12px; transition: background 0.1s; }
   .wf-table tbody tr:not(.total-row):hover td { background: #f7f9fc; }
   .wf-table td:first-child { text-align: left; font-size: 13px; }
+  .wf-table th.wf-align-left,
+  .wf-table td.wf-align-left { text-align: left; }
   .wf-table tr.indent td:first-child { padding-left: 30px; color: var(--text2); font-size: 12px; }
   .wf-table tr.subtotal td { background: var(--surface2); font-weight: 500; }
   .wf-table tr.subtotal td:first-child { font-family: var(--font); }
@@ -240,13 +264,13 @@
   .wf-bar-fill { height: 100%; border-radius: 2px; }
   .pos { color: var(--green); } .neg { color: var(--red); }
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.18); backdrop-filter: blur(2px); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
-  .modal { background: var(--surface); border-radius: var(--radius-modal); width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.15); animation: toastSlideUp 0.2s ease-out; }
+  .modal { background: var(--surface); border-radius: var(--radius-modal); width: 100%; max-width: 560px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.15); animation: toastSlideUp 0.2s ease-out; }
   .modal-sm { max-width: 370px; }
-  .modal-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; }
+  .modal-header { flex-shrink: 0; padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; }
   .modal-title { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
   .modal-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
-  .modal-body { padding: 20px 24px; }
-  .modal-footer { padding: 14px 24px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface2); border-radius: 0 0 var(--radius-modal) var(--radius-modal); }
+  .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 20px 24px; }
+  .modal-footer { flex-shrink: 0; padding: 14px 24px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface2); border-radius: 0 0 var(--radius-modal) var(--radius-modal); }
   .exp-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
   .exp-table th { font-size: 10px; color: var(--text3); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
   .exp-table th:last-child { text-align: right; }

@@ -1,7 +1,7 @@
 import { Fragment, useState } from 'react'
 import type { Contract, Property } from '../../lib/types'
 import { activeContract } from '../../lib/finance'
-import { parseNum } from '../../lib/format'
+import { parseNum, fmtCurrency } from '../../lib/format'
 import { ContractForm, type ContractFormState } from './ContractForm'
 
 type NewContractForm = ContractFormState & { activateNow: boolean }
@@ -99,6 +99,7 @@ export function NewContractModal({ prop, onSave, onClose }: Props) {
             <ContractForm
               value={contractFormValue}
               onChange={(next) => setForm((f) => ({ ...f, ...next }))}
+              currency={prop.currency}
             />
           )}
           {step === 2 && (
@@ -116,13 +117,13 @@ export function NewContractModal({ prop, onSave, onClose }: Props) {
                     {(
                       [
                         ['Tenant', form.tenant],
-                        ['Rent', `COP ${parseNum(form.monthlyRent).toLocaleString('es-CO')}`],
+                        ['Rent', fmtCurrency(parseNum(form.monthlyRent), prop.currency)],
                         ['Period', `${form.startDate} → ${form.endDate}`],
                         [
                           'Increment',
                           form.increment === 'ipc+' ? `IPC+${form.ipcExtra}%` : form.increment,
                         ],
-                        ['Admin fee', `COP ${parseNum(form.adminFee).toLocaleString('es-CO')}`],
+                        ['Admin fee', fmtCurrency(parseNum(form.adminFee), prop.currency)],
                         ['Deposit', `${form.deposit} months`],
                       ] as const
                     ).map(([l, v]) => (

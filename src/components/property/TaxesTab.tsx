@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import type { Property, TaxItem, TaxStatus } from '../../lib/types'
+import type { CurrencyCode } from '../../lib/currency'
 import { calcAnnual } from '../../lib/finance'
 import { fmt, parseNum } from '../../lib/format'
 
 type Props = {
   prop: Property
   onUpdateProp: (fn: (p: Property) => Property) => void
+  cx?: (n: number) => number
+  displayCurrency?: CurrencyCode
 }
 
 const TAX_STATUS_COLORS: Record<string, { bg: string; color: string }> = {
@@ -13,7 +16,7 @@ const TAX_STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   pending: { bg: '#fef9c3', color: '#a16207' },
 }
 
-export function TaxesTab({ prop, onUpdateProp }: Props) {
+export function TaxesTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
   const ann = calcAnnual(prop)
   const items = prop.taxes.items ?? []
   const itemsTotal = items.reduce((a, t) => a + t.amount, 0)
@@ -151,7 +154,7 @@ export function TaxesTab({ prop, onUpdateProp }: Props) {
               {items.map((t) => (
                 <tr key={t.id}>
                   <td style={{ textAlign: 'left', fontWeight: 500 }}>{t.taxId || '—'}</td>
-                  <td style={{ textAlign: 'right' }}>{t.amount ? fmt(t.amount) : '—'}</td>
+                  <td style={{ textAlign: 'right' }}>{t.amount ? fmt(cx(t.amount)) : '—'}</td>
                   <td style={{ textAlign: 'right' }}>
                     {t.dueDate
                       ? new Date(t.dueDate + 'T12:00').toLocaleDateString('en-GB', {
@@ -225,7 +228,7 @@ export function TaxesTab({ prop, onUpdateProp }: Props) {
               ))}
               <tr className="total-row">
                 <td style={{ textAlign: 'left' }}>Total</td>
-                <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(itemsTotal)}</td>
+                <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(cx(itemsTotal))}</td>
                 <td />
                 <td />
                 <td style={{ textAlign: 'right', fontWeight: 700 }}>{ann.egi && itemsTotal ? `${((itemsTotal / ann.egi) * 100).toFixed(1)}%` : ann.egi ? '—' : '100%'}</td>
@@ -252,7 +255,7 @@ export function TaxesTab({ prop, onUpdateProp }: Props) {
                 />
               </div>
               <div className="field">
-                <label>Amount (COP)</label>
+                <label>Amount ({prop.currency})</label>
                 <input
                   type="text"
                   placeholder="3,472,000"

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Property } from '../lib/types'
+import { type CurrencyCode, type FxRates, loadFxRates, convert } from '../lib/currency'
 import { useAppState } from '../context/useAppState'
 import { activeContract } from '../lib/finance'
 import { YEAR_OPTIONS } from '../lib/constants'
@@ -37,6 +38,9 @@ export function PropertyPage({ prop, onUpdateProp }: Props) {
   const [nameDraft, setNameDraft] = useState('')
   const active = activeContract(prop)
   const { setSelectedId } = useAppState()
+  const [displayCurrency, setDisplayCurrency] = useState<CurrencyCode>(prop.currency)
+  const [fxRates] = useState<FxRates>(loadFxRates)
+  const cx = (n: number) => displayCurrency === prop.currency ? n : convert(n, prop.currency, displayCurrency, fxRates)
 
   const startEditName = () => {
     setNameDraft(prop.name)
@@ -109,6 +113,36 @@ export function PropertyPage({ prop, onUpdateProp }: Props) {
               {y}
             </button>
           ))}
+          {prop.currency !== 'USD' && (
+            <>
+              <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
+              <div
+                style={{
+                  display: 'inline-flex', borderRadius: 20, padding: 2,
+                  background: '#e8ecf2', cursor: 'pointer', position: 'relative',
+                }}
+              >
+                {([prop.currency, 'USD'] as CurrencyCode[]).map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setDisplayCurrency(c)}
+                    style={{
+                      position: 'relative', zIndex: 1, padding: '4px 14px',
+                      fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 18,
+                      cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
+                      background: displayCurrency === c ? '#fff' : 'transparent',
+                      color: displayCurrency === c ? '#1a1d23' : '#6b7280',
+                      boxShadow: displayCurrency === c ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
       <div className="tabs">
@@ -125,13 +159,13 @@ export function PropertyPage({ prop, onUpdateProp }: Props) {
         ))}
       </div>
       <div className="content">
-        {tab === 'overview' && <OverviewTab prop={prop} onUpdateProp={onUpdateProp} />}
+        {tab === 'overview' && <OverviewTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
         {tab === 'contracts' && <ContractsTab prop={prop} onUpdateProp={onUpdateProp} />}
-        {tab === 'cashflow' && <CashflowTab prop={prop} />}
-        {tab === 'opex' && <OpexCapexTab prop={prop} onUpdateProp={onUpdateProp} />}
-        {tab === 'taxes' && <TaxesTab prop={prop} onUpdateProp={onUpdateProp} />}
-        {tab === 'services' && <ServicesTab prop={prop} onUpdateProp={onUpdateProp} />}
-        {tab === 'factsheet' && <FactSheetTab prop={prop} onUpdateProp={onUpdateProp} />}
+        {tab === 'cashflow' && <CashflowTab prop={prop} cx={cx} displayCurrency={displayCurrency} />}
+        {tab === 'opex' && <OpexCapexTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
+        {tab === 'taxes' && <TaxesTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
+        {tab === 'services' && <ServicesTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
+        {tab === 'factsheet' && <FactSheetTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
       </div>
     </div>
   )

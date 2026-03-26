@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef } from 'react'
 import type { FactSheet, Property, PropertyContact, OwnershipEntry, MortgageInfo } from '../../lib/types'
 import { fmt } from '../../lib/format'
+import type { CurrencyCode } from '../../lib/currency'
+import { COUNTRIES } from '../../lib/countries'
 import { uploadPropertyPhoto, deletePropertyPhoto } from '../../lib/photoStorage'
 
 const IconCopy = () => (
@@ -16,6 +18,8 @@ const CONTACT_ROLES = ['Owner', 'Property Manager', 'Building Manager', 'Broker'
 type Props = {
   prop: Property
   onUpdateProp: (fn: (p: Property) => Property) => void
+  cx?: (n: number) => number
+  displayCurrency?: CurrencyCode
 }
 
 const EMPTY_MORTGAGE: MortgageInfo = {
@@ -63,7 +67,7 @@ function ReadOnlyField({ label, value }: { label: string; value: string | number
   )
 }
 
-export function FactSheetTab({ prop, onUpdateProp }: Props) {
+export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
   const fs = prop.factSheet ?? EMPTY
   const [editingChars, setEditingChars] = useState(false)
   const [editingLegal, setEditingLegal] = useState(false)
@@ -315,8 +319,45 @@ export function FactSheetTab({ prop, onUpdateProp }: Props) {
               {editingChars ? 'Done' : 'Edit'}
             </button>
           </div>
+          {/* ── Location ── */}
+          <div className="ct-field-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 8, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Location</div>
           {editingChars ? (
-            <div className="contract-grid">
+            <div className="contract-grid" style={{ marginBottom: 20 }}>
+              <div className="field">
+                <label>Address</label>
+                <input type="text" placeholder="Calle 78 #5-32" value={prop.address} onChange={(e) => setProp('address', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Neighbourhood</label>
+                <input type="text" placeholder="Chicó" value={prop.neighbourhood} onChange={(e) => setProp('neighbourhood', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>City</label>
+                <input type="text" placeholder="Bogotá" value={prop.city} onChange={(e) => setProp('city', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Country</label>
+                <select value={prop.country} onChange={(e) => setProp('country', e.target.value)}>
+                  <option value="">Select...</option>
+                  {COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : (
+            <div className="ct-fields" style={{ marginBottom: 20 }}>
+              <ReadOnlyField label="Address" value={prop.address} />
+              <ReadOnlyField label="Neighbourhood" value={prop.neighbourhood} />
+              <ReadOnlyField label="City" value={prop.city} />
+              <ReadOnlyField label="Country" value={prop.country} />
+            </div>
+          )}
+
+          {/* ── Properties ── */}
+          <div className="ct-field-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 8, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Properties</div>
+          {editingChars ? (
+            <div className="contract-grid" style={{ marginBottom: 20 }}>
               <div className="field">
                 <label>Property type</label>
                 <select value={fs.propertyType} onChange={(e) => set('propertyType', e.target.value)}>
@@ -339,17 +380,40 @@ export function FactSheetTab({ prop, onUpdateProp }: Props) {
                 </select>
               </div>
               <div className="field">
-                <label>Address</label>
-                <input type="text" placeholder="Calle 78 #5-32" value={prop.address} onChange={(e) => setProp('address', e.target.value)} />
+                <label>Year built</label>
+                <input type="text" placeholder="2015" value={fs.yearBuilt ?? ''} onChange={(e) => setNum('yearBuilt', e.target.value)} />
               </div>
               <div className="field">
-                <label>Neighbourhood</label>
-                <input type="text" placeholder="Chicó" value={prop.neighbourhood} onChange={(e) => setProp('neighbourhood', e.target.value)} />
+                <label>Last renovation</label>
+                <input type="text" placeholder="2022" value={fs.lastRenovation ?? ''} onChange={(e) => setNum('lastRenovation', e.target.value)} />
               </div>
               <div className="field">
-                <label>City</label>
-                <input type="text" placeholder="Bogotá" value={prop.city} onChange={(e) => setProp('city', e.target.value)} />
+                <label>Floor</label>
+                <input type="text" placeholder="5" value={fs.floor ?? ''} onChange={(e) => setNum('floor', e.target.value)} />
               </div>
+              <div className="field">
+                <label>Concierge</label>
+                <select value={prop.concierge ? 'yes' : 'no'} onChange={(e) => setProp('concierge', e.target.value === 'yes')}>
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </div>
+            </div>
+          ) : (
+            <div className="ct-fields" style={{ marginBottom: 20 }}>
+              <ReadOnlyField label="Property type" value={fs.propertyType} />
+              <ReadOnlyField label="Estrato" value={fs.estrato} />
+              <ReadOnlyField label="Year built" value={fs.yearBuilt} />
+              <ReadOnlyField label="Last renovation" value={fs.lastRenovation} />
+              <ReadOnlyField label="Floor" value={fs.floor} />
+              <ReadOnlyField label="Concierge" value={prop.concierge ? 'Yes' : 'No'} />
+            </div>
+          )}
+
+          {/* ── Spatial features ── */}
+          <div className="ct-field-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 8, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Spatial features</div>
+          {editingChars ? (
+            <div className="contract-grid">
               <div className="field">
                 <label>Area (m²)</label>
                 <input type="text" placeholder="133" value={prop.area || ''} onChange={(e) => setPropNum('area', e.target.value)} />
@@ -371,13 +435,6 @@ export function FactSheetTab({ prop, onUpdateProp }: Props) {
                 <input type="text" placeholder="1" value={prop.storageUnits || ''} onChange={(e) => setPropNum('storageUnits', e.target.value)} />
               </div>
               <div className="field">
-                <label>Concierge</label>
-                <select value={prop.concierge ? 'yes' : 'no'} onChange={(e) => setProp('concierge', e.target.value === 'yes')}>
-                  <option value="no">No</option>
-                  <option value="yes">Yes</option>
-                </select>
-              </div>
-              <div className="field">
                 <label>Terrace (m²)</label>
                 <input type="text" placeholder="0" value={prop.terrace || ''} onChange={(e) => setPropNum('terrace', e.target.value)} />
               </div>
@@ -385,37 +442,16 @@ export function FactSheetTab({ prop, onUpdateProp }: Props) {
                 <label>Balcony (m²)</label>
                 <input type="text" placeholder="0" value={prop.balcony || ''} onChange={(e) => setPropNum('balcony', e.target.value)} />
               </div>
-              <div className="field">
-                <label>Year built</label>
-                <input type="text" placeholder="2015" value={fs.yearBuilt ?? ''} onChange={(e) => setNum('yearBuilt', e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Last renovation</label>
-                <input type="text" placeholder="2022" value={fs.lastRenovation ?? ''} onChange={(e) => setNum('lastRenovation', e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Floor</label>
-                <input type="text" placeholder="5" value={fs.floor ?? ''} onChange={(e) => setNum('floor', e.target.value)} />
-              </div>
             </div>
           ) : (
             <div className="ct-fields">
-              <ReadOnlyField label="Property type" value={fs.propertyType} />
-              <ReadOnlyField label="Estrato" value={fs.estrato} />
-              <ReadOnlyField label="Address" value={prop.address} />
-              <ReadOnlyField label="Neighbourhood" value={prop.neighbourhood} />
-              <ReadOnlyField label="City" value={prop.city} />
               <ReadOnlyField label="Area" value={prop.area ? `${prop.area} m²` : null} />
               <ReadOnlyField label="Bedrooms" value={prop.bedrooms || null} />
               <ReadOnlyField label="Bathrooms" value={prop.bathrooms || null} />
               <ReadOnlyField label="Parking" value={prop.parking || null} />
               <ReadOnlyField label="Storage units" value={prop.storageUnits || null} />
-              <ReadOnlyField label="Concierge" value={prop.concierge ? 'Yes' : 'No'} />
               <ReadOnlyField label="Terrace" value={prop.terrace ? `${prop.terrace} m²` : null} />
               <ReadOnlyField label="Balcony" value={prop.balcony ? `${prop.balcony} m²` : null} />
-              <ReadOnlyField label="Year built" value={fs.yearBuilt} />
-              <ReadOnlyField label="Last renovation" value={fs.lastRenovation} />
-              <ReadOnlyField label="Floor" value={fs.floor} />
             </div>
           )}
         </div>
@@ -526,15 +562,15 @@ export function FactSheetTab({ prop, onUpdateProp }: Props) {
                     </select>
                   </div>
                   <div className="field">
-                    <label>Original amount (COP)</label>
+                    <label>Original amount ({prop.currency})</label>
                     <input type="text" placeholder="250,000,000" value={mortgage.originalAmount ?? ''} onChange={(e) => setMortgageNum('originalAmount', e.target.value)} />
                   </div>
                   <div className="field">
-                    <label>Outstanding balance (COP)</label>
+                    <label>Outstanding balance ({prop.currency})</label>
                     <input type="text" placeholder="180,000,000" value={mortgage.outstandingBalance ?? ''} onChange={(e) => setMortgageNum('outstandingBalance', e.target.value)} />
                   </div>
                   <div className="field">
-                    <label>Monthly payment (COP)</label>
+                    <label>Monthly payment ({prop.currency})</label>
                     <input type="text" placeholder="2,500,000" value={mortgage.monthlyPayment ?? ''} onChange={(e) => setMortgageNum('monthlyPayment', e.target.value)} />
                   </div>
                   <div className="field">
@@ -563,9 +599,9 @@ export function FactSheetTab({ prop, onUpdateProp }: Props) {
               <div className="ct-fields">
                 <ReadOnlyField label="Lender" value={mortgage.lender} />
                 <ReadOnlyField label="Loan number" value={mortgage.loanNumber} />
-                <ReadOnlyField label="Original amount" value={mortgage.originalAmount ? fmt(mortgage.originalAmount) : null} />
-                <ReadOnlyField label="Outstanding balance" value={mortgage.outstandingBalance ? fmt(mortgage.outstandingBalance) : null} />
-                <ReadOnlyField label="Monthly payment" value={mortgage.monthlyPayment ? fmt(mortgage.monthlyPayment) : null} />
+                <ReadOnlyField label="Original amount" value={mortgage.originalAmount ? fmt(cx(mortgage.originalAmount)) : null} />
+                <ReadOnlyField label="Outstanding balance" value={mortgage.outstandingBalance ? fmt(cx(mortgage.outstandingBalance)) : null} />
+                <ReadOnlyField label="Monthly payment" value={mortgage.monthlyPayment ? fmt(cx(mortgage.monthlyPayment)) : null} />
                 <ReadOnlyField label="Interest rate" value={mortgage.interestRate ? `${mortgage.interestRate}% E.A.` : null} />
                 <ReadOnlyField label="Rate type" value={mortgage.rateType === 'fixed' ? 'Fixed (Tasa fija)' : mortgage.rateType === 'variable' ? 'Variable (UVR)' : null} />
                 <ReadOnlyField label="Term" value={mortgage.termMonths ? `${mortgage.termMonths} months (${(mortgage.termMonths / 12).toFixed(1)} yrs)` : null} />

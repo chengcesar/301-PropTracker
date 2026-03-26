@@ -1,5 +1,6 @@
 import { INCREMENT_OPTS } from '../../lib/constants'
 import type { IncrementType } from '../../lib/types'
+import type { CurrencyCode } from '../../lib/currency'
 
 export type ContractFormState = {
   tenant: string
@@ -18,9 +19,10 @@ export type ContractFormState = {
 type Props = {
   value: ContractFormState
   onChange: (next: ContractFormState) => void
+  currency?: CurrencyCode
 }
 
-export function ContractForm({ value, onChange }: Props) {
+export function ContractForm({ value, onChange, currency = 'COP' }: Props) {
   const set = <K extends keyof ContractFormState>(k: K, v: ContractFormState[K]) => {
     onChange({ ...value, [k]: v })
   }
@@ -44,7 +46,7 @@ export function ContractForm({ value, onChange }: Props) {
         />
       </div>
       <div className="field">
-        <label>Monthly rent (COP)</label>
+        <label>Monthly rent ({currency})</label>
         <input
           type="text"
           value={value.monthlyRent ?? ''}
@@ -102,7 +104,7 @@ export function ContractForm({ value, onChange }: Props) {
       )}
       <div className="divider" style={{ gridColumn: '1/-1' }} />
       <div className="field">
-        <label>Admin / mgmt fee (COP)</label>
+        <label>Admin / mgmt fee ({currency})</label>
         <input type="text" value={value.adminFee ?? ''} onChange={(e) => set('adminFee', e.target.value)} />
       </div>
       <div className="field" style={{ gridColumn: '1/-1' }}>

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import type { Property } from '../lib/types'
-import { activeContract, calcAnnual, calcPortfolioTotals } from '../lib/finance'
-import { fmtM } from '../lib/format'
+import { activeContract, calcAnnual, calcPortfolioTotalsIn, convertAnnual } from '../lib/finance'
+import { fmtCurrencyM } from '../lib/format'
+import { type CurrencyCode, type FxRates, CURRENCIES, CURRENCY_LIST, loadFxRates, saveFxRates, flagUrl } from '../lib/currency'
 import { useAppState } from '../context/useAppState'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { YEAR_OPTIONS } from '../lib/constants'
 import { KpiInfoIcon } from '../components/KpiInfoIcon'
+import { COUNTRIES, countryFlagUrl } from '../lib/countries'
 
 type Props = {
   properties: Property[]
@@ -107,6 +109,67 @@ function RowMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => voi
   )
 }
 
+const IconDeltaDown = () => (
+  <svg width="4" height="3" viewBox="0 0 7 5" fill="currentColor" aria-hidden>
+    <path d="M3.5 5L0 0h7L3.5 5z" />
+  </svg>
+)
+const IconDeltaUp = () => (
+  <svg width="4" height="3" viewBox="0 0 7 5" fill="currentColor" aria-hidden>
+    <path d="M3.5 0L7 5H0L3.5 0z" />
+  </svg>
+)
+
+function KpiPctOfEgiDelta({ pct, kind }: { pct: number | null; kind: 'egi100' | 'opex' | 'noi' | 'taxes' | 'net' }) {
+  if (kind === 'egi100') {
+    if (pct === null || !Number.isFinite(pct) || pct <= 0) return null
+    return (
+      <div className="kpi-delta-pill kpi-delta-pill--up" title="Total EGI ÷ total EGI = 100% (baseline for % of EGI)">
+        <IconDeltaUp />
+        <span>100%</span>
+      </div>
+    )
+  }
+
+  if (pct === null || !Number.isFinite(pct)) return null
+
+  if (kind === 'net') {
+    const nearZero = Math.abs(pct) < 0.05
+    const shown = nearZero ? '0' : Math.abs(pct).toFixed(1)
+    const positive = pct > 0 || nearZero
+    return positive ? (
+      <div className="kpi-delta-pill kpi-delta-pill--up" title="Net cashflow as % of total EGI">
+        <IconDeltaUp />
+        <span>{shown}%</span>
+      </div>
+    ) : (
+      <div className="kpi-delta-pill kpi-delta-pill--down" title="Net cashflow as % of total EGI">
+        <IconDeltaDown />
+        <span>−{shown}%</span>
+      </div>
+    )
+  }
+
+  const shown = Math.abs(pct) < 0.05 ? '0' : pct.toFixed(1)
+
+  if (kind === 'noi') {
+    return (
+      <div className="kpi-delta-pill kpi-delta-pill--up" title="NOI as % of total EGI">
+        <IconDeltaUp />
+        <span>{shown}%</span>
+      </div>
+    )
+  }
+
+  const expenseTitle = kind === 'opex' ? 'OPEX (−) as % of total EGI' : 'Taxes (−) as % of total EGI'
+  return (
+    <div className="kpi-delta-pill kpi-delta-pill--down" title={expenseTitle}>
+      <IconDeltaDown />
+      <span>−{shown}%</span>
+    </div>
+  )
+}
+
 const KPI_KEYS = ['gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'net'] as const
 type KpiKey = typeof KPI_KEYS[number]
 const KPI_META: Record<KpiKey, { label: string; cls?: string; negPrefix?: boolean; tip: string }> = {
@@ -119,19 +182,20 @@ const KPI_META: Record<KpiKey, { label: string; cls?: string; negPrefix?: boolea
   net: { label: 'Net cashflow', cls: 'green', tip: 'Final cashflow after all income and expenses' },
 }
 
-const COL_KEYS = ['owner', 'status', 'gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin'] as const
+const COL_KEYS = ['owner', 'country', 'status', 'gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin'] as const
 type ColKey = typeof COL_KEYS[number]
 const COL_LABELS: Record<ColKey, string> = {
-  owner: 'Owner', status: 'Status', gpi: 'GPI', egi: 'EGI', opex: 'OPEX', noi: 'NOI',
+  owner: 'Owner', country: 'Country', status: 'Status', gpi: 'GPI', egi: 'EGI', opex: 'OPEX', noi: 'NOI',
   capex: 'CAPEX', taxes: 'Taxes', netCf: 'Net CF', margin: 'Margin',
 }
 const COL_STORAGE_KEY = 'col-visibility'
 function loadColVisibility(): Record<ColKey, boolean> {
+  const defaults = Object.fromEntries(COL_KEYS.map(k => [k, true])) as Record<ColKey, boolean>
   try {
     const raw = localStorage.getItem(COL_STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) return { ...defaults, ...JSON.parse(raw) }
   } catch {}
-  return Object.fromEntries(COL_KEYS.map(k => [k, true])) as Record<ColKey, boolean>
+  return defaults
 }
 
 const STORAGE_KEY = 'kpi-visibility'
@@ -151,10 +215,183 @@ const IconEye = ({ visible }: { visible: boolean }) => (
   )
 )
 
+function CurrencyPicker({ value, onChange }: { value: CurrencyCode; onChange: (c: CurrencyCode) => void }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  useEffect(() => {
+    if (open) { setSearch(''); inputRef.current?.focus() }
+  }, [open])
+
+  const filtered = CURRENCY_LIST.filter(c => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    const cfg = CURRENCIES[c]
+    return c.toLowerCase().includes(q) || cfg.label.toLowerCase().includes(q)
+  })
+
+  const selected = CURRENCIES[value]
+  const recentCodes: CurrencyCode[] = ['USD', 'COP', 'PEN']
+  const recent = recentCodes.filter(c => !search || filtered.includes(c))
+  const rest = filtered.filter(c => !recentCodes.includes(c))
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        style={{
+          padding: '5px 28px 5px 10px', fontSize: 13, fontWeight: 500,
+          background: '#f7f9fc', border: '1px solid #e8ecf2', borderRadius: 10,
+          cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+          position: 'relative', whiteSpace: 'nowrap',
+        }}
+      >
+        <img src={flagUrl(value, 40)} alt="" width={20} height={14} style={{ borderRadius: 2, objectFit: 'cover' }} />
+        <span>{value}</span>
+        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 9, top: '50%', transform: `translateY(-50%)${open ? ' rotate(180deg)' : ''}`, transition: 'transform 0.15s ease' }}>
+          <path d="M1 1l4 4 4-4" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', right: 0, top: '100%', marginTop: 6,
+          background: '#fff', border: '1px solid #e8ecf2', borderRadius: 12,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50, width: 220,
+          animation: 'selectSlideIn 0.15s ease-out', overflow: 'hidden',
+        }}>
+          <div style={{ padding: '10px 10px 6px' }}>
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{
+                width: '100%', padding: '7px 10px', fontSize: 13,
+                background: '#f7f9fc', border: '1px solid #e8ecf2', borderRadius: 8,
+                outline: 'none', boxSizing: 'border-box',
+              }}
+            />
+          </div>
+          <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+            {recent.length > 0 && (
+              <>
+                <div style={{ padding: '6px 14px 4px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Recent
+                </div>
+                {recent.map(code => {
+                  const cfg = CURRENCIES[code]
+                  return (
+                    <button
+                      key={code}
+                      type="button"
+                      className="ghost"
+                      onClick={() => { onChange(code); setOpen(false) }}
+                      style={{
+                        width: '100%', textAlign: 'left', padding: '8px 14px',
+                        display: 'flex', alignItems: 'center', gap: 10, borderRadius: 0,
+                        background: value === code ? '#f0f5ff' : undefined,
+                      }}
+                    >
+                      <img src={flagUrl(code, 40)} alt="" width={22} height={16} style={{ borderRadius: 3, objectFit: 'cover' }} />
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#374151', minWidth: 32 }}>{code}</span>
+                      <span style={{ fontSize: 13, color: '#6b7280' }}>{cfg.label}</span>
+                    </button>
+                  )
+                })}
+              </>
+            )}
+            {rest.length > 0 && (
+              <>
+                {recent.length > 0 && <div style={{ height: 1, background: '#e8ecf2', margin: '4px 0' }} />}
+                {rest.map(code => {
+                  const cfg = CURRENCIES[code]
+                  return (
+                    <button
+                      key={code}
+                      type="button"
+                      className="ghost"
+                      onClick={() => { onChange(code); setOpen(false) }}
+                      style={{
+                        width: '100%', textAlign: 'left', padding: '8px 14px',
+                        display: 'flex', alignItems: 'center', gap: 10, borderRadius: 0,
+                        background: value === code ? '#f0f5ff' : undefined,
+                      }}
+                    >
+                      <img src={flagUrl(code, 40)} alt="" width={22} height={16} style={{ borderRadius: 3, objectFit: 'cover' }} />
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#374151', minWidth: 32 }}>{code}</span>
+                      <span style={{ fontSize: 13, color: '#6b7280' }}>{cfg.label}</span>
+                    </button>
+                  )
+                })}
+              </>
+            )}
+            {filtered.length === 0 && (
+              <div style={{ padding: '12px 14px', fontSize: 13, color: 'var(--text3)' }}>No results</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FxRateEditor({ rates, onSave, onClose }: { rates: FxRates; onSave: (r: FxRates) => void; onClose: () => void }) {
+  const [draft, setDraft] = useState({ ...rates })
+  const editableCurrencies = CURRENCY_LIST.filter(c => c !== 'USD')
+  return (
+    <div style={{
+      position: 'absolute', right: 0, top: '100%', marginTop: 6,
+      background: '#fff', border: '1px solid var(--border)', borderRadius: 12,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 280,
+      padding: 16, animation: 'selectSlideIn 0.15s ease-out',
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10 }}>
+        FX Rates (to USD)
+      </div>
+      {editableCurrencies.map(code => (
+        <div key={code} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 500, width: 60, display: 'inline-flex', alignItems: 'center', gap: 4 }}><img src={flagUrl(code)} alt="" width={16} height={12} style={{ borderRadius: 2, objectFit: 'cover' }} />{code}</span>
+          <input
+            type="text"
+            value={draft[code]}
+            onChange={(e) => setDraft(d => ({ ...d, [code]: parseFloat(e.target.value) || 0 }))}
+            style={{ flex: 1, padding: '6px 10px', fontSize: 13, background: '#f7f9fc', border: '1px solid #e8ecf2', borderRadius: 8 }}
+          />
+        </div>
+      ))}
+      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
+        Updated: {draft.updatedAt}
+      </div>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button className="ghost" style={{ fontSize: 12, padding: '5px 10px' }} onClick={onClose}>Cancel</button>
+        <button className="primary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => onSave({ ...draft, updatedAt: new Date().toISOString().slice(0, 10) })}>Save</button>
+      </div>
+    </div>
+  )
+}
+
 export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear())
   const withYear = (p: Property): Property => ({ ...p, year: selectedYear })
   const { setAddPropertyOpen, removeProperty } = useAppState()
+  const [fxRates, setFxRates] = useState<FxRates>(loadFxRates)
+  const [fxOpen, setFxOpen] = useState(false)
+  const fxRef = useRef<HTMLDivElement>(null)
+  const [displayCurrency, setDisplayCurrency] = useState<CurrencyCode>('USD')
+  const fm = (n: number | null | undefined) => fmtCurrencyM(n, displayCurrency)
   const [deleteTarget, setDeleteTarget] = useState<Property | null>(null)
   const [copied, setCopied] = useState(false)
   const [kpiVis, setKpiVis] = useState(loadKpiVisibility)
@@ -174,12 +411,14 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const FILTER_COLUMNS = useMemo(() => {
     const statusValues = ['Rented', 'Vacant']
     const owners = Array.from(new Set(properties.map(p => p.owner).filter(Boolean))).sort()
+    const countries = Array.from(new Set(properties.map(p => p.country).filter(Boolean))).sort()
     const cities = Array.from(new Set(properties.map(p => p.city).filter(Boolean))).sort()
     const neighbourhoods = Array.from(new Set(properties.map(p => p.neighbourhood).filter(Boolean))).sort()
     const cols: { key: string; label: string; values: string[] }[] = [
       { key: 'status', label: 'Status', values: statusValues },
     ]
     if (owners.length > 1) cols.push({ key: 'owner', label: 'Owner', values: owners })
+    if (countries.length > 1) cols.push({ key: 'country', label: 'Country', values: countries })
     if (cities.length > 1) cols.push({ key: 'city', label: 'City', values: cities })
     if (neighbourhoods.length > 1) cols.push({ key: 'neighbourhood', label: 'Neighbourhood', values: neighbourhoods })
     return cols
@@ -201,13 +440,32 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
       result = result.filter(p =>
         p.name.toLowerCase().includes(q) ||
         p.address?.toLowerCase().includes(q) ||
-        p.owner?.toLowerCase().includes(q)
+        p.owner?.toLowerCase().includes(q) ||
+        p.country?.toLowerCase().includes(q)
       )
     }
     return result
   }, [properties, activeFilters, searchQuery])
 
-  const totals = calcPortfolioTotals(filteredProperties.map(withYear))
+  const totals = calcPortfolioTotalsIn(filteredProperties.map(withYear), displayCurrency, fxRates)
+
+  const egiRatioRow = useMemo(() => {
+    const e = totals.egi
+    if (!e || !Number.isFinite(e)) {
+      return {
+        opexPct: null as number | null,
+        noiPct: null as number | null,
+        taxesPct: null as number | null,
+        netPct: null as number | null,
+      }
+    }
+    return {
+      opexPct: (totals.opex / e) * 100,
+      noiPct: (totals.noi / e) * 100,
+      taxesPct: (totals.taxes / e) * 100,
+      netPct: (totals.net / e) * 100,
+    }
+  }, [totals.egi, totals.opex, totals.noi, totals.taxes, totals.net])
 
   useEffect(() => {
     const el = tableScrollRef.current
@@ -238,6 +496,15 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   }, [colMenuOpen])
 
   useEffect(() => {
+    if (!fxOpen) return
+    const handler = (e: MouseEvent) => {
+      if (fxRef.current && !fxRef.current.contains(e.target as Node)) setFxOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [fxOpen])
+
+  useEffect(() => {
     if (!filterDropdownOpen) return
     const handler = (e: MouseEvent) => {
       if (filterBarRef.current && !filterBarRef.current.contains(e.target as Node)) setFilterDropdownOpen(null)
@@ -265,13 +532,15 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const visibleKpis = KPI_KEYS.filter(k => kpiVis[k])
 
   function handleDownloadCsv() {
-    const headers = ['Property', 'Owner', 'Status', 'GPI', 'EGI', 'OPEX', 'NOI', 'CAPEX', 'Taxes', 'Net CF', 'Margin']
+    const dc = displayCurrency
+    const headers = ['Property', 'Owner', 'Country', 'Status', `GPI (${dc})`, `EGI (${dc})`, `OPEX (${dc})`, `NOI (${dc})`, `CAPEX (${dc})`, `Taxes (${dc})`, `Net CF (${dc})`, 'Margin']
     const rows = filteredProperties.map((p) => {
-      const a = calcAnnual(withYear(p))
+      const a = convertAnnual(calcAnnual(withYear(p)), p.currency, dc, fxRates)
       const ac = activeContract(p)
       return [
         `"${p.name}"`,
         `"${p.owner || ''}"`,
+        `"${p.country || ''}"`,
         ac ? 'Rented' : 'Vacant',
         a.gpi, a.egi, a.totalOpex, a.noi,
         a.totalCapex || '', a.taxes || '', a.netCf,
@@ -283,27 +552,29 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `portfolio-${selectedYear}.csv`
+    a.download = `portfolio-${selectedYear}-${dc}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
 
   function handleCopy() {
-    const headers = ['Property', 'Owner', 'Status', 'GPI', 'EGI', 'OPEX', 'NOI', 'CAPEX', 'Taxes', 'Net CF', 'Margin']
+    const dc = displayCurrency
+    const headers = ['Property', 'Owner', 'Country', 'Status', `GPI (${dc})`, `EGI (${dc})`, `OPEX (${dc})`, `NOI (${dc})`, `CAPEX (${dc})`, `Taxes (${dc})`, `Net CF (${dc})`, 'Margin']
     const rows = filteredProperties.map((p) => {
-      const a = calcAnnual(withYear(p))
+      const a = convertAnnual(calcAnnual(withYear(p)), p.currency, dc, fxRates)
       const ac = activeContract(p)
       return [
         p.name,
         p.owner || '',
+        p.country || '',
         ac ? 'Rented' : 'Vacant',
-        fmtM(a.gpi),
-        fmtM(a.egi),
-        `−${fmtM(a.totalOpex)}`,
-        fmtM(a.noi),
-        a.totalCapex ? `−${fmtM(a.totalCapex)}` : '—',
-        a.taxes ? `−${fmtM(a.taxes)}` : '—',
-        fmtM(a.netCf),
+        fm(a.gpi),
+        fm(a.egi),
+        `−${fm(a.totalOpex)}`,
+        fm(a.noi),
+        a.totalCapex ? `−${fm(a.totalCapex)}` : '—',
+        a.taxes ? `−${fm(a.taxes)}` : '—',
+        fm(a.netCf),
         a.gpi ? `${Math.round((a.netCf / a.gpi) * 100)}%` : '—',
       ].join('\t')
     })
@@ -318,9 +589,27 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
           <div>
             <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.3px' }}>Portfolio</div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{properties.length} properties</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{properties.length} properties · Values in {displayCurrency}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CurrencyPicker value={displayCurrency} onChange={setDisplayCurrency} />
+            <div ref={fxRef} style={{ position: 'relative' }}>
+              <button
+                className="ghost"
+                style={{ padding: '5px 8px', fontSize: 12, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                title="FX Rates"
+                onClick={() => setFxOpen(v => !v)}
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M1.5 8h13"/><path d="M8 1.5c1.86 2.08 2.92 4.78 2.92 6.5S9.86 12.42 8 14.5c-1.86-2.08-2.92-4.78-2.92-6.5S6.14 3.58 8 1.5z"/></svg>
+              </button>
+              {fxOpen && (
+                <FxRateEditor
+                  rates={fxRates}
+                  onSave={(r) => { setFxRates(r); saveFxRates(r); setFxOpen(false) }}
+                  onClose={() => setFxOpen(false)}
+                />
+              )}
+            </div>
             <button className="primary" onClick={() => setAddPropertyOpen(true)}>+ Add Property</button>
             <div ref={kpiMenuRef} style={{ position: 'relative' }}>
               <button className="ghost" style={{ padding: '5px 8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} title="KPI settings" onClick={() => setKpiMenuOpen(v => !v)}>
@@ -380,8 +669,13 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                 <div className="kpi-label">{KPI_META[key].label} <KpiInfoIcon tip={KPI_META[key].tip} /></div>
                 <div className={`kpi-value ${KPI_META[key].cls || ''}`}>
                   {KPI_META[key].negPrefix && totals[key] ? '−' : ''}
-                  {fmtM(totals[key])}
+                  {fm(totals[key])}
                 </div>
+                {key === 'egi' && <KpiPctOfEgiDelta pct={totals.egi} kind="egi100" />}
+                {key === 'opex' && <KpiPctOfEgiDelta pct={egiRatioRow.opexPct} kind="opex" />}
+                {key === 'noi' && <KpiPctOfEgiDelta pct={egiRatioRow.noiPct} kind="noi" />}
+                {key === 'taxes' && <KpiPctOfEgiDelta pct={egiRatioRow.taxesPct} kind="taxes" />}
+                {key === 'net' && <KpiPctOfEgiDelta pct={egiRatioRow.netPct} kind="net" />}
               </div>
             ))}
           </div>
@@ -612,6 +906,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                 <tr>
                   <th>Property</th>
                   {colVis.owner && <th>Owner</th>}
+                  {colVis.country && <th className="wf-align-left">Country</th>}
                   {colVis.status && <th>Status</th>}
                   {colVis.gpi && <th>GPI</th>}
                   {colVis.egi && <th>EGI</th>}
@@ -635,8 +930,9 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
               </thead>
               <tbody>
                 {filteredProperties.map((p) => {
-                  const a = calcAnnual(withYear(p))
+                  const a = convertAnnual(calcAnnual(withYear(p)), p.currency, displayCurrency, fxRates)
                   const ac = activeContract(p)
+                  const countryCode = COUNTRIES.find(c => c.name === p.country)?.code
                   return (
                     <tr key={p.id} onClick={() => onSelectProperty(p.id)} style={{ cursor: 'pointer' }}>
                       <td>
@@ -644,18 +940,30 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                         <div className="fs11 text3">{p.address}</div>
                       </td>
                       {colVis.owner && <td className="text3">{p.owner || '—'}</td>}
+                      {colVis.country && (
+                        <td className="text3 wf-align-left">
+                          {p.country ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              {countryCode ? (
+                                <img src={countryFlagUrl(countryCode, 40)} alt="" width={20} height={14} style={{ borderRadius: 2, objectFit: 'cover', flexShrink: 0 }} />
+                              ) : null}
+                              {p.country}
+                            </span>
+                          ) : '—'}
+                        </td>
+                      )}
                       {colVis.status && <td>
                         <span className={`badge ${ac ? 'active-c' : 'vacant'}`}>{ac ? 'Rented' : 'Vacant'}</span>
                       </td>}
-                      {colVis.gpi && <td>{fmtM(a.gpi)}</td>}
-                      {colVis.egi && <td className="pos">{fmtM(a.egi)}</td>}
-                      {colVis.opex && <td className="neg">−{fmtM(a.totalOpex)}</td>}
-                      {colVis.noi && <td className={a.noi >= 0 ? 'pos' : 'neg'}>{fmtM(a.noi)}</td>}
-                      {colVis.capex && <td className={a.totalCapex ? 'neg' : 'text3'}>{a.totalCapex ? `−${fmtM(a.totalCapex)}` : '—'}</td>}
-                      {colVis.taxes && <td className={a.taxes ? 'neg' : 'text3'}>{a.taxes ? `−${fmtM(a.taxes)}` : '—'}</td>}
+                      {colVis.gpi && <td>{fm(a.gpi)}</td>}
+                      {colVis.egi && <td className="pos">{fm(a.egi)}</td>}
+                      {colVis.opex && <td className="neg">−{fm(a.totalOpex)}</td>}
+                      {colVis.noi && <td className={a.noi >= 0 ? 'pos' : 'neg'}>{fm(a.noi)}</td>}
+                      {colVis.capex && <td className={a.totalCapex ? 'neg' : 'text3'}>{a.totalCapex ? `−${fm(a.totalCapex)}` : '—'}</td>}
+                      {colVis.taxes && <td className={a.taxes ? 'neg' : 'text3'}>{a.taxes ? `−${fm(a.taxes)}` : '—'}</td>}
                       {colVis.netCf && <td className={a.netCf >= 0 ? 'pos fw5' : 'neg fw5'}>
                         {a.netCf >= 0 ? '+' : ''}
-                        {fmtM(a.netCf)}
+                        {fm(a.netCf)}
                       </td>}
                       {colVis.margin && <td>{a.gpi ? `${Math.round((a.netCf / a.gpi) * 100)}%` : '—'}</td>}
                       <td onClick={(e) => e.stopPropagation()} style={{ width: 52, padding: '8px 12px 8px 0', verticalAlign: 'middle' }}>
@@ -672,16 +980,17 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                 <tr className="total-row">
                   <td>Total</td>
                   {colVis.owner && <td />}
+                  {colVis.country && <td className="wf-align-left" />}
                   {colVis.status && <td />}
-                  {colVis.gpi && <td>{fmtM(totals.gpi)}</td>}
-                  {colVis.egi && <td>{fmtM(totals.egi)}</td>}
-                  {colVis.opex && <td className="neg">−{fmtM(totals.opex)}</td>}
-                  {colVis.noi && <td>{fmtM(totals.noi)}</td>}
-                  {colVis.capex && <td>{totals.capex ? `−${fmtM(totals.capex)}` : '—'}</td>}
-                  {colVis.taxes && <td>{totals.taxes ? `−${fmtM(totals.taxes)}` : '—'}</td>}
+                  {colVis.gpi && <td>{fm(totals.gpi)}</td>}
+                  {colVis.egi && <td>{fm(totals.egi)}</td>}
+                  {colVis.opex && <td className="neg">−{fm(totals.opex)}</td>}
+                  {colVis.noi && <td>{fm(totals.noi)}</td>}
+                  {colVis.capex && <td>{totals.capex ? `−${fm(totals.capex)}` : '—'}</td>}
+                  {colVis.taxes && <td>{totals.taxes ? `−${fm(totals.taxes)}` : '—'}</td>}
                   {colVis.netCf && <td>
                     {totals.net >= 0 ? '+' : ''}
-                    {fmtM(totals.net)}
+                    {fm(totals.net)}
                   </td>}
                   {colVis.margin && <td>{totals.gpi ? `${Math.round((totals.net / totals.gpi) * 100)}%` : '—'}</td>}
                   <td style={{ width: 52, padding: '8px 0' }} />

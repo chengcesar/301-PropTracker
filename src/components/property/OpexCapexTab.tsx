@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import { CAPEX_CATS, MONTHS } from '../../lib/constants'
 import type { Property } from '../../lib/types'
+import type { CurrencyCode } from '../../lib/currency'
 import { expenseRowsForYear, yearMonths } from '../../lib/finance'
 import { fmt, parseNum } from '../../lib/format'
 
 type Props = {
   prop: Property
   onUpdateProp: (fn: (p: Property) => Property) => void
+  cx?: (n: number) => number
+  displayCurrency?: CurrencyCode
 }
 
-export function OpexCapexTab({ prop, onUpdateProp }: Props) {
+export function OpexCapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
   const [newCapex, setNewCapex] = useState({
     date: '',
     desc: '',
@@ -60,9 +63,9 @@ export function OpexCapexTab({ prop, onUpdateProp }: Props) {
                 <tr key={i} className={!ym[i] ? 'no-contract-row' : ''}>
                   <td>{name}</td>
                   {cellValues.map((v, j) => (
-                    <td key={rowDefs[j].key} className={v ? '' : 'text3'}>{v ? fmt(v) : '—'}</td>
+                    <td key={rowDefs[j].key} className={v ? '' : 'text3'}>{v ? fmt(cx(v)) : '—'}</td>
                   ))}
-                  <td className="fw5">−{fmt(total)}</td>
+                  <td className="fw5">−{fmt(cx(total))}</td>
                 </tr>
               )
             })}
@@ -71,7 +74,7 @@ export function OpexCapexTab({ prop, onUpdateProp }: Props) {
       </div>
       <div className="sec-hdr mb12">
         <span className="sec-title">CAPEX log</span>
-        <span className="fs11 text3">Total: {fmt(prop.capex.reduce((a, b) => a + b.amount, 0))}</span>
+        <span className="fs11 text3">Total: {fmt(cx(prop.capex.reduce((a, b) => a + b.amount, 0)))}</span>
       </div>
       <div className="card mb16">
         <div className="card-inner">
@@ -95,7 +98,7 @@ export function OpexCapexTab({ prop, onUpdateProp }: Props) {
               </span>
               <div style={{ width: '130px', textAlign: 'right' }}>
                 <div className="fs11 text3">Amount</div>
-                <div className="fs13 fw6 neg">−{fmt(c.amount)}</div>
+                <div className="fs13 fw6 neg">−{fmt(cx(c.amount))}</div>
               </div>
               <button
                 type="button"
@@ -144,7 +147,7 @@ export function OpexCapexTab({ prop, onUpdateProp }: Props) {
               </select>
             </div>
             <div className="field">
-              <label>Amount (COP)</label>
+              <label>Amount ({prop.currency})</label>
               <input
                 type="text"
                 value={newCapex.amount}

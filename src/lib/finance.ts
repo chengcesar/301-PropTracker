@@ -1,4 +1,5 @@
 import type { Contract, MonthData, Property, ServiceEntry } from './types'
+import { type CurrencyCode, type FxRates, convert } from './currency'
 
 export interface AnnualResult {
   gpi: number
@@ -189,6 +190,41 @@ export function calcPortfolioTotals(properties: Property[]): PortfolioTotals {
   return properties.reduce(
     (acc, p) => {
       const a = calcAnnual(p)
+      return {
+        gpi: acc.gpi + a.gpi,
+        egi: acc.egi + a.egi,
+        opex: acc.opex + a.totalOpex,
+        noi: acc.noi + a.noi,
+        capex: acc.capex + a.totalCapex,
+        taxes: acc.taxes + a.taxes,
+        net: acc.net + a.netCf,
+      }
+    },
+    { gpi: 0, egi: 0, opex: 0, noi: 0, capex: 0, taxes: 0, net: 0 },
+  )
+}
+
+/** Convert an AnnualResult from one currency to another */
+export function convertAnnual(result: AnnualResult, from: CurrencyCode, to: CurrencyCode, rates: FxRates): AnnualResult {
+  if (from === to) return result
+  const c = (n: number) => convert(n, from, to, rates)
+  return {
+    gpi: c(result.gpi),
+    vacancy: c(result.vacancy),
+    egi: c(result.egi),
+    totalOpex: c(result.totalOpex),
+    noi: c(result.noi),
+    totalCapex: c(result.totalCapex),
+    taxes: c(result.taxes),
+    netCf: c(result.netCf),
+  }
+}
+
+/** Portfolio totals converted to a common display currency */
+export function calcPortfolioTotalsIn(properties: Property[], to: CurrencyCode, rates: FxRates): PortfolioTotals {
+  return properties.reduce(
+    (acc, p) => {
+      const a = convertAnnual(calcAnnual(p), p.currency, to, rates)
       return {
         gpi: acc.gpi + a.gpi,
         egi: acc.egi + a.egi,
