@@ -1,6 +1,6 @@
 /** Multi-currency support — config, FX rates, conversion helpers */
 
-export type CurrencyCode = 'USD' | 'EUR' | 'CHF' | 'COP' | 'PEN'
+export type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'CHF' | 'COP' | 'PEN'
 
 export interface CurrencyConfig {
   code: CurrencyCode
@@ -12,11 +12,12 @@ export interface CurrencyConfig {
   decimals: number
 }
 
-export const CURRENCY_LIST: CurrencyCode[] = ['USD', 'EUR', 'CHF', 'COP', 'PEN']
+export const CURRENCY_LIST: CurrencyCode[] = ['USD', 'EUR', 'GBP', 'CHF', 'COP', 'PEN']
 
 export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
   USD: { code: 'USD', symbol: '$', locale: 'en-US', country: 'us', label: 'US Dollar', decimals: 2 },
   EUR: { code: 'EUR', symbol: '€', locale: 'de-DE', country: 'eu', label: 'Euro', decimals: 2 },
+  GBP: { code: 'GBP', symbol: '£', locale: 'en-GB', country: 'gb', label: 'British Pound', decimals: 2 },
   CHF: { code: 'CHF', symbol: 'Fr.', locale: 'de-CH', country: 'ch', label: 'Swiss Franc', decimals: 2 },
   COP: { code: 'COP', symbol: '$', locale: 'es-CO', country: 'co', label: 'Colombian Peso', decimals: 0 },
   PEN: { code: 'PEN', symbol: 'S/', locale: 'es-PE', country: 'pe', label: 'Peruvian Sol', decimals: 2 },
@@ -35,6 +36,7 @@ const FX_STORAGE_KEY = 'proptracker-fx-rates'
 const DEFAULT_RATES: FxRates = {
   USD: 1,
   EUR: 1.08,
+  GBP: 1.26,
   CHF: 1.13,
   COP: 0.000235,
   PEN: 0.267,

@@ -1,30 +1,21 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AppStateProvider } from './context/AppStateProvider'
 import { useAppState } from './context/useAppState'
-import { AddPropertyModal } from './components/modals/AddPropertyModal'
+import LandingPage from './pages/LandingPage'
+import LoginPage from './pages/LoginPage'
+import AuthHeader from './components/AuthHeader'
 import { PortfolioPage } from './pages/PortfolioPage'
 import { PropertyPage } from './pages/PropertyPage'
+import { AddPropertyModal } from './components/modals/AddPropertyModal'
 
-function AppRoutes() {
+function AppContent() {
   const { properties, selectedId, setSelectedId, updateProperty, addProperty, addPropertyOpen, setAddPropertyOpen } = useAppState()
   const activeProp = properties.find((p) => p.id === selectedId)
 
   return (
     <>
-      <header className="app-header">
-        <div className="app-header-logo">
-          <svg width="24" height="24" viewBox="0 0 90 90" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M36 56C36 55.4477 36.4477 55 37 55H54C54.5523 55 55 55.4477 55 56V82C55 82.5523 54.5523 83 54 83H37C36.4477 83 36 82.5523 36 82V56Z" fill="currentColor"/>
-            <path d="M12 72C12 71.4477 12.4477 71 13 71H30C30.5523 71 31 71.4477 31 72V82C31 82.5523 30.5523 83 30 83H13C12.4477 83 12 82.5523 12 82L12 72Z" fill="currentColor"/>
-            <path d="M59 45.8889C59 45.3366 59.4477 44.8889 60 44.8889H77C77.5523 44.8889 78 45.3366 78 45.8889V81.8889C78 82.4412 77.5523 82.8889 77 82.8889H60C59.4477 82.8889 59 82.4412 59 81.8889V45.8889Z" fill="currentColor"/>
-            <path d="M12 40C12 21.7746 26.7746 7 45 7C62.5538 7 76.9064 20.7057 77.9404 37.9997C78.0063 39.1023 77.1046 40 76 40H60.4444C59.3399 40 58.4601 39.0993 58.2977 38.0068C57.3347 31.5268 51.7479 26.5556 45 26.5556C37.5748 26.5556 31.5556 32.5748 31.5556 40V64.5C31.5556 65.6046 30.6601 66.5 29.5556 66.5H14C12.8954 66.5 12 65.6046 12 64.5V40Z" fill="currentColor"/>
-          </svg>
-          PropTracker
-        </div>
-        <div className="app-header-right">
-          <span className="app-header-user">user@example.com</span>
-          <button>Sign out</button>
-        </div>
-      </header>
+      <AuthHeader />
       <div className="app-body">
         {selectedId === 'portfolio' ? (
           <PortfolioPage properties={properties} onSelectProperty={setSelectedId} />
@@ -39,10 +30,45 @@ function AppRoutes() {
   )
 }
 
+function AppRoutes() {
+  const { user, loading } = useAuth()
+  if (loading) return (
+    <div className="app-loading">
+      <svg width="48" height="48" viewBox="0 0 90 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="65.6367" y="30.0342" width="12.3568" height="52.4532" fill="#6D2F20"/>
+        <rect x="38.832" y="30.3232" width="12.2887" height="52.1643" fill="#6D2F20"/>
+        <rect x="12" y="30.3232" width="12.2887" height="52.1643" fill="#6D2F20"/>
+        <path d="M78.001 30.3232H65.623C65.5666 22.9727 59.5914 17.0313 52.2275 17.0312C44.8636 17.0312 38.8884 22.9726 38.832 30.3232H24.332V7H78.001V30.3232Z" fill="#6D2F20"/>
+      </svg>
+      <div className="app-loading-spinner" />
+    </div>
+  )
+
+  return (
+    <Routes>
+      <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
+      <Route
+        path="/"
+        element={
+          user ? (
+            <AppStateProvider uid={user.uid}>
+              <AppContent />
+            </AppStateProvider>
+          ) : (
+            <LandingPage />
+          )
+        }
+      />
+    </Routes>
+  )
+}
+
 export default function App() {
   return (
-    <AppStateProvider>
-      <AppRoutes />
-    </AppStateProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </BrowserRouter>
   )
 }

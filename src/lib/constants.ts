@@ -34,3 +34,70 @@ export const INCREMENT_OPTS = [
 ] as const
 
 export const YEAR_OPTIONS = [2025, 2026, 2027] as const
+
+export const PROPERTY_TYPES = ['Apartment', 'House', 'Studio', 'Office', 'Commercial', 'Lot', 'Other'] as const
+
+export type SpatialFieldKey = 'area' | 'bedrooms' | 'bathrooms' | 'parking' | 'storageUnits' | 'terrace' | 'balcony' | 'floors'
+
+export interface SpatialFieldConfig {
+  key: SpatialFieldKey
+  label: string
+  placeholder: string
+  suffix?: string
+}
+
+const SPATIAL_FIELDS_BY_TYPE: Record<string, SpatialFieldConfig[]> = {
+  Apartment: [
+    { key: 'area', label: 'Area (m²)', placeholder: '133', suffix: 'm²' },
+    { key: 'bedrooms', label: 'Bedrooms', placeholder: '3' },
+    { key: 'bathrooms', label: 'Bathrooms', placeholder: '2' },
+    { key: 'parking', label: 'Parking', placeholder: '1' },
+    { key: 'storageUnits', label: 'Storage units', placeholder: '1' },
+    { key: 'terrace', label: 'Terrace (m²)', placeholder: '0', suffix: 'm²' },
+    { key: 'balcony', label: 'Balcony (m²)', placeholder: '0', suffix: 'm²' },
+  ],
+  House: [
+    { key: 'area', label: 'Area (m²)', placeholder: '200', suffix: 'm²' },
+    { key: 'floors', label: 'Floors', placeholder: '2' },
+    { key: 'bedrooms', label: 'Bedrooms', placeholder: '4' },
+    { key: 'bathrooms', label: 'Bathrooms', placeholder: '3' },
+    { key: 'parking', label: 'Parking', placeholder: '2' },
+    { key: 'storageUnits', label: 'Storage units', placeholder: '1' },
+    { key: 'terrace', label: 'Terrace (m²)', placeholder: '0', suffix: 'm²' },
+  ],
+  Studio: [
+    { key: 'area', label: 'Area (m²)', placeholder: '35', suffix: 'm²' },
+    { key: 'bathrooms', label: 'Bathrooms', placeholder: '1' },
+  ],
+  Office: [
+    { key: 'area', label: 'Area (m²)', placeholder: '150', suffix: 'm²' },
+    { key: 'bedrooms', label: 'Units', placeholder: '5' },
+    { key: 'bathrooms', label: 'Bathrooms', placeholder: '2' },
+    { key: 'parking', label: 'Parking', placeholder: '3' },
+    { key: 'storageUnits', label: 'Storage units', placeholder: '1' },
+    { key: 'terrace', label: 'Terrace (m²)', placeholder: '0', suffix: 'm²' },
+  ],
+  Commercial: [
+    { key: 'area', label: 'Area (m²)', placeholder: '300', suffix: 'm²' },
+    { key: 'bedrooms', label: 'Units', placeholder: '1' },
+    { key: 'bathrooms', label: 'Bathrooms', placeholder: '1' },
+    { key: 'parking', label: 'Parking', placeholder: '2' },
+    { key: 'storageUnits', label: 'Storage units', placeholder: '1' },
+  ],
+  Lot: [
+    { key: 'area', label: 'Area (m²)', placeholder: '500', suffix: 'm²' },
+  ],
+  Other: [
+    { key: 'area', label: 'Area (m²)', placeholder: '133', suffix: 'm²' },
+    { key: 'bedrooms', label: 'Bedrooms/Units', placeholder: '3' },
+    { key: 'bathrooms', label: 'Bathrooms', placeholder: '2' },
+    { key: 'parking', label: 'Parking', placeholder: '1' },
+    { key: 'storageUnits', label: 'Storage units', placeholder: '1' },
+    { key: 'terrace', label: 'Terrace (m²)', placeholder: '0', suffix: 'm²' },
+    { key: 'balcony', label: 'Balcony (m²)', placeholder: '0', suffix: 'm²' },
+  ],
+}
+
+export function getSpatialFields(propertyType: string): SpatialFieldConfig[] {
+  return SPATIAL_FIELDS_BY_TYPE[propertyType] || SPATIAL_FIELDS_BY_TYPE['Other']
+}

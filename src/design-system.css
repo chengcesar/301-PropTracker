@@ -14,6 +14,9 @@
   }
   html, body { height: 100%; font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
   #root { height: 100%; display: flex; flex-direction: column; }
+  .app-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 20px; }
+  .app-loading-spinner { width: 24px; height: 24px; border: 2.5px solid var(--border); border-top-color: #6D2F20; border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .app-header { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; position: sticky; top: 0; z-index: 20; }
   .app-header-logo { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; letter-spacing: -0.3px; color: var(--text); }
   .app-header-logo svg { flex-shrink: 0; color: #0539FF; }
@@ -511,6 +514,44 @@
     flex: 1;
   }
   .fs-photo-empty:hover { background: #f3f5f9; }
+
+  /* Photo upload skeleton & spinner */
+  .fs-photo-skeleton {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    background: linear-gradient(90deg, #e8ecf2 25%, #f3f4f6 50%, #e8ecf2 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite ease-in-out;
+  }
+  .fs-photo-uploading-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(2px);
+  }
+  .fs-photo-spinner {
+    animation: logoPulse 1.2s ease-in-out infinite;
+  }
+  .fs-thumb-skeleton {
+    pointer-events: none;
+  }
+  .fs-thumb-shimmer {
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    background: linear-gradient(90deg, #e8ecf2 25%, #f3f4f6 50%, #e8ecf2 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite ease-in-out;
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  @keyframes logoPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.9); } }
 
   @media (max-width: 768px) {
     .content { padding: 16px; }

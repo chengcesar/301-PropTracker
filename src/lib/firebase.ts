@@ -1,4 +1,5 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app'
+import { getAuth as _getAuth, type Auth } from 'firebase/auth'
 import { getFirestore, type Firestore } from 'firebase/firestore'
 import { getStorage, type FirebaseStorage } from 'firebase/storage'
 
@@ -17,22 +18,35 @@ function configIsComplete(): boolean {
   )
 }
 
+export const isConfigured: boolean = configIsComplete()
+
 let app: FirebaseApp | undefined
+let _auth: Auth | undefined
 let db: Firestore | undefined
 let storage: FirebaseStorage | undefined
 
 function getApp(): FirebaseApp | null {
-  if (!configIsComplete()) return null
+  if (!isConfigured) return null
   if (!app) app = initializeApp(firebaseConfig)
   return app
 }
 
+// Eagerly initialize if configured (needed by AuthContext)
+if (isConfigured) {
+  const a = getApp()!
+  _auth = _getAuth(a)
+  db = getFirestore(a)
+}
+
+/** Firebase Auth instance, or null if config is incomplete. */
+export const auth: Auth | null = _auth ?? null
+
+/** Firestore instance, or null if config is incomplete. */
+export const firestore: Firestore | null = db ?? null
+
 /** Call once Firestore reads/writes are wired; returns null until env is set. */
 export function getFirestoreDb(): Firestore | null {
-  const a = getApp()
-  if (!a) return null
-  if (!db) db = getFirestore(a)
-  return db
+  return firestore
 }
 
 /** Returns Firebase Storage instance, or null if config is incomplete. */

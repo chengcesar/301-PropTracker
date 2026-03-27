@@ -125,6 +125,7 @@ export interface Property {
   address: string
   neighbourhood: string
   city: string
+  postalCode: string
   country: string
   currency: CurrencyCode
   area: number
@@ -135,6 +136,7 @@ export interface Property {
   concierge: boolean
   terrace: number
   balcony: number
+  floors: number
   year: number
   occupant?: Occupant
   customExpenseCats?: Record<number, string[]>

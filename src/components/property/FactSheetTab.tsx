@@ -4,6 +4,7 @@ import { fmt } from '../../lib/format'
 import type { CurrencyCode } from '../../lib/currency'
 import { COUNTRIES } from '../../lib/countries'
 import { uploadPropertyPhoto, deletePropertyPhoto } from '../../lib/photoStorage'
+import { PROPERTY_TYPES, getSpatialFields } from '../../lib/constants'
 
 const IconCopy = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
@@ -11,8 +12,6 @@ const IconCopy = () => (
 const IconCheck = () => (
   <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#15803d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3.5 3.5L13 4"/></svg>
 )
-
-const PROPERTY_TYPES = ['Apartment', 'House', 'Studio', 'Penthouse', 'Office', 'Commercial', 'Lot', 'Other'] as const
 const CONTACT_ROLES = ['Owner', 'Property Manager', 'Building Manager', 'Broker', 'Insurance', 'Lawyer', 'Accountant', 'Other'] as const
 
 type Props = {
@@ -268,9 +267,30 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
             hidden
             onChange={(e) => { addPhotos(e.target.files); e.target.value = '' }}
           />
-          {photos.length > 0 ? (
+          {uploading && photos.length === 0 ? (
+            <div className="fs-photo-skeleton">
+              <svg className="fs-photo-spinner" width="30" height="30" viewBox="0 0 90 90" fill="none">
+                <path d="M35.4551 56.9697C35.4551 56.384 35.9299 55.9091 36.5157 55.9091H54.546C55.1317 55.9091 55.6066 56.384 55.6066 56.9697V84.5455C55.6066 85.1312 55.1317 85.6061 54.546 85.6061H36.5157C35.9299 85.6061 35.4551 85.1312 35.4551 84.5455V56.9697Z" fill="#0539FF"/>
+                <path d="M10 73.9394C10 73.3536 10.4748 72.8788 11.0606 72.8788H29.0909C29.6767 72.8788 30.1515 73.3536 30.1515 73.9394V84.5455C30.1515 85.1312 29.6767 85.6061 29.0909 85.6061H11.0606C10.4749 85.6061 10 85.1312 10 84.5455L10 73.9394Z" fill="#0539FF"/>
+                <path d="M59.8477 46.2459C59.8477 45.6601 60.3225 45.1852 60.9083 45.1852H78.9386C79.5243 45.1852 79.9992 45.6601 79.9992 46.2458V84.4277C79.9992 85.0134 79.5243 85.4883 78.9386 85.4883H60.9083C60.3225 85.4883 59.8477 85.0134 59.8477 84.4277V46.2459Z" fill="#0539FF"/>
+                <path d="M10 40C10 20.67 25.67 5 45 5C63.6176 5 78.8401 19.5364 79.9368 37.8785C80.0067 39.0479 79.0503 40 77.8788 40H61.3805C60.209 40 59.2758 39.0448 59.1036 37.886C58.0822 31.0133 52.1568 25.7407 45 25.7407C37.1248 25.7407 30.7407 32.1248 30.7407 40V65.9848C30.7407 67.1564 29.791 68.1061 28.6195 68.1061H12.1212C10.9497 68.1061 10 67.1564 10 65.9848V40Z" fill="#0539FF"/>
+              </svg>
+              <div style={{ fontSize: 14, color: '#6b7280', marginTop: 12 }}>Loading…</div>
+            </div>
+          ) : photos.length > 0 ? (
             <>
               <div className="fs-photo-hero">
+                {uploading && (
+                  <div className="fs-photo-uploading-overlay">
+                    <svg className="fs-photo-spinner" width="28" height="28" viewBox="0 0 90 90" fill="none">
+                      <path d="M35.4551 56.9697C35.4551 56.384 35.9299 55.9091 36.5157 55.9091H54.546C55.1317 55.9091 55.6066 56.384 55.6066 56.9697V84.5455C55.6066 85.1312 55.1317 85.6061 54.546 85.6061H36.5157C35.9299 85.6061 35.4551 85.1312 35.4551 84.5455V56.9697Z" fill="#fff"/>
+                      <path d="M10 73.9394C10 73.3536 10.4748 72.8788 11.0606 72.8788H29.0909C29.6767 72.8788 30.1515 73.3536 30.1515 73.9394V84.5455C30.1515 85.1312 29.6767 85.6061 29.0909 85.6061H11.0606C10.4749 85.6061 10 85.1312 10 84.5455L10 73.9394Z" fill="#fff"/>
+                      <path d="M59.8477 46.2459C59.8477 45.6601 60.3225 45.1852 60.9083 45.1852H78.9386C79.5243 45.1852 79.9992 45.6601 79.9992 46.2458V84.4277C79.9992 85.0134 79.5243 85.4883 78.9386 85.4883H60.9083C60.3225 85.4883 59.8477 85.0134 59.8477 84.4277V46.2459Z" fill="#fff"/>
+                      <path d="M10 40C10 20.67 25.67 5 45 5C63.6176 5 78.8401 19.5364 79.9368 37.8785C80.0067 39.0479 79.0503 40 77.8788 40H61.3805C60.209 40 59.2758 39.0448 59.1036 37.886C58.0822 31.0133 52.1568 25.7407 45 25.7407C37.1248 25.7407 30.7407 32.1248 30.7407 40V65.9848C30.7407 67.1564 29.791 68.1061 28.6195 68.1061H12.1212C10.9497 68.1061 10 67.1564 10 65.9848V40Z" fill="#fff"/>
+                    </svg>
+                    <div style={{ fontSize: 13, color: '#fff', marginTop: 8 }}>Loading…</div>
+                  </div>
+                )}
                 <img src={photos[activePhoto] ?? photos[0]} alt="Property" />
                 <span className="fs-photo-count">{photos.length} {photos.length === 1 ? 'photo' : 'photos'}</span>
                 <a className="fs-photo-dl" href={photos[activePhoto] ?? photos[0]} download={`photo-${activePhoto + 1}.jpg`} title="Download photo">
@@ -287,6 +307,11 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                     <button type="button" className="fs-thumb-del" onClick={() => removePhoto(i)}>×</button>
                   </div>
                 ))}
+                {uploading && (
+                  <div className="fs-thumb fs-thumb-skeleton">
+                    <div className="fs-thumb-shimmer" />
+                  </div>
+                )}
                 <button type="button" className="fs-thumb-add" onClick={() => fileRef.current?.click()}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
                 </button>
@@ -299,7 +324,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                 <circle cx="8.5" cy="8.5" r="1.5"/>
                 <path d="M21 15l-5-5L5 21"/>
               </svg>
-              <div style={{ fontSize: 14, color: '#6b7280', marginTop: 8 }}>{uploading ? 'Uploading…' : 'Upload main photo'}</div>
+              <div style={{ fontSize: 14, color: '#6b7280', marginTop: 8 }}>Upload main photo</div>
               <div style={{ fontSize: 12, color: '#9ca3af' }}>JPEG or PNG</div>
             </div>
           )}
@@ -336,6 +361,10 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                 <input type="text" placeholder="Bogotá" value={prop.city} onChange={(e) => setProp('city', e.target.value)} />
               </div>
               <div className="field">
+                <label>Postal code</label>
+                <input type="text" placeholder="110221" value={prop.postalCode || ''} onChange={(e) => setProp('postalCode', e.target.value)} />
+              </div>
+              <div className="field">
                 <label>Country</label>
                 <select value={prop.country} onChange={(e) => setProp('country', e.target.value)}>
                   <option value="">Select...</option>
@@ -350,6 +379,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
               <ReadOnlyField label="Address" value={prop.address} />
               <ReadOnlyField label="Neighbourhood" value={prop.neighbourhood} />
               <ReadOnlyField label="City" value={prop.city} />
+              <ReadOnlyField label="Postal code" value={prop.postalCode} />
               <ReadOnlyField label="Country" value={prop.country} />
             </div>
           )}
@@ -368,7 +398,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                 </select>
               </div>
               <div className="field">
-                <label>Estrato</label>
+                <label>Estrato/Grade</label>
                 <select
                   value={fs.estrato ?? ''}
                   onChange={(e) => set('estrato', e.target.value ? Number(e.target.value) : null)}
@@ -402,7 +432,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
           ) : (
             <div className="ct-fields" style={{ marginBottom: 20 }}>
               <ReadOnlyField label="Property type" value={fs.propertyType} />
-              <ReadOnlyField label="Estrato" value={fs.estrato} />
+              <ReadOnlyField label="Estrato/Grade" value={fs.estrato} />
               <ReadOnlyField label="Year built" value={fs.yearBuilt} />
               <ReadOnlyField label="Last renovation" value={fs.lastRenovation} />
               <ReadOnlyField label="Floor" value={fs.floor} />
@@ -414,44 +444,25 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
           <div className="ct-field-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 8, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Spatial features</div>
           {editingChars ? (
             <div className="contract-grid">
-              <div className="field">
-                <label>Area (m²)</label>
-                <input type="text" placeholder="133" value={prop.area || ''} onChange={(e) => setPropNum('area', e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Bedrooms</label>
-                <input type="text" placeholder="3" value={prop.bedrooms || ''} onChange={(e) => setPropNum('bedrooms', e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Bathrooms</label>
-                <input type="text" placeholder="3" value={prop.bathrooms || ''} onChange={(e) => setPropNum('bathrooms', e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Parking</label>
-                <input type="text" placeholder="2" value={prop.parking || ''} onChange={(e) => setPropNum('parking', e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Storage units</label>
-                <input type="text" placeholder="1" value={prop.storageUnits || ''} onChange={(e) => setPropNum('storageUnits', e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Terrace (m²)</label>
-                <input type="text" placeholder="0" value={prop.terrace || ''} onChange={(e) => setPropNum('terrace', e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Balcony (m²)</label>
-                <input type="text" placeholder="0" value={prop.balcony || ''} onChange={(e) => setPropNum('balcony', e.target.value)} />
-              </div>
+              {getSpatialFields(fs.propertyType).map((f) => (
+                <div className="field" key={f.key}>
+                  <label>{f.label}</label>
+                  <input type="text" placeholder={f.placeholder} value={prop[f.key as keyof Property] || ''} onChange={(e) => setPropNum(f.key as keyof Property, e.target.value)} />
+                </div>
+              ))}
             </div>
           ) : (
             <div className="ct-fields">
-              <ReadOnlyField label="Area" value={prop.area ? `${prop.area} m²` : null} />
-              <ReadOnlyField label="Bedrooms" value={prop.bedrooms || null} />
-              <ReadOnlyField label="Bathrooms" value={prop.bathrooms || null} />
-              <ReadOnlyField label="Parking" value={prop.parking || null} />
-              <ReadOnlyField label="Storage units" value={prop.storageUnits || null} />
-              <ReadOnlyField label="Terrace" value={prop.terrace ? `${prop.terrace} m²` : null} />
-              <ReadOnlyField label="Balcony" value={prop.balcony ? `${prop.balcony} m²` : null} />
+              {getSpatialFields(fs.propertyType).map((f) => {
+                const val = prop[f.key as keyof Property]
+                return (
+                  <ReadOnlyField
+                    key={f.key}
+                    label={f.suffix ? f.label.replace(` (${f.suffix})`, '') : f.label}
+                    value={val ? (f.suffix ? `${val} ${f.suffix}` : val) : null}
+                  />
+                )
+              })}
             </div>
           )}
         </div>

@@ -1,40 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { seedProperties } from '../data/seedProperties'
 import type { Property } from '../lib/types'
 import { AppStateContext, type Selection } from './app-state-context'
-
-const STORAGE_KEY = 'proptracker-properties'
-
-/** Migrate old taxes shape { predial, incomeTax } → { items } */
-function migrateTaxes(p: any): Property {
-  if (p.taxes && !Array.isArray(p.taxes.items)) {
-    const predial = p.taxes.predial ?? 0
-    p.taxes = {
-      items: predial
-        ? [{ id: Date.now() + p.id, taxId: p.name ?? 'Predial', amount: predial, dueDate: '', status: 'pending' as const }]
-        : [],
-    }
-  }
-  return p as Property
-}
-
-/** Migrate properties without currency / country fields */
-function migrateCurrency(p: any): Property {
-  if (!p.currency) p.currency = 'COP'
-  if (!p.country) p.country = 'Colombia'
-  return p as Property
-}
-
-function loadProperties(): Property[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed.map(migrateTaxes).map(migrateCurrency)
-    }
-  } catch { /* ignore corrupted data */ }
-  return seedProperties()
-}
+import { subscribeProperties, saveProperty, removePropertyDoc } from '../services/propertyService'
+import { createSeedProperties } from '../lib/seedProperties'
 
 function selectionFromHash(): Selection {
   const hash = window.location.hash
@@ -46,28 +14,42 @@ function hashFromSelection(id: Selection): string {
   return id === 'portfolio' ? '#' : `#property/${id}`
 }
 
-export function AppStateProvider({ children }: { children: ReactNode }) {
-  const [properties, setProperties] = useState<Property[]>(loadProperties)
+export function AppStateProvider({ uid, children }: { uid: string; children: ReactNode }) {
+  const [properties, setProperties] = useState<Property[]>([])
+  const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedIdRaw] = useState<Selection>(selectionFromHash)
   const [addPropertyOpen, setAddPropertyOpen] = useState(false)
+
+  // Track whether Firestore snapshot has loaded to avoid writing back initial state
+  const snapshotLoaded = useRef(false)
 
   const setSelectedId = useCallback((id: Selection) => {
     setSelectedIdRaw(id)
     window.history.pushState(null, '', hashFromSelection(id))
   }, [])
 
-  // Persist properties to localStorage on change (skip initial load)
-  const isFirstRender = useRef(true)
+  // Subscribe to Firestore real-time updates; seed sample data for new users
+  const seeded = useRef(false)
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false
-      return
-    }
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(properties))
-    } catch { /* storage full — silently fail */ }
-  }, [properties])
+    snapshotLoaded.current = false
+    seeded.current = false
+    setLoading(true)
+    const unsub = subscribeProperties(uid, (props) => {
+      if (props.length === 0 && !seeded.current) {
+        seeded.current = true
+        const samples = createSeedProperties()
+        samples.forEach((p) => saveProperty(uid, p))
+        // Firestore listener will fire again with the saved data
+        return
+      }
+      setProperties(props)
+      snapshotLoaded.current = true
+      setLoading(false)
+    })
+    return unsub
+  }, [uid])
 
+  // Hash-based navigation
   useEffect(() => {
     const onHashChange = () => setSelectedIdRaw(selectionFromHash())
     window.addEventListener('hashchange', onHashChange)
@@ -79,18 +61,29 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const updateProperty = useCallback((id: number, fn: (p: Property) => Property) => {
-    setProperties((ps) => ps.map((p) => (p.id === id ? fn(p) : p)))
-  }, [])
+    setProperties((ps) => {
+      const updated = ps.map((p) => {
+        if (p.id !== id) return p
+        const next = fn(p)
+        // Fire-and-forget save to Firestore
+        saveProperty(uid, next)
+        return next
+      })
+      return updated
+    })
+  }, [uid])
 
   const addProperty = useCallback((p: Property) => {
     setProperties((ps) => [...ps, p])
     setSelectedId(p.id)
-  }, [])
+    saveProperty(uid, p)
+  }, [uid, setSelectedId])
 
   const removeProperty = useCallback((id: number) => {
     setProperties((ps) => ps.filter((p) => p.id !== id))
     setSelectedIdRaw((cur) => (cur === id ? 'portfolio' : cur))
-  }, [])
+    removePropertyDoc(uid, id)
+  }, [uid])
 
   const value = useMemo(
     () => ({
@@ -105,6 +98,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }),
     [properties, selectedId, updateProperty, addProperty, removeProperty, addPropertyOpen],
   )
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', color: '#6b7280', fontSize: 14 }}>
+        Loading portfolio…
+      </div>
+    )
+  }
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>
 }

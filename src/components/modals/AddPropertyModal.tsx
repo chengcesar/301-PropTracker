@@ -3,6 +3,7 @@ import type { Property } from '../../lib/types'
 import { type CurrencyCode, CURRENCIES, CURRENCY_LIST, flagUrl } from '../../lib/currency'
 import { COUNTRIES, countryFlagUrl } from '../../lib/countries'
 import { parseNum } from '../../lib/format'
+import { PROPERTY_TYPES } from '../../lib/constants'
 
 type Props = {
   onSave: (p: Property) => void
@@ -202,8 +203,6 @@ function CountrySelect({ value, onChange }: { value: string; onChange: (v: strin
   )
 }
 
-const PROPERTY_TYPES = ['Apartment', 'House', 'Studio', 'Penthouse', 'Office', 'Commercial', 'Lot', 'Other'] as const
-
 export function AddPropertyModal({ onSave, onClose }: Props) {
   const [form, setForm] = useState({
     owner: '',
@@ -214,7 +213,6 @@ export function AddPropertyModal({ onSave, onClose }: Props) {
     country: '',
     currency: 'USD' as CurrencyCode,
     area: '',
-    bedrooms: '',
     tenant: '',
     monthlyRent: '',
     startDate: '2026-01-01',
@@ -246,16 +244,18 @@ export function AddPropertyModal({ onSave, onClose }: Props) {
       address: form.address,
       neighbourhood: '',
       city: form.city,
+      postalCode: '',
       country: form.country,
       currency,
       area: parseNum(form.area),
-      bedrooms: parseNum(form.bedrooms),
+      bedrooms: 0,
       bathrooms: 0,
       parking: 0,
       storageUnits: 0,
       concierge: false,
       terrace: 0,
       balcony: 0,
+      floors: 0,
       year: 2026,
       contracts: form.tenant
         ? [
@@ -316,10 +316,13 @@ export function AddPropertyModal({ onSave, onClose }: Props) {
           </button>
         </div>
         <div className="modal-body">
-          {/* ── Owner ── */}
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 8, letterSpacing: '0.04em', textTransform: 'uppercase' as const }}>Owner</div>
+          {/* ── Unit name & Owner ── */}
           <div className="contract-grid" style={{ marginBottom: 0 }}>
-            <div className="field" style={{ gridColumn: '1/-1' }}>
+            <div className="field">
+              <label>Unit name *</label>
+              <input placeholder="Apto 104" value={form.name} onChange={(e) => set('name', e.target.value)} />
+            </div>
+            <div className="field">
               <label>Property owner</label>
               <input placeholder="Juan Pérez" value={form.owner} onChange={(e) => set('owner', e.target.value)} />
             </div>
@@ -330,10 +333,6 @@ export function AddPropertyModal({ onSave, onClose }: Props) {
           {/* ── Location ── */}
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 8, letterSpacing: '0.04em', textTransform: 'uppercase' as const }}>Location</div>
           <div className="contract-grid" style={{ marginBottom: 0 }}>
-            <div className="field">
-              <label>Unit name *</label>
-              <input placeholder="Apto 104" value={form.name} onChange={(e) => set('name', e.target.value)} />
-            </div>
             <div className="field" style={{ gridColumn: 'span 2' }}>
               <label>Address</label>
               <input placeholder="Calle 78 #5-32" value={form.address} onChange={(e) => set('address', e.target.value)} />
@@ -376,10 +375,6 @@ export function AddPropertyModal({ onSave, onClose }: Props) {
             <div className="field">
               <label>Area (m²)</label>
               <input type="number" placeholder="133" value={form.area} onChange={(e) => set('area', e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Bedrooms</label>
-              <input type="number" placeholder="3" value={form.bedrooms} onChange={(e) => set('bedrooms', e.target.value)} />
             </div>
           </div>
 
