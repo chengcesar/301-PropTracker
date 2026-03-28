@@ -183,10 +183,10 @@ const KPI_META: Record<KpiKey, { label: string; cls?: string; negPrefix?: boolea
   net: { label: 'Net cashflow', cls: 'green', tip: 'Final cashflow after all income and expenses' },
 }
 
-const COL_KEYS = ['owner', 'country', 'status', 'gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin'] as const
+const COL_KEYS = ['owner', 'country', 'status', 'endDate', 'gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin'] as const
 type ColKey = typeof COL_KEYS[number]
 const COL_LABELS: Record<ColKey, string> = {
-  owner: 'Owner', country: 'Country', status: 'Status', gpi: 'GPI', egi: 'EGI', opex: 'OPEX', noi: 'NOI',
+  owner: 'Owner', country: 'Country', status: 'Status', endDate: 'Months Left', gpi: 'GPI', egi: 'EGI', opex: 'OPEX', noi: 'NOI',
   capex: 'CAPEX', taxes: 'Taxes', netCf: 'Net CF', margin: 'Margin',
 }
 const COL_STORAGE_KEY = 'col-visibility'
@@ -410,7 +410,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const colMenuRef = useRef<HTMLDivElement>(null)
 
   // Sort state
-  type SortKey = 'name' | 'owner' | 'country' | 'status' | 'gpi' | 'egi' | 'opex' | 'noi' | 'capex' | 'taxes' | 'netCf' | 'margin'
+  type SortKey = 'name' | 'owner' | 'country' | 'status' | 'endDate' | 'gpi' | 'egi' | 'opex' | 'noi' | 'capex' | 'taxes' | 'netCf' | 'margin'
   type SortDir = 'asc' | 'desc'
   const [sortKey, setSortKey] = useState<SortKey | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>('asc')
@@ -483,6 +483,11 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
       else if (sortKey === 'owner') { va = (a.owner ?? '').toLowerCase(); vb = (b.owner ?? '').toLowerCase() }
       else if (sortKey === 'country') { va = (a.country ?? '').toLowerCase(); vb = (b.country ?? '').toLowerCase() }
       else if (sortKey === 'status') { va = activeContract(a) ? 1 : 0; vb = activeContract(b) ? 1 : 0 }
+      else if (sortKey === 'endDate') {
+        const acA = activeContract(a), acB = activeContract(b)
+        va = acA ? new Date(acA.endDate).getTime() : Infinity
+        vb = acB ? new Date(acB.endDate).getTime() : Infinity
+      }
       else {
         const aa = convertAnnual(calcAnnual(withYear(a)), a.currency, displayCurrency, fxRates)
         const ab = convertAnnual(calcAnnual(withYear(b)), b.currency, displayCurrency, fxRates)
@@ -980,6 +985,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                   {colVis.owner && <SortTh col="owner">Owner</SortTh>}
                   {colVis.country && <SortTh col="country" className="wf-align-left">Country</SortTh>}
                   {colVis.status && <SortTh col="status">Status</SortTh>}
+                  {colVis.endDate && <SortTh col="endDate">Months Left</SortTh>}
                   {colVis.gpi && <SortTh col="gpi">GPI</SortTh>}
                   {colVis.egi && <SortTh col="egi">EGI</SortTh>}
                   {colVis.opex && <SortTh col="opex">OPEX</SortTh>}
@@ -1027,6 +1033,15 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                       {colVis.status && <td className="wf-col-status">
                         <span className={`badge ${ac ? 'active-c' : 'vacant'}`}>{ac ? 'Rented' : 'Vacant'}</span>
                       </td>}
+                      {colVis.endDate && (() => {
+                        if (!ac) return <td className="text3">—</td>
+                        const end = new Date(ac.endDate)
+                        const now = new Date()
+                        const months = (end.getFullYear() - now.getFullYear()) * 12 + end.getMonth() - now.getMonth()
+                        return <td className={months <= 3 ? 'neg' : months <= 6 ? '' : 'text3'} style={{ whiteSpace: 'nowrap' }}>
+                          {months <= 0 ? 'Expired' : `${months}m`}
+                        </td>
+                      })()}
                       {colVis.gpi && <td>{fm(a.gpi)}</td>}
                       {colVis.egi && <td className="pos">{fm(a.egi)}</td>}
                       {colVis.opex && <td className="neg">−{fm(a.totalOpex)}</td>}
@@ -1054,6 +1069,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                   {colVis.owner && <td />}
                   {colVis.country && <td className="wf-align-left" />}
                   {colVis.status && <td />}
+                  {colVis.endDate && <td />}
                   {colVis.gpi && <td>{fm(totals.gpi)}</td>}
                   {colVis.egi && <td>{fm(totals.egi)}</td>}
                   {colVis.opex && <td className="neg">−{fm(totals.opex)}</td>}
