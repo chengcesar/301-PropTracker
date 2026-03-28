@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import type { Property } from '../lib/types'
+import type { Contract, Property } from '../lib/types'
 import { activeContract, calcAnnual, calcPortfolioTotalsIn, convertAnnual } from '../lib/finance'
 import { fmtCurrencyM } from '../lib/format'
 import { type CurrencyCode, type FxRates, CURRENCIES, CURRENCY_LIST, loadFxRates, saveFxRates, flagUrl } from '../lib/currency'
@@ -183,15 +183,28 @@ const KPI_META: Record<KpiKey, { label: string; cls?: string; negPrefix?: boolea
   net: { label: 'Net cashflow', cls: 'green', tip: 'Final cashflow after all income and expenses' },
 }
 
-const COL_KEYS = ['owner', 'country', 'status', 'endDate', 'gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin'] as const
+const COL_KEYS = [
+  'owner', 'country', 'status', 'endDate', 'taxStatus',
+  'propertyType', 'bedrooms', 'area', 'bathrooms', 'parking', 'floor', 'estrato', 'yearBuilt', 'lastRenovation',
+  'gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin',
+] as const
 type ColKey = typeof COL_KEYS[number]
 const COL_LABELS: Record<ColKey, string> = {
-  owner: 'Owner', country: 'Country', status: 'Status', endDate: 'Months Left', gpi: 'GPI', egi: 'EGI', opex: 'OPEX', noi: 'NOI',
+  owner: 'Owner', country: 'Country', status: 'Status', endDate: 'Months Left', taxStatus: 'Tax Status',
+  propertyType: 'Type', bedrooms: 'Beds', area: 'Area', bathrooms: 'Baths', parking: 'Parking',
+  floor: 'Floor', estrato: 'Estrato', yearBuilt: 'Year Built', lastRenovation: 'Renovation',
+  gpi: 'GPI', egi: 'EGI', opex: 'OPEX', noi: 'NOI',
   capex: 'CAPEX', taxes: 'Taxes', netCf: 'Net CF', margin: 'Margin',
+}
+const DETAIL_COLS: ColKey[] = ['propertyType', 'bedrooms', 'area', 'bathrooms', 'parking', 'floor', 'estrato', 'yearBuilt', 'lastRenovation']
+type ColGroup = 'financial' | 'characteristics' | 'all'
+const COL_GROUPS: Record<Exclude<ColGroup, 'all'>, ColKey[]> = {
+  financial: ['gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin'],
+  characteristics: ['owner', 'country', 'status', 'endDate', 'taxStatus', ...DETAIL_COLS],
 }
 const COL_STORAGE_KEY = 'col-visibility'
 function loadColVisibility(): Record<ColKey, boolean> {
-  const defaults = Object.fromEntries(COL_KEYS.map(k => [k, true])) as Record<ColKey, boolean>
+  const defaults = Object.fromEntries(COL_KEYS.map(k => [k, !DETAIL_COLS.includes(k)])) as Record<ColKey, boolean>
   try {
     const raw = localStorage.getItem(COL_STORAGE_KEY)
     if (raw) return { ...defaults, ...JSON.parse(raw) }
@@ -215,6 +228,15 @@ const IconEye = ({ visible }: { visible: boolean }) => (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M7.58 7.58a2.003 2.003 0 002.84 2.84M13.36 13.36C12.12 14.27 10.62 14.78 9 14.75c-5.25 0-7.5-5.25-7.5-5.25a13.16 13.16 0 013.64-4.11m2.91-1.16A5.7 5.7 0 019 4c5.25 0 7.5 5.25 7.5 5.25a13.24 13.24 0 01-1.47 2.15M1.5 1.5l15 15" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
   )
 )
+
+const FILTER_STORAGE_KEY = 'portfolio-filters'
+function loadSavedFilters() {
+  try {
+    const raw = localStorage.getItem(FILTER_STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as Record<string, unknown>
+  } catch {}
+  return {} as Record<string, unknown>
+}
 
 function CurrencyPicker({ value, onChange }: { value: CurrencyCode; onChange: (c: CurrencyCode) => void }) {
   const [open, setOpen] = useState(false)
@@ -385,13 +407,14 @@ function FxRateEditor({ rates, onSave, onClose }: { rates: FxRates; onSave: (r: 
 }
 
 export function PortfolioPage({ properties, onSelectProperty }: Props) {
-  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear())
+  const _saved = useMemo(loadSavedFilters, [])
+  const [selectedYear, setSelectedYear] = useState(() => (typeof _saved.selectedYear === 'number' ? _saved.selectedYear : new Date().getFullYear()))
   const withYear = (p: Property): Property => ({ ...p, year: selectedYear })
   const { setAddPropertyOpen, removeProperty } = useAppState()
   const [fxRates, setFxRates] = useState<FxRates>(loadFxRates)
   const [fxOpen, setFxOpen] = useState(false)
   const fxRef = useRef<HTMLDivElement>(null)
-  const [displayCurrency, setDisplayCurrency] = useState<CurrencyCode>('USD')
+  const [displayCurrency, setDisplayCurrency] = useState<CurrencyCode>((_saved.displayCurrency as CurrencyCode) || 'USD')
   const fm = (n: number | null | undefined) => fmtCurrencyM(n, displayCurrency)
   const [deleteTarget, setDeleteTarget] = useState<Property | null>(null)
   const [copied, setCopied] = useState(false)
@@ -400,20 +423,28 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const kpiMenuRef = useRef<HTMLDivElement>(null)
   const tableScrollRef = useRef<HTMLDivElement>(null)
   const [showScrollBtns, setShowScrollBtns] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [activeFilters, setActiveFilters] = useState<Record<string, string | null>>({})
+  const [searchQuery, setSearchQuery] = useState((typeof _saved.searchQuery === 'string' ? _saved.searchQuery : ''))
+  const [activeFilters, setActiveFilters] = useState<Record<string, string | null>>((_saved.activeFilters && typeof _saved.activeFilters === 'object') ? _saved.activeFilters as Record<string, string | null> : {})
   const [filterDropdownOpen, setFilterDropdownOpen] = useState<string | null>(null)
   // null = closed, '__pick__' = picking column, column key = value picker open on that chip
   const filterBarRef = useRef<HTMLDivElement>(null)
   const [colVis, setColVis] = useState(loadColVisibility)
   const [colMenuOpen, setColMenuOpen] = useState(false)
+  const [colGroupTab, setColGroupTab] = useState<ColGroup>('financial')
   const colMenuRef = useRef<HTMLDivElement>(null)
 
   // Sort state
-  type SortKey = 'name' | 'owner' | 'country' | 'status' | 'endDate' | 'gpi' | 'egi' | 'opex' | 'noi' | 'capex' | 'taxes' | 'netCf' | 'margin'
+  type SortKey = 'name' | ColKey
   type SortDir = 'asc' | 'desc'
-  const [sortKey, setSortKey] = useState<SortKey | null>(null)
-  const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [sortKey, setSortKey] = useState<SortKey | null>((_saved.sortKey as SortKey) || null)
+  const [sortDir, setSortDir] = useState<SortDir>((_saved.sortDir as SortDir) || 'asc')
+  // Persist filter state to localStorage
+  useEffect(() => {
+    localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify({
+      searchQuery, activeFilters, sortKey, sortDir, selectedYear, displayCurrency,
+    }))
+  }, [searchQuery, activeFilters, sortKey, sortDir, selectedYear, displayCurrency])
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       if (sortDir === 'asc') setSortDir('desc')
@@ -488,6 +519,21 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
         va = acA ? new Date(acA.endDate).getTime() : Infinity
         vb = acB ? new Date(acB.endDate).getTime() : Infinity
       }
+      else if (sortKey === 'taxStatus') {
+        const pendA = (a.taxes?.items ?? []).filter(t => t.status === 'pending')
+        const pendB = (b.taxes?.items ?? []).filter(t => t.status === 'pending')
+        va = pendA.length > 0 ? 0 : 1
+        vb = pendB.length > 0 ? 0 : 1
+      }
+      else if (sortKey === 'propertyType') { va = (a.factSheet?.propertyType ?? '').toLowerCase(); vb = (b.factSheet?.propertyType ?? '').toLowerCase() }
+      else if (sortKey === 'bedrooms') { va = a.bedrooms ?? 0; vb = b.bedrooms ?? 0 }
+      else if (sortKey === 'area') { va = a.area ?? 0; vb = b.area ?? 0 }
+      else if (sortKey === 'bathrooms') { va = a.bathrooms ?? 0; vb = b.bathrooms ?? 0 }
+      else if (sortKey === 'parking') { va = a.parking ?? 0; vb = b.parking ?? 0 }
+      else if (sortKey === 'floor') { va = a.factSheet?.floor ?? 0; vb = b.factSheet?.floor ?? 0 }
+      else if (sortKey === 'estrato') { va = a.factSheet?.estrato ?? 0; vb = b.factSheet?.estrato ?? 0 }
+      else if (sortKey === 'yearBuilt') { va = a.factSheet?.yearBuilt ?? 0; vb = b.factSheet?.yearBuilt ?? 0 }
+      else if (sortKey === 'lastRenovation') { va = a.factSheet?.lastRenovation ?? 0; vb = b.factSheet?.lastRenovation ?? 0 }
       else {
         const aa = convertAnnual(calcAnnual(withYear(a)), a.currency, displayCurrency, fxRates)
         const ab = convertAnnual(calcAnnual(withYear(b)), b.currency, displayCurrency, fxRates)
@@ -610,15 +656,21 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
 
   function handleDownloadCsv() {
     const dc = displayCurrency
-    const headers = ['Property', 'Owner', 'Country', 'Status', `GPI (${dc})`, `EGI (${dc})`, `OPEX (${dc})`, `NOI (${dc})`, `CAPEX (${dc})`, `Taxes (${dc})`, `Net CF (${dc})`, 'Margin']
+    const headers = ['Property', 'Owner', 'Country', 'Status', 'Tax Status', 'Type', 'Beds', 'Area (m²)', 'Baths', 'Parking', 'Floor', 'Estrato', 'Year Built', 'Renovation', `GPI (${dc})`, `EGI (${dc})`, `OPEX (${dc})`, `NOI (${dc})`, `CAPEX (${dc})`, `Taxes (${dc})`, `Net CF (${dc})`, 'Margin']
     const rows = filteredProperties.map((p) => {
       const a = convertAnnual(calcAnnual(withYear(p)), p.currency, dc, fxRates)
       const ac = activeContract(p)
+      const pending = (p.taxes?.items ?? []).filter(t => t.status === 'pending')
       return [
         `"${p.name}"`,
         `"${p.owner || ''}"`,
         `"${p.country || ''}"`,
         ac ? 'Rented' : 'Vacant',
+        pending.length > 0 ? 'Pending' : 'Paid',
+        `"${p.factSheet?.propertyType || ''}"`,
+        p.bedrooms || '', p.area || '', p.bathrooms || '', p.parking || '',
+        p.factSheet?.floor ?? '', p.factSheet?.estrato ?? '',
+        p.factSheet?.yearBuilt ?? '', p.factSheet?.lastRenovation ?? '',
         a.gpi, a.egi, a.totalOpex, a.noi,
         a.totalCapex || '', a.taxes || '', a.netCf,
         a.gpi ? `${Math.round((a.netCf / a.gpi) * 100)}%` : '',
@@ -636,24 +688,42 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
 
   function handleCopy() {
     const dc = displayCurrency
-    const headers = ['Property', 'Owner', 'Country', 'Status', `GPI (${dc})`, `EGI (${dc})`, `OPEX (${dc})`, `NOI (${dc})`, `CAPEX (${dc})`, `Taxes (${dc})`, `Net CF (${dc})`, 'Margin']
+    const raw = (n: number | null | undefined) => n != null ? String(Math.round(n * 100) / 100) : ''
+    const colDefs: { key: ColKey | 'name'; label: string; value: (p: Property, a: ReturnType<typeof convertAnnual>, ac: Contract | null) => string }[] = [
+      { key: 'name', label: 'Property', value: (p) => p.name },
+      { key: 'owner', label: 'Owner', value: (p) => p.owner || '' },
+      { key: 'country', label: 'Country', value: (p) => p.country || '' },
+      { key: 'status', label: 'Status', value: (_p, _a, ac) => ac ? 'Rented' : 'Vacant' },
+      { key: 'endDate', label: 'Months Left', value: (_p, _a, ac) => {
+        if (!ac) return ''
+        const end = new Date(ac.endDate), now = new Date()
+        const months = (end.getFullYear() - now.getFullYear()) * 12 + end.getMonth() - now.getMonth()
+        return String(months)
+      }},
+      { key: 'propertyType', label: 'Type', value: (p) => p.factSheet?.propertyType || '' },
+      { key: 'bedrooms', label: 'Beds', value: (p) => p.bedrooms ? String(p.bedrooms) : '' },
+      { key: 'area', label: 'Area (m²)', value: (p) => p.area ? String(p.area) : '' },
+      { key: 'bathrooms', label: 'Baths', value: (p) => p.bathrooms ? String(p.bathrooms) : '' },
+      { key: 'parking', label: 'Parking', value: (p) => p.parking ? String(p.parking) : '' },
+      { key: 'floor', label: 'Floor', value: (p) => p.factSheet?.floor != null ? String(p.factSheet.floor) : '' },
+      { key: 'estrato', label: 'Estrato', value: (p) => p.factSheet?.estrato != null ? String(p.factSheet.estrato) : '' },
+      { key: 'yearBuilt', label: 'Year Built', value: (p) => p.factSheet?.yearBuilt != null ? String(p.factSheet.yearBuilt) : '' },
+      { key: 'lastRenovation', label: 'Renovation', value: (p) => p.factSheet?.lastRenovation != null ? String(p.factSheet.lastRenovation) : '' },
+      { key: 'gpi', label: `GPI (${dc})`, value: (_p, a) => raw(a.gpi) },
+      { key: 'egi', label: `EGI (${dc})`, value: (_p, a) => raw(a.egi) },
+      { key: 'opex', label: `OPEX (${dc})`, value: (_p, a) => raw(-a.totalOpex) },
+      { key: 'noi', label: `NOI (${dc})`, value: (_p, a) => raw(a.noi) },
+      { key: 'capex', label: `CAPEX (${dc})`, value: (_p, a) => raw(a.totalCapex ? -a.totalCapex : 0) },
+      { key: 'taxes', label: `Taxes (${dc})`, value: (_p, a) => raw(a.taxes ? -a.taxes : 0) },
+      { key: 'netCf', label: `Net CF (${dc})`, value: (_p, a) => raw(a.netCf) },
+      { key: 'margin', label: 'Margin', value: (_p, a) => a.gpi ? String(Math.round((a.netCf / a.gpi) * 100)) : '' },
+    ]
+    const visible = colDefs.filter(c => c.key === 'name' || colVis[c.key as ColKey])
+    const headers = visible.map(c => c.label)
     const rows = filteredProperties.map((p) => {
       const a = convertAnnual(calcAnnual(withYear(p)), p.currency, dc, fxRates)
       const ac = activeContract(p)
-      return [
-        p.name,
-        p.owner || '',
-        p.country || '',
-        ac ? 'Rented' : 'Vacant',
-        fm(a.gpi),
-        fm(a.egi),
-        `−${fm(a.totalOpex)}`,
-        fm(a.noi),
-        a.totalCapex ? `−${fm(a.totalCapex)}` : '—',
-        a.taxes ? `−${fm(a.taxes)}` : '—',
-        fm(a.netCf),
-        a.gpi ? `${Math.round((a.netCf / a.gpi) * 100)}%` : '—',
-      ].join('\t')
+      return visible.map(c => c.value(p, a, ac)).join('\t')
     })
     navigator.clipboard.writeText([headers.join('\t'), ...rows].join('\n'))
     setCopied(true)
@@ -785,34 +855,66 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                 <button className={`filter-bar-icon-btn${colMenuOpen ? ' active' : ''}`} title="Column visibility" onClick={() => setColMenuOpen(v => !v)}>
                   <IconSpreadsheet />
                 </button>
-                {colMenuOpen && (
-                  <div style={{
+                {colMenuOpen && (() => {
+                  const shownKeys: ColKey[] = colGroupTab === 'all' ? [...COL_KEYS] : COL_GROUPS[colGroupTab]
+                  return (
+                  <div
+                    ref={(el) => {
+                      if (el) {
+                        const top = el.getBoundingClientRect().top
+                        el.style.maxHeight = `${window.innerHeight - top - 12}px`
+                      }
+                    }}
+                    style={{
                     position: 'absolute', right: 0, top: '100%', marginTop: 6,
                     background: '#fff', border: '1px solid var(--border)', borderRadius: 12,
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 200,
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 220,
+                    display: 'flex', flexDirection: 'column',
                     animation: 'selectSlideIn 0.15s ease-out',
                   }}>
-                    <div style={{ padding: '10px 14px 6px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                      Visible columns
+                    <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
+                      {(['financial', 'characteristics', 'all'] as ColGroup[]).map(tab => (
+                        <button
+                          key={tab}
+                          className="ghost"
+                          onClick={() => setColGroupTab(tab)}
+                          style={{
+                            flex: 1, padding: '9px 6px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
+                            letterSpacing: '0.5px', borderRadius: 0, textAlign: 'center',
+                            color: colGroupTab === tab ? '#3b82f6' : 'var(--text3)',
+                            boxShadow: colGroupTab === tab ? 'inset 0 -2px 0 #3b82f6' : 'none',
+                          }}
+                        >
+                          {tab === 'characteristics' ? 'Details' : tab === 'financial' ? 'Financial' : 'All'}
+                        </button>
+                      ))}
                     </div>
-                    {COL_KEYS.filter(k => colVis[k]).map(key => (
-                      <button
-                        key={key}
-                        className="ghost"
-                        style={{ width: '100%', textAlign: 'left', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 0 }}
-                        onClick={() => toggleCol(key)}
-                      >
-                        <span style={{ fontSize: 13 }}>{COL_LABELS[key]}</span>
-                        <IconEye visible={true} />
-                      </button>
-                    ))}
-                    {COL_KEYS.some(k => !colVis[k]) && (
+                    <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
+                    {shownKeys.filter(k => colVis[k]).length > 0 && (
+                      <>
+                        <div style={{ padding: '10px 14px 6px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                          Visible
+                        </div>
+                        {shownKeys.filter(k => colVis[k]).map(key => (
+                          <button
+                            key={key}
+                            className="ghost"
+                            style={{ width: '100%', textAlign: 'left', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 0 }}
+                            onClick={() => toggleCol(key)}
+                          >
+                            <span style={{ fontSize: 13 }}>{COL_LABELS[key]}</span>
+                            <IconEye visible={true} />
+                          </button>
+                        ))}
+                      </>
+                    )}
+                    {shownKeys.some(k => !colVis[k]) && (
                       <>
                         <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
                         <div style={{ padding: '10px 14px 6px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
                           Hidden
                         </div>
-                        {COL_KEYS.filter(k => !colVis[k]).map(key => (
+                        {shownKeys.filter(k => !colVis[k]).map(key => (
                           <button
                             key={key}
                             className="ghost"
@@ -826,8 +928,10 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                       </>
                     )}
                     <div style={{ height: 6 }} />
+                    </div>
                   </div>
-                )}
+                  )
+                })()}
               </div>
             </div>
           </div>
@@ -986,6 +1090,16 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                   {colVis.country && <SortTh col="country" className="wf-align-left">Country</SortTh>}
                   {colVis.status && <SortTh col="status">Status</SortTh>}
                   {colVis.endDate && <SortTh col="endDate">Months Left</SortTh>}
+                  {colVis.taxStatus && <SortTh col="taxStatus">Tax Status</SortTh>}
+                  {colVis.propertyType && <SortTh col="propertyType">Type</SortTh>}
+                  {colVis.bedrooms && <SortTh col="bedrooms">Beds</SortTh>}
+                  {colVis.area && <SortTh col="area">Area</SortTh>}
+                  {colVis.bathrooms && <SortTh col="bathrooms">Baths</SortTh>}
+                  {colVis.parking && <SortTh col="parking">Parking</SortTh>}
+                  {colVis.floor && <SortTh col="floor">Floor</SortTh>}
+                  {colVis.estrato && <SortTh col="estrato">Estrato</SortTh>}
+                  {colVis.yearBuilt && <SortTh col="yearBuilt">Year Built</SortTh>}
+                  {colVis.lastRenovation && <SortTh col="lastRenovation">Renovation</SortTh>}
                   {colVis.gpi && <SortTh col="gpi">GPI</SortTh>}
                   {colVis.egi && <SortTh col="egi">EGI</SortTh>}
                   {colVis.opex && <SortTh col="opex">OPEX</SortTh>}
@@ -1042,6 +1156,28 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                           {months <= 0 ? 'Expired' : `${months}m`}
                         </td>
                       })()}
+                      {colVis.taxStatus && (() => {
+                        const items = p.taxes?.items ?? []
+                        const pending = items.filter(t => t.status === 'pending')
+                        if (items.length === 0) return <td className="text3">—</td>
+                        if (pending.length === 0) return <td><span className="badge active-c">Paid</span></td>
+                        const nearest = pending.reduce((a, b) => a.dueDate < b.dueDate ? a : b)
+                        const due = new Date(nearest.dueDate)
+                        const now = new Date()
+                        const daysLeft = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+                        return <td>
+                          <span className="badge vacant">Due {daysLeft <= 0 ? 'overdue' : `${daysLeft}d`}</span>
+                        </td>
+                      })()}
+                      {colVis.propertyType && <td className="text3">{p.factSheet?.propertyType || '—'}</td>}
+                      {colVis.bedrooms && <td className="text3">{p.bedrooms || '—'}</td>}
+                      {colVis.area && <td className="text3">{p.area ? `${p.area} m²` : '—'}</td>}
+                      {colVis.bathrooms && <td className="text3">{p.bathrooms || '—'}</td>}
+                      {colVis.parking && <td className="text3">{p.parking || '—'}</td>}
+                      {colVis.floor && <td className="text3">{p.factSheet?.floor ?? '—'}</td>}
+                      {colVis.estrato && <td className="text3">{p.factSheet?.estrato ?? '—'}</td>}
+                      {colVis.yearBuilt && <td className="text3">{p.factSheet?.yearBuilt ?? '—'}</td>}
+                      {colVis.lastRenovation && <td className="text3">{p.factSheet?.lastRenovation ?? '—'}</td>}
                       {colVis.gpi && <td>{fm(a.gpi)}</td>}
                       {colVis.egi && <td className="pos">{fm(a.egi)}</td>}
                       {colVis.opex && <td className="neg">−{fm(a.totalOpex)}</td>}
@@ -1070,6 +1206,16 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                   {colVis.country && <td className="wf-align-left" />}
                   {colVis.status && <td />}
                   {colVis.endDate && <td />}
+                  {colVis.taxStatus && <td />}
+                  {colVis.propertyType && <td />}
+                  {colVis.bedrooms && <td />}
+                  {colVis.area && <td />}
+                  {colVis.bathrooms && <td />}
+                  {colVis.parking && <td />}
+                  {colVis.floor && <td />}
+                  {colVis.estrato && <td />}
+                  {colVis.yearBuilt && <td />}
+                  {colVis.lastRenovation && <td />}
                   {colVis.gpi && <td>{fm(totals.gpi)}</td>}
                   {colVis.egi && <td>{fm(totals.egi)}</td>}
                   {colVis.opex && <td className="neg">−{fm(totals.opex)}</td>}

@@ -596,7 +596,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
               <div className="contract-grid">
                 <div className="field">
                   <label>Address</label>
-                  <input type="text" placeholder="Calle 78 #5-32" value={prop.address} onChange={(e) => setProp('address', e.target.value)} />
+                  <input type="text" placeholder="Calle 58 #6-32" value={prop.address} onChange={(e) => setProp('address', e.target.value)} />
                 </div>
                 <div className="field">
                   <label>Neighbourhood</label>

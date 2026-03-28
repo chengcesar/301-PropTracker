@@ -269,7 +269,7 @@ const activeContract = (prop) => prop.contracts.find(c => c.status === 'active')
 // ── Initial data ─────────────────────────────────────────────────────────────
 const initProps = () => [
   {
-    id: 1, name: 'Apto 102', address: 'Calle 78 #5-32', type: '2-bed', ref: 'AAA0093HHNN', year: 2026,
+    id: 1, name: 'Apto 102', address: 'Carrera 15 #93-47', type: '2-bed', ref: 'AAA0093HHNN', year: 2026,
     contracts: [
       { id: 101, status: 'archived', tenant: 'Carlos Mejía', monthlyRent: 1650000, startDate: '2025-02-01', endDate: '2025-12-31', paymentDay: 2, deposit: 2, increment: 'ipc+', ipcExtra: 1, adminFee: 1200000, internet: 100000, notes: 'First tenant. Left on good terms.' },
       { id: 102, status: 'active', tenant: 'Empresa S.A.S.', monthlyRent: 1808629, startDate: '2026-02-01', endDate: '2027-01-31', paymentDay: 2, deposit: 2, increment: 'ipc+', ipcExtra: 1, adminFee: 1320099, internet: 100000, notes: '' },
@@ -284,7 +284,7 @@ const initProps = () => [
     taxes: { predial: 3966000, incomeTax: 0 },
   },
   {
-    id: 2, name: 'Apto 103', address: 'Calle 78 #5-32', type: '2-bed', ref: 'AAA0093HH0E', year: 2026,
+    id: 2, name: 'Apto 103', address: 'Carrera 15 #93-47', type: '2-bed', ref: 'AAA0093HH0E', year: 2026,
     contracts: [
       { id: 201, status: 'active', tenant: 'Juan Pérez', monthlyRent: 2360100, startDate: '2026-01-01', endDate: '2026-12-31', paymentDay: 1, deposit: 1, increment: 'ipc+', ipcExtra: 1, adminFee: 2360100, internet: 0, notes: '' },
     ],
@@ -865,7 +865,7 @@ function AddPropertyModal({ onSave, onClose }) {
         <div className="modal-body">
           <div className="contract-grid">
             <div className="field"><label>Unit name *</label><input placeholder="Apto 104" value={form.name} onChange={e=>set('name',e.target.value)}/></div>
-            <div className="field" style={{gridColumn:'span 2'}}><label>Address</label><input placeholder="Calle 78 #5-32" value={form.address} onChange={e=>set('address',e.target.value)}/></div>
+            <div className="field" style={{gridColumn:'span 2'}}><label>Address</label><input placeholder="Carrera 15 #93-47" value={form.address} onChange={e=>set('address',e.target.value)}/></div>
             <div className="field"><label>Type</label><select value={form.type} onChange={e=>set('type',e.target.value)}><option>Studio</option><option>1-bed</option><option value="2-bed">2-bed</option><option>3-bed</option></select></div>
             <div className="field" style={{gridColumn:'span 2'}}><label>Matricula / reference</label><input value={form.ref} onChange={e=>set('ref',e.target.value)}/></div>
             <div className="divider" style={{gridColumn:'1/-1'}}/>

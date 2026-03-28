@@ -406,7 +406,7 @@ export function AddPropertyModal({ onSave, onClose }: Props) {
               <div className="contract-grid" style={{ marginBottom: 0 }}>
                 <div className="field" style={{ gridColumn: 'span 2' }}>
                   <label>Address</label>
-                  <input placeholder="Calle 78 #5-32" value={form.address} onChange={(e) => set('address', e.target.value)} />
+                  <input placeholder="Carrera 15 #93-42" value={form.address} onChange={(e) => set('address', e.target.value)} />
                 </div>
                 <div className="field">
                   <label>City</label>

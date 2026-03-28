@@ -38,6 +38,8 @@ interface PropertyWithMetrics {
   annual: AnnualResult
   monthsLeft: number | null
   vacant: boolean
+  taxDaysLeft: number | null  // days until nearest pending tax due date
+  taxPending: boolean
 }
 
 /* ── Alert rules ── */
@@ -83,6 +85,30 @@ const ALERT_RULES: AlertRule[] = [
     severity: 'info',
     check: (p) => p.monthsLeft != null && p.monthsLeft > 3 && p.monthsLeft <= 6,
     describe: (p) => `Contract expires in ${p.monthsLeft} months`,
+    color: [59, 130, 246],
+  },
+  {
+    key: 'taxOverdue',
+    label: 'Tax overdue',
+    severity: 'critical',
+    check: (p) => p.taxPending && p.taxDaysLeft != null && p.taxDaysLeft <= 10,
+    describe: (p) => p.taxDaysLeft! <= 0 ? 'Tax payment is overdue' : `Tax due in ${p.taxDaysLeft} days`,
+    color: [185, 28, 28],
+  },
+  {
+    key: 'taxDue30',
+    label: 'Tax due < 30d',
+    severity: 'warning',
+    check: (p) => p.taxPending && p.taxDaysLeft != null && p.taxDaysLeft > 10 && p.taxDaysLeft <= 30,
+    describe: (p) => `Tax due in ${p.taxDaysLeft} days`,
+    color: [217, 119, 6],
+  },
+  {
+    key: 'taxDue90',
+    label: 'Tax due < 90d',
+    severity: 'info',
+    check: (p) => p.taxPending && p.taxDaysLeft != null && p.taxDaysLeft > 30 && p.taxDaysLeft <= 90,
+    describe: (p) => `Tax due in ${p.taxDaysLeft} days`,
     color: [59, 130, 246],
   },
 ]
@@ -158,6 +184,13 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
           annual: annual ?? { gpi: 0, vacancy: 0, egi: 0, totalOpex: 0, noi: 0, totalCapex: 0, taxes: 0, netCf: 0 },
           monthsLeft: ac?.endDate ? monthsUntil(ac.endDate) : null,
           vacant: !ac,
+          ...(() => {
+            const pending = (p.taxes?.items ?? []).filter(t => t.status === 'pending')
+            if (pending.length === 0) return { taxPending: false, taxDaysLeft: null }
+            const nearest = pending.reduce((a, b) => a.dueDate < b.dueDate ? a : b)
+            const days = Math.ceil((new Date(nearest.dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+            return { taxPending: true, taxDaysLeft: days }
+          })(),
         }
       })
   }, [properties, annuals, activeContractMap])
@@ -281,10 +314,13 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
   // Build structured alert notifications grouped by severity
   const alertNotifications = useMemo(() => {
     const items: { prop: PropertyWithMetrics; rule: AlertRule }[] = []
+    const contractRules = ALERT_RULES.filter(r => r.key.startsWith('contract') || r.key === 'vacant')
+    const taxRules = ALERT_RULES.filter(r => r.key.startsWith('tax'))
     for (const p of data) {
-      for (const r of ALERT_RULES) {
-        if (r.check(p)) { items.push({ prop: p, rule: r }); break } // first matching rule wins (highest severity)
-      }
+      // first matching contract/vacancy rule
+      for (const r of contractRules) { if (r.check(p)) { items.push({ prop: p, rule: r }); break } }
+      // first matching tax rule
+      for (const r of taxRules) { if (r.check(p)) { items.push({ prop: p, rule: r }); break } }
     }
     const order: Record<AlertSeverity, number> = { critical: 0, warning: 1, info: 2 }
     return items.sort((a, b) => order[a.rule.severity] - order[b.rule.severity])

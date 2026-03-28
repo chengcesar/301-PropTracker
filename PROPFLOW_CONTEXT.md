@@ -70,8 +70,8 @@ Gross Potential Income (GPI)
 ```typescript
 interface Property {
   id: number
-  name: string          // e.g. "Apto 102"
-  address: string       // e.g. "Calle 78 #5-32"
+  name: string          // e.g. "Apto 101"
+  address: string       // e.g. "Calle 55 #4-36"
   type: 'Studio' | '1-bed' | '2-bed' | '3-bed'
   ref: string           // matricula / catastral reference
   year: number          // currently selected year for display
