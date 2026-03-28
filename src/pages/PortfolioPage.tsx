@@ -1007,24 +1007,24 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                   const countryCode = COUNTRIES.find(c => c.name === p.country)?.code
                   return (
                     <tr key={p.id} onClick={() => onSelectProperty(p.id)} style={{ cursor: 'pointer' }}>
-                      <td>
-                        <div className="fw5">{p.name}</div>
-                        <div className="fs11 text3">{p.address}</div>
+                      <td className="wf-col-name">
+                        <div className="fw5 wf-truncate" title={p.name}>{p.name}</div>
+                        <div className="fs11 text3 wf-truncate" title={p.address}>{p.address}</div>
                       </td>
-                      {colVis.owner && <td className="text3">{p.owner || '—'}</td>}
+                      {colVis.owner && <td className="text3 wf-col-owner"><div className="wf-truncate" title={p.owner || ''}>{p.owner || '—'}</div></td>}
                       {colVis.country && (
-                        <td className="text3 wf-align-left">
+                        <td className="text3 wf-align-left wf-col-country">
                           {p.country ? (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} title={p.country}>
                               {countryCode ? (
                                 <img src={countryFlagUrl(countryCode, 40)} alt="" width={20} height={14} style={{ borderRadius: 2, objectFit: 'cover', flexShrink: 0 }} />
                               ) : null}
-                              {p.country}
+                              {countryCode || p.country}
                             </span>
                           ) : '—'}
                         </td>
                       )}
-                      {colVis.status && <td>
+                      {colVis.status && <td className="wf-col-status">
                         <span className={`badge ${ac ? 'active-c' : 'vacant'}`}>{ac ? 'Rented' : 'Vacant'}</span>
                       </td>}
                       {colVis.gpi && <td>{fm(a.gpi)}</td>}
