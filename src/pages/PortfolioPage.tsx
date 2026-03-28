@@ -197,12 +197,12 @@ const COL_LABELS: Record<ColKey, string> = {
   capex: 'CAPEX', taxes: 'Taxes', netCf: 'Net CF', margin: 'Margin',
 }
 const DETAIL_COLS: ColKey[] = ['propertyType', 'bedrooms', 'area', 'bathrooms', 'parking', 'floor', 'estrato', 'yearBuilt', 'lastRenovation']
-type ColGroup = 'financial' | 'characteristics' | 'all' | 'custom0' | 'custom1' | 'custom2'
-const COL_GROUPS: Record<'financial' | 'characteristics', ColKey[]> = {
-  financial: ['gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin'],
-  characteristics: ['owner', 'country', 'status', 'endDate', 'taxStatus', ...DETAIL_COLS],
-}
-const CUSTOM_SLOTS = ['custom0', 'custom1', 'custom2'] as const
+const BUILT_IN_PRESETS: { id: string; label: string; cols: ColKey[] }[] = [
+  { id: 'financial', label: 'Financial', cols: ['gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin'] },
+  { id: 'details', label: 'Details', cols: ['owner', 'country', 'status', 'endDate', 'taxStatus', ...DETAIL_COLS] },
+  { id: 'all', label: 'All', cols: [...COL_KEYS] },
+]
+const CUSTOM_SLOT_COUNT = 3
 type CustomPreset = { name: string; cols: ColKey[] }
 const CUSTOM_PRESETS_KEY = 'col-custom-presets'
 function loadCustomPresets(): (CustomPreset | null)[] {
@@ -214,6 +214,20 @@ function loadCustomPresets(): (CustomPreset | null)[] {
 }
 function saveCustomPresets(p: (CustomPreset | null)[]) {
   localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(p))
+}
+const COL_ORDER_KEY = 'col-order'
+function loadColOrder(): ColKey[] {
+  try {
+    const raw = localStorage.getItem(COL_ORDER_KEY)
+    if (raw) {
+      const arr = JSON.parse(raw) as ColKey[]
+      const known = new Set<string>(COL_KEYS)
+      const valid = arr.filter((k): k is ColKey => known.has(k))
+      const missing = ([...COL_KEYS] as ColKey[]).filter(k => !valid.includes(k))
+      return [...valid, ...missing]
+    }
+  } catch {}
+  return [...COL_KEYS]
 }
 const COL_STORAGE_KEY = 'col-visibility'
 function loadColVisibility(): Record<ColKey, boolean> {
@@ -442,11 +456,15 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   // null = closed, '__pick__' = picking column, column key = value picker open on that chip
   const filterBarRef = useRef<HTMLDivElement>(null)
   const [colVis, setColVis] = useState(loadColVisibility)
+  const [colOrder, setColOrder] = useState(loadColOrder)
   const [colMenuOpen, setColMenuOpen] = useState(false)
-  const [colGroupTab, setColGroupTab] = useState<ColGroup>('financial')
+  // activePreset: built-in id string ('financial'|'details'|'all') or custom slot index (0|1|2) or null
+  const [activePreset, setActivePreset] = useState<string | number | null>('financial')
   const [customPresets, setCustomPresets] = useState(loadCustomPresets)
   const [renamingSlot, setRenamingSlot] = useState<number | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [dragCol, setDragCol] = useState<ColKey | null>(null)
+  const [dragOverCol, setDragOverCol] = useState<ColKey | null>(null)
   const colMenuRef = useRef<HTMLDivElement>(null)
 
   // Sort state
@@ -652,29 +670,28 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
     return () => document.removeEventListener('mousedown', handler)
   }, [filterDropdownOpen])
 
+  function applyColSet(cols: ColKey[]) {
+    const next = Object.fromEntries(COL_KEYS.map(k => [k, cols.includes(k)])) as Record<ColKey, boolean>
+    setColVis(next)
+    localStorage.setItem(COL_STORAGE_KEY, JSON.stringify(next))
+  }
+
   function toggleCol(key: ColKey) {
     setColVis(prev => {
       const next = { ...prev, [key]: !prev[key] }
       localStorage.setItem(COL_STORAGE_KEY, JSON.stringify(next))
       return next
     })
+    setActivePreset(null)
   }
 
   function saveCustomPreset(slot: number, name: string) {
-    const visibleCols = COL_KEYS.filter(k => colVis[k]) as ColKey[]
+    const visibleCols = colOrder.filter(k => colVis[k])
     const next = [...customPresets] as (CustomPreset | null)[]
     next[slot] = { name, cols: visibleCols }
     setCustomPresets(next)
     saveCustomPresets(next)
-    setColGroupTab(CUSTOM_SLOTS[slot])
-  }
-
-  function applyCustomPreset(slot: number) {
-    const preset = customPresets[slot]
-    if (!preset) return
-    const next = Object.fromEntries(COL_KEYS.map(k => [k, preset.cols.includes(k)])) as Record<ColKey, boolean>
-    setColVis(next)
-    localStorage.setItem(COL_STORAGE_KEY, JSON.stringify(next))
+    setActivePreset(slot)
   }
 
   function deleteCustomPreset(slot: number) {
@@ -682,7 +699,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
     next[slot] = null
     setCustomPresets(next)
     saveCustomPresets(next)
-    if (colGroupTab === CUSTOM_SLOTS[slot]) setColGroupTab('financial')
+    if (activePreset === slot) setActivePreset(null)
   }
 
   function toggleKpi(key: KpiKey) {
@@ -695,27 +712,51 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
 
   const visibleKpis = KPI_KEYS.filter(k => kpiVis[k])
 
+  function colExportDefs(dc: CurrencyCode) {
+    const raw = (n: number | null | undefined) => n != null ? String(Math.round(n * 100) / 100) : ''
+    const map: Record<ColKey, { label: string; value: (p: Property, a: ReturnType<typeof convertAnnual>, ac: Contract | null) => string }> = {
+      owner: { label: 'Owner', value: (p) => p.owner || '' },
+      country: { label: 'Country', value: (p) => p.country || '' },
+      status: { label: 'Status', value: (_p, _a, ac) => ac ? 'Rented' : 'Vacant' },
+      endDate: { label: 'Months Left', value: (_p, _a, ac) => {
+        if (!ac) return ''
+        const end = new Date(ac.endDate), now = new Date()
+        return String((end.getFullYear() - now.getFullYear()) * 12 + end.getMonth() - now.getMonth())
+      }},
+      taxStatus: { label: 'Tax Status', value: (p) => { const pend = (p.taxes?.items ?? []).filter(t => t.status === 'pending'); return pend.length > 0 ? 'Pending' : 'Paid' }},
+      propertyType: { label: 'Type', value: (p) => p.factSheet?.propertyType || '' },
+      bedrooms: { label: 'Beds', value: (p) => p.bedrooms ? String(p.bedrooms) : '' },
+      area: { label: 'Area (m²)', value: (p) => p.area ? String(p.area) : '' },
+      bathrooms: { label: 'Baths', value: (p) => p.bathrooms ? String(p.bathrooms) : '' },
+      parking: { label: 'Parking', value: (p) => p.parking ? String(p.parking) : '' },
+      floor: { label: 'Floor', value: (p) => p.factSheet?.floor != null ? String(p.factSheet.floor) : '' },
+      estrato: { label: 'Estrato', value: (p) => p.factSheet?.estrato != null ? String(p.factSheet.estrato) : '' },
+      yearBuilt: { label: 'Year Built', value: (p) => p.factSheet?.yearBuilt != null ? String(p.factSheet.yearBuilt) : '' },
+      lastRenovation: { label: 'Renovation', value: (p) => p.factSheet?.lastRenovation != null ? String(p.factSheet.lastRenovation) : '' },
+      gpi: { label: `GPI (${dc})`, value: (_p, a) => raw(a.gpi) },
+      egi: { label: `EGI (${dc})`, value: (_p, a) => raw(a.egi) },
+      opex: { label: `OPEX (${dc})`, value: (_p, a) => raw(-a.totalOpex) },
+      noi: { label: `NOI (${dc})`, value: (_p, a) => raw(a.noi) },
+      capex: { label: `CAPEX (${dc})`, value: (_p, a) => raw(a.totalCapex ? -a.totalCapex : 0) },
+      taxes: { label: `Taxes (${dc})`, value: (_p, a) => raw(a.taxes ? -a.taxes : 0) },
+      netCf: { label: `Net CF (${dc})`, value: (_p, a) => raw(a.netCf) },
+      margin: { label: 'Margin', value: (_p, a) => a.gpi ? String(Math.round((a.netCf / a.gpi) * 100)) : '' },
+    }
+    return map
+  }
+
   function handleDownloadCsv() {
     const dc = displayCurrency
-    const headers = ['Property', 'Owner', 'Country', 'Status', 'Tax Status', 'Type', 'Beds', 'Area (m²)', 'Baths', 'Parking', 'Floor', 'Estrato', 'Year Built', 'Renovation', `GPI (${dc})`, `EGI (${dc})`, `OPEX (${dc})`, `NOI (${dc})`, `CAPEX (${dc})`, `Taxes (${dc})`, `Net CF (${dc})`, 'Margin']
+    const defs = colExportDefs(dc)
+    const visCols = colOrder.filter(k => colVis[k])
+    const headers = ['Property', ...visCols.map(k => defs[k].label)]
     const rows = filteredProperties.map((p) => {
       const a = convertAnnual(calcAnnual(withYear(p)), p.currency, dc, fxRates)
       const ac = activeContract(p)
-      const pending = (p.taxes?.items ?? []).filter(t => t.status === 'pending')
-      return [
-        `"${p.name}"`,
-        `"${p.owner || ''}"`,
-        `"${p.country || ''}"`,
-        ac ? 'Rented' : 'Vacant',
-        pending.length > 0 ? 'Pending' : 'Paid',
-        `"${p.factSheet?.propertyType || ''}"`,
-        p.bedrooms || '', p.area || '', p.bathrooms || '', p.parking || '',
-        p.factSheet?.floor ?? '', p.factSheet?.estrato ?? '',
-        p.factSheet?.yearBuilt ?? '', p.factSheet?.lastRenovation ?? '',
-        a.gpi, a.egi, a.totalOpex, a.noi,
-        a.totalCapex || '', a.taxes || '', a.netCf,
-        a.gpi ? `${Math.round((a.netCf / a.gpi) * 100)}%` : '',
-      ].join(',')
+      return [`"${p.name}"`, ...visCols.map(k => {
+        const v = defs[k].value(p, a, ac)
+        return v.includes(',') ? `"${v}"` : v
+      })].join(',')
     })
     const csv = [headers.join(','), ...rows].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -729,42 +770,13 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
 
   function handleCopy() {
     const dc = displayCurrency
-    const raw = (n: number | null | undefined) => n != null ? String(Math.round(n * 100) / 100) : ''
-    const colDefs: { key: ColKey | 'name'; label: string; value: (p: Property, a: ReturnType<typeof convertAnnual>, ac: Contract | null) => string }[] = [
-      { key: 'name', label: 'Property', value: (p) => p.name },
-      { key: 'owner', label: 'Owner', value: (p) => p.owner || '' },
-      { key: 'country', label: 'Country', value: (p) => p.country || '' },
-      { key: 'status', label: 'Status', value: (_p, _a, ac) => ac ? 'Rented' : 'Vacant' },
-      { key: 'endDate', label: 'Months Left', value: (_p, _a, ac) => {
-        if (!ac) return ''
-        const end = new Date(ac.endDate), now = new Date()
-        const months = (end.getFullYear() - now.getFullYear()) * 12 + end.getMonth() - now.getMonth()
-        return String(months)
-      }},
-      { key: 'propertyType', label: 'Type', value: (p) => p.factSheet?.propertyType || '' },
-      { key: 'bedrooms', label: 'Beds', value: (p) => p.bedrooms ? String(p.bedrooms) : '' },
-      { key: 'area', label: 'Area (m²)', value: (p) => p.area ? String(p.area) : '' },
-      { key: 'bathrooms', label: 'Baths', value: (p) => p.bathrooms ? String(p.bathrooms) : '' },
-      { key: 'parking', label: 'Parking', value: (p) => p.parking ? String(p.parking) : '' },
-      { key: 'floor', label: 'Floor', value: (p) => p.factSheet?.floor != null ? String(p.factSheet.floor) : '' },
-      { key: 'estrato', label: 'Estrato', value: (p) => p.factSheet?.estrato != null ? String(p.factSheet.estrato) : '' },
-      { key: 'yearBuilt', label: 'Year Built', value: (p) => p.factSheet?.yearBuilt != null ? String(p.factSheet.yearBuilt) : '' },
-      { key: 'lastRenovation', label: 'Renovation', value: (p) => p.factSheet?.lastRenovation != null ? String(p.factSheet.lastRenovation) : '' },
-      { key: 'gpi', label: `GPI (${dc})`, value: (_p, a) => raw(a.gpi) },
-      { key: 'egi', label: `EGI (${dc})`, value: (_p, a) => raw(a.egi) },
-      { key: 'opex', label: `OPEX (${dc})`, value: (_p, a) => raw(-a.totalOpex) },
-      { key: 'noi', label: `NOI (${dc})`, value: (_p, a) => raw(a.noi) },
-      { key: 'capex', label: `CAPEX (${dc})`, value: (_p, a) => raw(a.totalCapex ? -a.totalCapex : 0) },
-      { key: 'taxes', label: `Taxes (${dc})`, value: (_p, a) => raw(a.taxes ? -a.taxes : 0) },
-      { key: 'netCf', label: `Net CF (${dc})`, value: (_p, a) => raw(a.netCf) },
-      { key: 'margin', label: 'Margin', value: (_p, a) => a.gpi ? String(Math.round((a.netCf / a.gpi) * 100)) : '' },
-    ]
-    const visible = colDefs.filter(c => c.key === 'name' || colVis[c.key as ColKey])
-    const headers = visible.map(c => c.label)
+    const defs = colExportDefs(dc)
+    const visCols = colOrder.filter(k => colVis[k])
+    const headers = ['Property', ...visCols.map(k => defs[k].label)]
     const rows = filteredProperties.map((p) => {
       const a = convertAnnual(calcAnnual(withYear(p)), p.currency, dc, fxRates)
       const ac = activeContract(p)
-      return visible.map(c => c.value(p, a, ac)).join('\t')
+      return [p.name, ...visCols.map(k => defs[k].value(p, a, ac))].join('\t')
     })
     navigator.clipboard.writeText([headers.join('\t'), ...rows].join('\n'))
     setCopied(true)
@@ -897,14 +909,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                   <IconSpreadsheet />
                 </button>
                 {colMenuOpen && (() => {
-                  const customIdx = CUSTOM_SLOTS.indexOf(colGroupTab as typeof CUSTOM_SLOTS[number])
-                  const isCustomTab = customIdx !== -1
-                  const activePreset = isCustomTab ? customPresets[customIdx] : null
-                  const shownKeys: ColKey[] = colGroupTab === 'all'
-                    ? [...COL_KEYS]
-                    : isCustomTab
-                      ? (activePreset ? activePreset.cols : [...COL_KEYS])
-                      : COL_GROUPS[colGroupTab as 'financial' | 'characteristics']
+                  const customSlotActive = typeof activePreset === 'number' ? customPresets[activePreset] : null
                   return (
                   <div
                     ref={(el) => {
@@ -920,40 +925,41 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                     display: 'flex', flexDirection: 'column',
                     animation: 'selectSlideIn 0.15s ease-out',
                   }}>
-                    {/* Built-in tabs */}
+                    {/* Built-in preset tabs */}
                     <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-                      {(['financial', 'characteristics', 'all'] as const).map(tab => (
+                      {BUILT_IN_PRESETS.map(bp => (
                         <button
-                          key={tab}
+                          key={bp.id}
                           className="ghost"
-                          onClick={() => { setColGroupTab(tab); setRenamingSlot(null) }}
+                          onClick={() => { applyColSet(bp.cols); setActivePreset(bp.id); setRenamingSlot(null) }}
                           style={{
                             flex: 1, padding: '9px 6px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
                             letterSpacing: '0.5px', borderRadius: 0, textAlign: 'center',
-                            color: colGroupTab === tab ? '#3b82f6' : 'var(--text3)',
-                            boxShadow: colGroupTab === tab ? 'inset 0 -2px 0 #3b82f6' : 'none',
+                            color: activePreset === bp.id ? '#3b82f6' : 'var(--text3)',
+                            boxShadow: activePreset === bp.id ? 'inset 0 -2px 0 #3b82f6' : 'none',
                           }}
                         >
-                          {tab === 'characteristics' ? 'Details' : tab === 'financial' ? 'Financial' : 'All'}
+                          {bp.label}
                         </button>
                       ))}
                     </div>
                     {/* Custom preset tabs */}
                     <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-                      {CUSTOM_SLOTS.map((slot, i) => {
+                      {Array.from({ length: CUSTOM_SLOT_COUNT }, (_, i) => {
                         const preset = customPresets[i]
-                        const isActive = colGroupTab === slot
+                        const isActive = activePreset === i
                         return (
                           <button
-                            key={slot}
+                            key={i}
                             className="ghost"
                             onClick={() => {
-                              if (preset) { setColGroupTab(slot); applyCustomPreset(i); setRenamingSlot(null) }
+                              if (preset) { applyColSet(preset.cols); setActivePreset(i); setRenamingSlot(null) }
                               else { setRenamingSlot(i); setRenameValue('') }
                             }}
                             style={{
                               flex: 1, padding: '9px 6px', fontSize: 11, fontWeight: 600,
                               borderRadius: 0, textAlign: 'center', position: 'relative',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
                               color: isActive ? '#3b82f6' : preset ? 'var(--text3)' : '#d1d5db',
                               boxShadow: isActive ? 'inset 0 -2px 0 #3b82f6' : 'none',
                             }}
@@ -1002,51 +1008,82 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                       </form>
                     )}
                     {/* Delete / update actions for active custom preset */}
-                    {isCustomTab && activePreset && renamingSlot === null && (
+                    {typeof activePreset === 'number' && customSlotActive && renamingSlot === null && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
                         <button
                           className="ghost"
-                          onClick={() => { saveCustomPreset(customIdx, activePreset.name) }}
+                          onClick={() => { saveCustomPreset(activePreset, customSlotActive.name) }}
                           style={{ fontSize: 11, fontWeight: 600, color: '#3b82f6', padding: '2px 6px', borderRadius: 6 }}
                         >Update preset</button>
                         <button
                           className="ghost"
-                          onClick={() => { setRenamingSlot(customIdx); setRenameValue(activePreset.name) }}
+                          onClick={() => { setRenamingSlot(activePreset); setRenameValue(customSlotActive.name) }}
                           style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', padding: '2px 6px', borderRadius: 6 }}
                         >Rename</button>
                         <button
                           className="ghost"
-                          onClick={() => deleteCustomPreset(customIdx)}
+                          onClick={() => deleteCustomPreset(activePreset)}
                           style={{ fontSize: 11, fontWeight: 600, color: '#ef4444', padding: '2px 6px', borderRadius: 6 }}
                         >Delete</button>
                       </div>
                     )}
                     <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
-                    {shownKeys.filter(k => colVis[k]).length > 0 && (
+                    {colOrder.some(k => colVis[k]) && (
                       <>
                         <div style={{ padding: '10px 14px 6px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                          Visible
+                          Visible — drag to reorder
                         </div>
-                        {shownKeys.filter(k => colVis[k]).map(key => (
-                          <button
+                        {colOrder.filter(k => colVis[k]).map(key => (
+                          <div
                             key={key}
-                            className="ghost"
-                            style={{ width: '100%', textAlign: 'left', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 0 }}
-                            onClick={() => toggleCol(key)}
+                            draggable
+                            onDragStart={(e) => { setDragCol(key); e.dataTransfer.effectAllowed = 'move' }}
+                            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragOverCol !== key) setDragOverCol(key) }}
+                            onDragLeave={() => setDragOverCol(prev => prev === key ? null : prev)}
+                            onDrop={(e) => {
+                              e.preventDefault()
+                              if (dragCol && dragCol !== key) {
+                                setColOrder(prev => {
+                                  const next = [...prev], from = next.indexOf(dragCol), to = next.indexOf(key)
+                                  next.splice(from, 1); next.splice(to, 0, dragCol)
+                                  localStorage.setItem(COL_ORDER_KEY, JSON.stringify(next))
+                                  return next
+                                })
+                              }
+                              setDragCol(null); setDragOverCol(null)
+                            }}
+                            onDragEnd={() => { setDragCol(null); setDragOverCol(null) }}
+                            style={{
+                              display: 'flex', alignItems: 'center', padding: '8px 14px', cursor: 'grab',
+                              opacity: dragCol === key ? 0.35 : 1,
+                              borderTop: dragOverCol === key && dragCol !== key ? '2px solid #3b82f6' : '2px solid transparent',
+                              transition: 'border-color 0.1s, opacity 0.1s',
+                            }}
                           >
-                            <span style={{ fontSize: 13 }}>{COL_LABELS[key]}</span>
-                            <IconEye visible={true} />
-                          </button>
+                            <svg width="10" height="14" viewBox="0 0 10 14" fill="#c4c9d2" style={{ flexShrink: 0, marginRight: 8 }}>
+                              <circle cx="3" cy="2" r="1.3"/><circle cx="7" cy="2" r="1.3"/>
+                              <circle cx="3" cy="7" r="1.3"/><circle cx="7" cy="7" r="1.3"/>
+                              <circle cx="3" cy="12" r="1.3"/><circle cx="7" cy="12" r="1.3"/>
+                            </svg>
+                            <span style={{ fontSize: 13, flex: 1 }}>{COL_LABELS[key]}</span>
+                            <button
+                              className="ghost"
+                              onClick={(e) => { e.stopPropagation(); toggleCol(key) }}
+                              style={{ padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0 }}
+                            >
+                              <IconEye visible={true} />
+                            </button>
+                          </div>
                         ))}
                       </>
                     )}
-                    {shownKeys.some(k => !colVis[k]) && (
+                    {colOrder.some(k => !colVis[k]) && (
                       <>
                         <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
                         <div style={{ padding: '10px 14px 6px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
                           Hidden
                         </div>
-                        {shownKeys.filter(k => !colVis[k]).map(key => (
+                        {colOrder.filter(k => !colVis[k]).map(key => (
                           <button
                             key={key}
                             className="ghost"
@@ -1218,28 +1255,9 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
               <thead>
                 <tr>
                   <SortTh col="name">Property</SortTh>
-                  {colVis.owner && <SortTh col="owner">Owner</SortTh>}
-                  {colVis.country && <SortTh col="country" className="wf-align-left">Country</SortTh>}
-                  {colVis.status && <SortTh col="status">Status</SortTh>}
-                  {colVis.endDate && <SortTh col="endDate">Months Left</SortTh>}
-                  {colVis.taxStatus && <SortTh col="taxStatus">Tax Status</SortTh>}
-                  {colVis.propertyType && <SortTh col="propertyType">Type</SortTh>}
-                  {colVis.bedrooms && <SortTh col="bedrooms">Beds</SortTh>}
-                  {colVis.area && <SortTh col="area">Area</SortTh>}
-                  {colVis.bathrooms && <SortTh col="bathrooms">Baths</SortTh>}
-                  {colVis.parking && <SortTh col="parking">Parking</SortTh>}
-                  {colVis.floor && <SortTh col="floor">Floor</SortTh>}
-                  {colVis.estrato && <SortTh col="estrato">Estrato</SortTh>}
-                  {colVis.yearBuilt && <SortTh col="yearBuilt">Year Built</SortTh>}
-                  {colVis.lastRenovation && <SortTh col="lastRenovation">Renovation</SortTh>}
-                  {colVis.gpi && <SortTh col="gpi">GPI</SortTh>}
-                  {colVis.egi && <SortTh col="egi">EGI</SortTh>}
-                  {colVis.opex && <SortTh col="opex">OPEX</SortTh>}
-                  {colVis.noi && <SortTh col="noi">NOI</SortTh>}
-                  {colVis.capex && <SortTh col="capex">CAPEX</SortTh>}
-                  {colVis.taxes && <SortTh col="taxes">Taxes</SortTh>}
-                  {colVis.netCf && <SortTh col="netCf">Net CF</SortTh>}
-                  {colVis.margin && <SortTh col="margin">Margin</SortTh>}
+                  {colOrder.filter(k => colVis[k]).map(key => (
+                    <SortTh key={key} col={key} className={key === 'country' ? 'wf-align-left' : undefined}>{COL_LABELS[key]}</SortTh>
+                  ))}
                   <th style={{ width: 52, textAlign: 'center', padding: '8px 12px 8px 0' }}>
                     <button
                       className="ghost"
@@ -1257,70 +1275,58 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                   const a = convertAnnual(calcAnnual(withYear(p)), p.currency, displayCurrency, fxRates)
                   const ac = activeContract(p)
                   const countryCode = COUNTRIES.find(c => c.name === p.country)?.code
+                  const cellMap: Record<ColKey, React.ReactNode> = {
+                    owner: <td key="owner" className="text3 wf-col-owner"><div className="wf-truncate" title={p.owner || ''}>{p.owner || '—'}</div></td>,
+                    country: (
+                      <td key="country" className="text3 wf-align-left wf-col-country">
+                        {p.country ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} title={p.country}>
+                            {countryCode ? <img src={countryFlagUrl(countryCode, 40)} alt="" width={20} height={14} style={{ borderRadius: 2, objectFit: 'cover', flexShrink: 0 }} /> : null}
+                            {countryCode || p.country}
+                          </span>
+                        ) : '—'}
+                      </td>
+                    ),
+                    status: <td key="status" className="wf-col-status"><span className={`badge ${ac ? 'active-c' : 'vacant'}`}>{ac ? 'Rented' : 'Vacant'}</span></td>,
+                    endDate: (() => {
+                      if (!ac) return <td key="endDate" className="text3">—</td>
+                      const end = new Date(ac.endDate), now = new Date()
+                      const months = (end.getFullYear() - now.getFullYear()) * 12 + end.getMonth() - now.getMonth()
+                      return <td key="endDate" className={months <= 3 ? 'neg' : months <= 6 ? '' : 'text3'} style={{ whiteSpace: 'nowrap' }}>{months <= 0 ? 'Expired' : `${months}m`}</td>
+                    })(),
+                    taxStatus: (() => {
+                      const items = p.taxes?.items ?? [], pending = items.filter(t => t.status === 'pending')
+                      if (items.length === 0) return <td key="taxStatus" className="text3">—</td>
+                      if (pending.length === 0) return <td key="taxStatus"><span className="badge active-c">Paid</span></td>
+                      const nearest = pending.reduce((x, b) => x.dueDate < b.dueDate ? x : b)
+                      const daysLeft = Math.ceil((new Date(nearest.dueDate).getTime() - Date.now()) / 864e5)
+                      return <td key="taxStatus"><span className="badge vacant">Due {daysLeft <= 0 ? 'overdue' : `${daysLeft}d`}</span></td>
+                    })(),
+                    propertyType: <td key="propertyType" className="text3">{p.factSheet?.propertyType || '—'}</td>,
+                    bedrooms: <td key="bedrooms" className="text3">{p.bedrooms || '—'}</td>,
+                    area: <td key="area" className="text3">{p.area ? `${p.area} m²` : '—'}</td>,
+                    bathrooms: <td key="bathrooms" className="text3">{p.bathrooms || '—'}</td>,
+                    parking: <td key="parking" className="text3">{p.parking || '—'}</td>,
+                    floor: <td key="floor" className="text3">{p.factSheet?.floor ?? '—'}</td>,
+                    estrato: <td key="estrato" className="text3">{p.factSheet?.estrato ?? '—'}</td>,
+                    yearBuilt: <td key="yearBuilt" className="text3">{p.factSheet?.yearBuilt ?? '—'}</td>,
+                    lastRenovation: <td key="lastRenovation" className="text3">{p.factSheet?.lastRenovation ?? '—'}</td>,
+                    gpi: <td key="gpi">{fm(a.gpi)}</td>,
+                    egi: <td key="egi" className="pos">{fm(a.egi)}</td>,
+                    opex: <td key="opex" className="neg">−{fm(a.totalOpex)}</td>,
+                    noi: <td key="noi" className={a.noi >= 0 ? 'pos' : 'neg'}>{fm(a.noi)}</td>,
+                    capex: <td key="capex" className={a.totalCapex ? 'neg' : 'text3'}>{a.totalCapex ? `−${fm(a.totalCapex)}` : '—'}</td>,
+                    taxes: <td key="taxes" className={a.taxes ? 'neg' : 'text3'}>{a.taxes ? `−${fm(a.taxes)}` : '—'}</td>,
+                    netCf: <td key="netCf" className={a.netCf >= 0 ? 'pos fw5' : 'neg fw5'}>{a.netCf >= 0 ? '+' : ''}{fm(a.netCf)}</td>,
+                    margin: <td key="margin">{a.gpi ? `${Math.round((a.netCf / a.gpi) * 100)}%` : '—'}</td>,
+                  }
                   return (
                     <tr key={p.id} onClick={() => onSelectProperty(p.id)} style={{ cursor: 'pointer' }}>
                       <td className="wf-col-name">
                         <div className="fw5 wf-truncate" title={p.name}>{p.name}</div>
                         <div className="fs11 text3 wf-truncate" title={p.address}>{p.address}</div>
                       </td>
-                      {colVis.owner && <td className="text3 wf-col-owner"><div className="wf-truncate" title={p.owner || ''}>{p.owner || '—'}</div></td>}
-                      {colVis.country && (
-                        <td className="text3 wf-align-left wf-col-country">
-                          {p.country ? (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} title={p.country}>
-                              {countryCode ? (
-                                <img src={countryFlagUrl(countryCode, 40)} alt="" width={20} height={14} style={{ borderRadius: 2, objectFit: 'cover', flexShrink: 0 }} />
-                              ) : null}
-                              {countryCode || p.country}
-                            </span>
-                          ) : '—'}
-                        </td>
-                      )}
-                      {colVis.status && <td className="wf-col-status">
-                        <span className={`badge ${ac ? 'active-c' : 'vacant'}`}>{ac ? 'Rented' : 'Vacant'}</span>
-                      </td>}
-                      {colVis.endDate && (() => {
-                        if (!ac) return <td className="text3">—</td>
-                        const end = new Date(ac.endDate)
-                        const now = new Date()
-                        const months = (end.getFullYear() - now.getFullYear()) * 12 + end.getMonth() - now.getMonth()
-                        return <td className={months <= 3 ? 'neg' : months <= 6 ? '' : 'text3'} style={{ whiteSpace: 'nowrap' }}>
-                          {months <= 0 ? 'Expired' : `${months}m`}
-                        </td>
-                      })()}
-                      {colVis.taxStatus && (() => {
-                        const items = p.taxes?.items ?? []
-                        const pending = items.filter(t => t.status === 'pending')
-                        if (items.length === 0) return <td className="text3">—</td>
-                        if (pending.length === 0) return <td><span className="badge active-c">Paid</span></td>
-                        const nearest = pending.reduce((a, b) => a.dueDate < b.dueDate ? a : b)
-                        const due = new Date(nearest.dueDate)
-                        const now = new Date()
-                        const daysLeft = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-                        return <td>
-                          <span className="badge vacant">Due {daysLeft <= 0 ? 'overdue' : `${daysLeft}d`}</span>
-                        </td>
-                      })()}
-                      {colVis.propertyType && <td className="text3">{p.factSheet?.propertyType || '—'}</td>}
-                      {colVis.bedrooms && <td className="text3">{p.bedrooms || '—'}</td>}
-                      {colVis.area && <td className="text3">{p.area ? `${p.area} m²` : '—'}</td>}
-                      {colVis.bathrooms && <td className="text3">{p.bathrooms || '—'}</td>}
-                      {colVis.parking && <td className="text3">{p.parking || '—'}</td>}
-                      {colVis.floor && <td className="text3">{p.factSheet?.floor ?? '—'}</td>}
-                      {colVis.estrato && <td className="text3">{p.factSheet?.estrato ?? '—'}</td>}
-                      {colVis.yearBuilt && <td className="text3">{p.factSheet?.yearBuilt ?? '—'}</td>}
-                      {colVis.lastRenovation && <td className="text3">{p.factSheet?.lastRenovation ?? '—'}</td>}
-                      {colVis.gpi && <td>{fm(a.gpi)}</td>}
-                      {colVis.egi && <td className="pos">{fm(a.egi)}</td>}
-                      {colVis.opex && <td className="neg">−{fm(a.totalOpex)}</td>}
-                      {colVis.noi && <td className={a.noi >= 0 ? 'pos' : 'neg'}>{fm(a.noi)}</td>}
-                      {colVis.capex && <td className={a.totalCapex ? 'neg' : 'text3'}>{a.totalCapex ? `−${fm(a.totalCapex)}` : '—'}</td>}
-                      {colVis.taxes && <td className={a.taxes ? 'neg' : 'text3'}>{a.taxes ? `−${fm(a.taxes)}` : '—'}</td>}
-                      {colVis.netCf && <td className={a.netCf >= 0 ? 'pos fw5' : 'neg fw5'}>
-                        {a.netCf >= 0 ? '+' : ''}
-                        {fm(a.netCf)}
-                      </td>}
-                      {colVis.margin && <td>{a.gpi ? `${Math.round((a.netCf / a.gpi) * 100)}%` : '—'}</td>}
+                      {colOrder.filter(k => colVis[k]).map(key => cellMap[key])}
                       <td onClick={(e) => e.stopPropagation()} style={{ width: 52, padding: '8px 12px 8px 0', verticalAlign: 'middle' }}>
                         <div style={{ display: 'flex', justifyContent: 'center' }}>
                           <RowMenu
@@ -1332,35 +1338,25 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                     </tr>
                   )
                 })}
-                <tr className="total-row">
-                  <td>Total</td>
-                  {colVis.owner && <td />}
-                  {colVis.country && <td className="wf-align-left" />}
-                  {colVis.status && <td />}
-                  {colVis.endDate && <td />}
-                  {colVis.taxStatus && <td />}
-                  {colVis.propertyType && <td />}
-                  {colVis.bedrooms && <td />}
-                  {colVis.area && <td />}
-                  {colVis.bathrooms && <td />}
-                  {colVis.parking && <td />}
-                  {colVis.floor && <td />}
-                  {colVis.estrato && <td />}
-                  {colVis.yearBuilt && <td />}
-                  {colVis.lastRenovation && <td />}
-                  {colVis.gpi && <td>{fm(totals.gpi)}</td>}
-                  {colVis.egi && <td>{fm(totals.egi)}</td>}
-                  {colVis.opex && <td className="neg">−{fm(totals.opex)}</td>}
-                  {colVis.noi && <td>{fm(totals.noi)}</td>}
-                  {colVis.capex && <td>{totals.capex ? `−${fm(totals.capex)}` : '—'}</td>}
-                  {colVis.taxes && <td>{totals.taxes ? `−${fm(totals.taxes)}` : '—'}</td>}
-                  {colVis.netCf && <td>
-                    {totals.net >= 0 ? '+' : ''}
-                    {fm(totals.net)}
-                  </td>}
-                  {colVis.margin && <td>{totals.gpi ? `${Math.round((totals.net / totals.gpi) * 100)}%` : '—'}</td>}
-                  <td style={{ width: 52, padding: '8px 0' }} />
-                </tr>
+                {(() => {
+                  const totalMap: Partial<Record<ColKey, React.ReactNode>> = {
+                    gpi: <td key="gpi">{fm(totals.gpi)}</td>,
+                    egi: <td key="egi">{fm(totals.egi)}</td>,
+                    opex: <td key="opex" className="neg">−{fm(totals.opex)}</td>,
+                    noi: <td key="noi">{fm(totals.noi)}</td>,
+                    capex: <td key="capex">{totals.capex ? `−${fm(totals.capex)}` : '—'}</td>,
+                    taxes: <td key="taxes">{totals.taxes ? `−${fm(totals.taxes)}` : '—'}</td>,
+                    netCf: <td key="netCf">{totals.net >= 0 ? '+' : ''}{fm(totals.net)}</td>,
+                    margin: <td key="margin">{totals.gpi ? `${Math.round((totals.net / totals.gpi) * 100)}%` : '—'}</td>,
+                  }
+                  return (
+                    <tr className="total-row">
+                      <td>Total</td>
+                      {colOrder.filter(k => colVis[k]).map(key => totalMap[key] || <td key={key} />)}
+                      <td style={{ width: 52, padding: '8px 0' }} />
+                    </tr>
+                  )
+                })()}
               </tbody>
             </table>
           </div>

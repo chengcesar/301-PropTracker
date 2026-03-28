@@ -428,6 +428,14 @@
     transition: background 0.15s ease;
   }
   .fs-map-edit-btn:hover { background: #f7f9fc; }
+  .fs-map-btn-group {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    display: flex;
+    gap: 6px;
+  }
+  .fs-map-btn-group .fs-map-edit-btn { position: static; }
   .fs-map-edit-hint {
     position: absolute;
     bottom: 0;

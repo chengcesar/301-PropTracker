@@ -75,6 +75,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
   const [editingChars, setEditingChars] = useState(false)
   const [editingLocation, setEditingLocation] = useState(false)
   const [repositionPin, setRepositionPin] = useState(false)
+  const [mapLocked, setMapLocked] = useState(true)
   const [geoQuery, setGeoQuery] = useState('')
   const [geoResults, setGeoResults] = useState<{ display_name: string; lat: string; lon: string }[]>([])
   const [geoLoading, setGeoLoading] = useState(false)
@@ -405,18 +406,6 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                 </select>
               </div>
               <div className="field">
-                <label>Estrato/Grade</label>
-                <select
-                  value={fs.estrato ?? ''}
-                  onChange={(e) => set('estrato', e.target.value ? Number(e.target.value) : null)}
-                >
-                  <option value="">Select...</option>
-                  {[1, 2, 3, 4, 5, 6].map((n) => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="field">
                 <label>Year built</label>
                 <input type="text" placeholder="2015" value={fs.yearBuilt ?? ''} onChange={(e) => setNum('yearBuilt', e.target.value)} />
               </div>
@@ -439,7 +428,6 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
           ) : (
             <div className="ct-fields" style={{ marginBottom: 20 }}>
               <ReadOnlyField label="Property type" value={fs.propertyType} />
-              <ReadOnlyField label="Estrato/Grade" value={fs.estrato} />
               <ReadOnlyField label="Year built" value={fs.yearBuilt} />
               <ReadOnlyField label="Last renovation" value={fs.lastRenovation} />
               <ReadOnlyField label="Floor" value={fs.floor} />
@@ -488,8 +476,13 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                   mapStyle={CARTO_STYLE}
                   style={{ width: '100%', height: '100%' }}
                   attributionControl={false}
-                  interactive={true}
-                  cursor={repositionPin ? 'crosshair' : 'grab'}
+                  scrollZoom={!mapLocked}
+                  boxZoom={!mapLocked}
+                  dragPan={!mapLocked || repositionPin}
+                  dragRotate={!mapLocked}
+                  doubleClickZoom={!mapLocked}
+                  touchZoomRotate={!mapLocked}
+                  cursor={repositionPin ? 'crosshair' : mapLocked ? 'default' : 'grab'}
                   onClick={repositionPin ? (e) => {
                     setProp('latitude', Math.round(e.lngLat.lat * 1e6) / 1e6)
                     setProp('longitude', Math.round(e.lngLat.lng * 1e6) / 1e6)
@@ -536,15 +529,30 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                 {repositionPin ? (
                   <div className="fs-map-edit-hint">
                     <span>Drag the pin or click to reposition</span>
-                    <button type="button" className="fs-map-done-btn" onClick={() => setRepositionPin(false)}>Done</button>
+                    <button type="button" className="fs-map-done-btn" onClick={() => { setRepositionPin(false); setMapLocked(true) }}>Done</button>
                   </div>
                 ) : (
-                  <button type="button" className="fs-map-edit-btn" onClick={() => setRepositionPin(true)}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
-                    </svg>
-                    Edit location
-                  </button>
+                  <div className="fs-map-btn-group">
+                    <button type="button" className="fs-map-edit-btn" onClick={() => setMapLocked(l => !l)} title={mapLocked ? 'Unlock map' : 'Lock map'}>
+                      {mapLocked ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="11" width="18" height="11" rx="2"/>
+                          <path d="M7 11V7a5 5 0 0110 0v4"/>
+                        </svg>
+                      ) : (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="11" width="18" height="11" rx="2"/>
+                          <path d="M7 11V7a5 5 0 019.9-1"/>
+                        </svg>
+                      )}
+                    </button>
+                    <button type="button" className="fs-map-edit-btn" onClick={() => { setRepositionPin(true); setMapLocked(false) }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+                      </svg>
+                      Edit location
+                    </button>
+                  </div>
                 )}
               </div>
             ) : (
@@ -620,6 +628,18 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                   </select>
                 </div>
                 <div className="field">
+                  <label>Estrato/Grade</label>
+                  <select
+                    value={fs.estrato ?? ''}
+                    onChange={(e) => set('estrato', e.target.value ? Number(e.target.value) : null)}
+                  >
+                    <option value="">Select...</option>
+                    {[1, 2, 3, 4, 5, 6].map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
                   <label>Latitude</label>
                   <input type="text" placeholder="4.711" value={prop.latitude ?? ''} onChange={(e) => {
                     const v = e.target.value
@@ -643,6 +663,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                 <ReadOnlyField label="City" value={prop.city} />
                 <ReadOnlyField label="Postal code" value={prop.postalCode} />
                 <ReadOnlyField label="Country" value={prop.country} />
+                <ReadOnlyField label="Estrato/Grade" value={fs.estrato} />
                 <ReadOnlyField label="Latitude" value={prop.latitude} />
                 <ReadOnlyField label="Longitude" value={prop.longitude} />
               </div>
