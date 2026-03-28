@@ -104,6 +104,7 @@ export interface FactSheet {
   currentValue: number | null
   valuationDate: string
   photos: string[]
+  documents?: string[]
   owners?: OwnershipEntry[]
   mortgage?: MortgageInfo
   contacts: PropertyContact[]

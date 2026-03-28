@@ -5,7 +5,7 @@ import type { FactSheet, Property, PropertyContact, OwnershipEntry, MortgageInfo
 import { fmt } from '../../lib/format'
 import type { CurrencyCode } from '../../lib/currency'
 import { COUNTRIES } from '../../lib/countries'
-import { uploadPropertyPhoto, deletePropertyPhoto } from '../../lib/photoStorage'
+import { uploadPropertyPhoto, deletePropertyPhoto, uploadPropertyDocument, deletePropertyDocument } from '../../lib/photoStorage'
 import { PROPERTY_TYPES, getSpatialFields } from '../../lib/constants'
 
 const CARTO_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
@@ -288,6 +288,81 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
     setActivePhoto((prev) => Math.min(prev, Math.max(0, photos.length - 2)))
   }
 
+  /* ── Documents (maps, floor plans, etc.) ── */
+  const documents = fs.documents ?? []
+  const [activeDoc, setActiveDoc] = useState(0)
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const docFileRef = useRef<HTMLInputElement>(null)
+
+  const isPdf = (url: string) => /\.pdf/i.test(url)
+
+  /* ── Document viewer zoom & pan ── */
+  const [docZoom, setDocZoom] = useState(1)
+  const [docPan, setDocPan] = useState({ x: 0, y: 0 })
+  const docDragRef = useRef<{ dragging: boolean; startX: number; startY: number; panX: number; panY: number }>({ dragging: false, startX: 0, startY: 0, panX: 0, panY: 0 })
+  const docViewerRef = useRef<HTMLDivElement>(null)
+
+  const resetDocView = useCallback(() => { setDocZoom(1); setDocPan({ x: 0, y: 0 }) }, [])
+
+  // Reset view when switching documents
+  useEffect(() => { resetDocView() }, [activeDoc, resetDocView])
+
+  // Native wheel listener with { passive: false } so preventDefault() works
+  useEffect(() => {
+    const el = docViewerRef.current
+    if (!el) return
+    const handler = (e: WheelEvent) => {
+      e.preventDefault()
+      setDocZoom(z => Math.min(5, Math.max(0.5, z - e.deltaY * 0.001)))
+    }
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [])
+
+  const handleDocPointerDown = useCallback((e: React.PointerEvent) => {
+    docDragRef.current = { dragging: true, startX: e.clientX, startY: e.clientY, panX: docPan.x, panY: docPan.y }
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+  }, [docPan])
+
+  const handleDocPointerMove = useCallback((e: React.PointerEvent) => {
+    const d = docDragRef.current
+    if (!d.dragging) return
+    setDocPan({ x: d.panX + (e.clientX - d.startX), y: d.panY + (e.clientY - d.startY) })
+  }, [])
+
+  const handleDocPointerUp = useCallback(() => {
+    docDragRef.current.dragging = false
+  }, [])
+
+  const addDocuments = async (files: FileList | null) => {
+    if (!files) return
+    setUploadingDoc(true)
+    try {
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith('image/') && file.type !== 'application/pdf') continue
+        const url = await uploadPropertyDocument(prop.id, file)
+        onUpdateProp((p) => {
+          const f = p.factSheet ?? EMPTY
+          return { ...p, factSheet: { ...f, documents: [...(f.documents ?? []), url] } }
+        })
+      }
+    } finally {
+      setUploadingDoc(false)
+    }
+  }
+
+  const removeDocument = async (idx: number) => {
+    const url = documents[idx]
+    if (!url) return
+    try { await deletePropertyDocument(url) } catch { /* already deleted */ }
+    onUpdateProp((p) => {
+      const f = p.factSheet ?? EMPTY
+      const next = (f.documents ?? []).filter((_, i) => i !== idx)
+      return { ...p, factSheet: { ...f, documents: next } }
+    })
+    setActiveDoc((prev) => Math.min(prev, Math.max(0, documents.length - 2)))
+  }
+
   const [copied, setCopied] = useState(false)
   const handleCopy = useCallback(() => {
     const headers = ['Name', 'Role', 'Phone', 'Email']
@@ -442,7 +517,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
               {getSpatialFields(fs.propertyType).map((f) => (
                 <div className="field" key={f.key}>
                   <label>{f.label}</label>
-                  <input type="text" placeholder={f.placeholder} value={prop[f.key as keyof Property] || ''} onChange={(e) => setPropNum(f.key as keyof Property, e.target.value)} />
+                  <input type="text" placeholder={f.placeholder} value={(prop[f.key as keyof Property] as string | number) || ''} onChange={(e) => setPropNum(f.key as keyof Property, e.target.value)} />
                 </div>
               ))}
             </div>
@@ -454,7 +529,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                   <ReadOnlyField
                     key={f.key}
                     label={f.suffix ? f.label.replace(` (${f.suffix})`, '') : f.label}
-                    value={val ? (f.suffix ? `${val} ${f.suffix}` : val) : null}
+                    value={val ? (f.suffix ? `${val} ${f.suffix}` : val as string | number) : null}
                   />
                 )
               })}
@@ -669,6 +744,155 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Documents (maps, floor plans, etc.) */}
+      <div className="card mb24" style={{ overflow: 'hidden' }}>
+        <div className="card-inner" style={{ padding: 0 }}>
+          <input
+            ref={docFileRef}
+            type="file"
+            accept="image/jpeg,image/png,application/pdf"
+            multiple
+            hidden
+            onChange={(e) => { addDocuments(e.target.files); e.target.value = '' }}
+          />
+          {uploadingDoc && documents.length === 0 ? (
+            <div className="fs-doc-skeleton">
+              <svg className="fs-photo-spinner" width="30" height="30" viewBox="0 0 90 90" fill="none">
+                <path d="M35.4551 56.9697C35.4551 56.384 35.9299 55.9091 36.5157 55.9091H54.546C55.1317 55.9091 55.6066 56.384 55.6066 56.9697V84.5455C55.6066 85.1312 55.1317 85.6061 54.546 85.6061H36.5157C35.9299 85.6061 35.4551 85.1312 35.4551 84.5455V56.9697Z" fill="#0539FF"/>
+                <path d="M10 73.9394C10 73.3536 10.4748 72.8788 11.0606 72.8788H29.0909C29.6767 72.8788 30.1515 73.3536 30.1515 73.9394V84.5455C30.1515 85.1312 29.6767 85.6061 29.0909 85.6061H11.0606C10.4749 85.6061 10 85.1312 10 84.5455L10 73.9394Z" fill="#0539FF"/>
+                <path d="M59.8477 46.2459C59.8477 45.6601 60.3225 45.1852 60.9083 45.1852H78.9386C79.5243 45.1852 79.9992 45.6601 79.9992 46.2458V84.4277C79.9992 85.0134 79.5243 85.4883 78.9386 85.4883H60.9083C60.3225 85.4883 59.8477 85.0134 59.8477 84.4277V46.2459Z" fill="#0539FF"/>
+                <path d="M10 40C10 20.67 25.67 5 45 5C63.6176 5 78.8401 19.5364 79.9368 37.8785C80.0067 39.0479 79.0503 40 77.8788 40H61.3805C60.209 40 59.2758 39.0448 59.1036 37.886C58.0822 31.0133 52.1568 25.7407 45 25.7407C37.1248 25.7407 30.7407 32.1248 30.7407 40V65.9848C30.7407 67.1564 29.791 68.1061 28.6195 68.1061H12.1212C10.9497 68.1061 10 67.1564 10 65.9848V40Z" fill="#0539FF"/>
+              </svg>
+              <div style={{ fontSize: 14, color: '#6b7280', marginTop: 12 }}>Uploading…</div>
+            </div>
+          ) : documents.length > 0 ? (
+            <>
+              <div className="fs-doc-header">
+                <span className="sec-title" style={{ margin: 0 }}>Documents</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: '#6b7280' }}>{documents.length} {documents.length === 1 ? 'file' : 'files'}</span>
+                  <a className="fs-doc-dl-btn" href={documents[activeDoc] ?? documents[0]} download target="_blank" rel="noreferrer" title="Download">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  </a>
+                  <button type="button" className="fs-doc-add-btn" onClick={() => docFileRef.current?.click()} disabled={uploadingDoc}>
+                    {uploadingDoc ? 'Uploading…' : '+ Add'}
+                  </button>
+                </div>
+              </div>
+              <div className="fs-doc-viewer">
+                {uploadingDoc && (
+                  <div className="fs-photo-uploading-overlay">
+                    <svg className="fs-photo-spinner" width="28" height="28" viewBox="0 0 90 90" fill="none">
+                      <path d="M35.4551 56.9697C35.4551 56.384 35.9299 55.9091 36.5157 55.9091H54.546C55.1317 55.9091 55.6066 56.384 55.6066 56.9697V84.5455C55.6066 85.1312 55.1317 85.6061 54.546 85.6061H36.5157C35.9299 85.6061 35.4551 85.1312 35.4551 84.5455V56.9697Z" fill="#fff"/>
+                      <path d="M10 73.9394C10 73.3536 10.4748 72.8788 11.0606 72.8788H29.0909C29.6767 72.8788 30.1515 73.3536 30.1515 73.9394V84.5455C30.1515 85.1312 29.6767 85.6061 29.0909 85.6061H11.0606C10.4749 85.6061 10 85.1312 10 84.5455L10 73.9394Z" fill="#fff"/>
+                      <path d="M59.8477 46.2459C59.8477 45.6601 60.3225 45.1852 60.9083 45.1852H78.9386C79.5243 45.1852 79.9992 45.6601 79.9992 46.2458V84.4277C79.9992 85.0134 79.5243 85.4883 78.9386 85.4883H60.9083C60.3225 85.4883 59.8477 85.0134 59.8477 84.4277V46.2459Z" fill="#fff"/>
+                      <path d="M10 40C10 20.67 25.67 5 45 5C63.6176 5 78.8401 19.5364 79.9368 37.8785C80.0067 39.0479 79.0503 40 77.8788 40H61.3805C60.209 40 59.2758 39.0448 59.1036 37.886C58.0822 31.0133 52.1568 25.7407 45 25.7407C37.1248 25.7407 30.7407 32.1248 30.7407 40V65.9848C30.7407 67.1564 29.791 68.1061 28.6195 68.1061H12.1212C10.9497 68.1061 10 67.1564 10 65.9848V40Z" fill="#fff"/>
+                    </svg>
+                    <div style={{ fontSize: 13, color: '#fff', marginTop: 8 }}>Uploading…</div>
+                  </div>
+                )}
+                {isPdf(documents[activeDoc] ?? '') ? (
+                  <iframe
+                    className="fs-doc-pdf"
+                    src={documents[activeDoc]}
+                    title="Document"
+                  />
+                ) : (
+                  <div
+                    className="fs-doc-canvas"
+                    ref={docViewerRef}
+                    onPointerDown={handleDocPointerDown}
+                    onPointerMove={handleDocPointerMove}
+                    onPointerUp={handleDocPointerUp}
+                  >
+                    <img
+                      className="fs-doc-img"
+                      src={documents[activeDoc] ?? documents[0]}
+                      alt="Document"
+                      draggable={false}
+                      style={{ transform: `translate(${docPan.x}px, ${docPan.y}px) scale(${docZoom})` }}
+                    />
+                  </div>
+                )}
+                {docZoom > 1 && !isPdf(documents[activeDoc] ?? '') && (
+                  <div
+                    className="fs-doc-minimap"
+                    onClick={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      const cx = (e.clientX - rect.left) / rect.width   // 0..1
+                      const cy = (e.clientY - rect.top) / rect.height   // 0..1
+                      const viewerEl = docViewerRef.current
+                      if (!viewerEl) return
+                      const vw = viewerEl.clientWidth
+                      const vh = viewerEl.clientHeight
+                      // Pan so click point maps to center of viewport
+                      setDocPan({
+                        x: (0.5 - cx) * vw * docZoom,
+                        y: (0.5 - cy) * vh * docZoom,
+                      })
+                    }}
+                  >
+                    <img src={documents[activeDoc] ?? documents[0]} alt="" draggable={false} />
+                    <div
+                      className="fs-doc-minimap-vp"
+                      style={{
+                        width: `${Math.min(100, 100 / docZoom)}%`,
+                        height: `${Math.min(100, 100 / docZoom)}%`,
+                        left: `${50 - (docPan.x / ((docViewerRef.current?.clientWidth ?? 1) * docZoom)) * 100}%`,
+                        top: `${50 - (docPan.y / ((docViewerRef.current?.clientHeight ?? 1) * docZoom)) * 100}%`,
+                        transform: 'translate(-50%, -50%)',
+                      }}
+                    />
+                  </div>
+                )}
+                <div className="fs-doc-zoom-bar">
+                  <button type="button" onClick={() => setDocZoom(z => Math.min(5, z + 0.25))} title="Zoom in">+</button>
+                  <span className="fs-doc-zoom-label">{Math.round(docZoom * 100)}%</span>
+                  <button type="button" onClick={() => setDocZoom(z => Math.max(0.5, z - 0.25))} title="Zoom out">−</button>
+                  <button type="button" onClick={resetDocView} title="Fit to view">⊡</button>
+                </div>
+              </div>
+              <div className="fs-photo-strip">
+                {documents.map((src, i) => (
+                  <div key={i} className={`fs-thumb${i === activeDoc ? ' active' : ''}`}>
+                    {isPdf(src) ? (
+                      <div className="fs-thumb-pdf" onClick={() => setActiveDoc(i)}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        <span>PDF</span>
+                      </div>
+                    ) : (
+                      <img src={src} alt="" onClick={() => setActiveDoc(i)} />
+                    )}
+                    <button type="button" className="fs-thumb-del" onClick={() => removeDocument(i)}>×</button>
+                  </div>
+                ))}
+                {uploadingDoc && (
+                  <div className="fs-thumb fs-thumb-skeleton">
+                    <div className="fs-thumb-shimmer" />
+                  </div>
+                )}
+                <button type="button" className="fs-thumb-add" onClick={() => docFileRef.current?.click()}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="fs-doc-empty" onClick={() => !uploadingDoc && docFileRef.current?.click()}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#c4c9d4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+              <div style={{ fontSize: 14, color: '#6b7280', marginTop: 8 }}>Upload documents</div>
+              <div style={{ fontSize: 12, color: '#9ca3af' }}>Floor plans, maps, blueprints — JPEG, PNG or PDF</div>
+            </div>
+          )}
         </div>
       </div>
 

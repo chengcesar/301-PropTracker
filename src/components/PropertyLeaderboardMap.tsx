@@ -40,6 +40,18 @@ interface PropertyWithMetrics {
   vacant: boolean
   taxDaysLeft: number | null  // days until nearest pending tax due date
   taxPending: boolean
+  // Spatial / detail fields
+  propertyType: string
+  bedrooms: number
+  bathrooms: number
+  parking: number
+  storageUnits: number
+  concierge: boolean
+  terrace: number
+  balcony: number
+  floors: number
+  yearBuilt: number | null
+  estrato: number | null
 }
 
 /* ── Alert rules ── */
@@ -140,6 +152,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
   const [alertOn, setAlertOn] = useState(false)
   const [panelTab, setPanelTab] = useState<'list' | 'alerts'>('list')
   const [severityFilter, setSeverityFilter] = useState<AlertSeverity | 'all'>('all')
+  const [popupTab, setPopupTab] = useState<'financial' | 'details'>('financial')
   const [viewState, setViewState] = useState({
     longitude: -74.08,
     latitude: 4.65,
@@ -191,6 +204,17 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
             const days = Math.ceil((new Date(nearest.dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
             return { taxPending: true, taxDaysLeft: days }
           })(),
+          propertyType: p.factSheet?.propertyType ?? '',
+          bedrooms: p.bedrooms ?? 0,
+          bathrooms: p.bathrooms ?? 0,
+          parking: p.parking ?? 0,
+          storageUnits: p.storageUnits ?? 0,
+          concierge: p.concierge ?? false,
+          terrace: p.terrace ?? 0,
+          balcony: p.balcony ?? 0,
+          floors: p.floors ?? 0,
+          yearBuilt: p.factSheet?.yearBuilt ?? p.year ?? null,
+          estrato: p.factSheet?.estrato ?? null,
         }
       })
   }, [properties, annuals, activeContractMap])
@@ -548,6 +572,9 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
               <div>
                 <div className="lb-popup-name">{selectedProp.name}</div>
                 <div className="lb-popup-address">{selectedProp.address}</div>
+                <span className={`lb-popup-badge${selectedProp.vacant ? ' vacant' : ''}`}>
+                  {selectedProp.vacant ? 'Vacant' : selectedProp.monthsLeft != null ? `Rented · ${selectedProp.monthsLeft}mo left` : 'Rented'}
+                </span>
               </div>
               <button className="lb-popup-close" onClick={() => setSelectedId(null)}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -555,40 +582,118 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
                 </svg>
               </button>
             </div>
-            <div className="lb-popup-metrics">
-              <div className="lb-popup-row">
-                <span className="lb-popup-label">Area</span>
-                <span className="lb-popup-val">{selectedProp.area.toLocaleString()} m²</span>
-              </div>
-              <div className="lb-popup-row">
-                <span className="lb-popup-label">Rent</span>
-                <span className="lb-popup-val">{formatMetricValue('rent', selectedProp.rent)}</span>
-              </div>
-              <div className="lb-popup-row">
-                <span className="lb-popup-label">Monthly Income</span>
-                <span className="lb-popup-val">{formatMetricValue('monthlyIncome', selectedProp.monthlyIncome)}</span>
-              </div>
-              <div className="lb-popup-row">
-                <span className="lb-popup-label">GPI</span>
-                <span className="lb-popup-val">{formatMetricValue('rent', selectedProp.annual.gpi)}</span>
-              </div>
-              <div className="lb-popup-row">
-                <span className="lb-popup-label">EGI</span>
-                <span className="lb-popup-val">{formatMetricValue('rent', selectedProp.annual.egi)}</span>
-              </div>
-              <div className="lb-popup-row">
-                <span className="lb-popup-label">OPEX</span>
-                <span className="lb-popup-val">{formatMetricValue('rent', selectedProp.annual.totalOpex)}</span>
-              </div>
-              <div className="lb-popup-row">
-                <span className="lb-popup-label">NOI</span>
-                <span className="lb-popup-val">{formatMetricValue('noi', selectedProp.annual.noi)}</span>
-              </div>
-              <div className="lb-popup-row">
-                <span className="lb-popup-label">Net CF</span>
-                <span className="lb-popup-val">{formatMetricValue('netCf', selectedProp.annual.netCf)}</span>
-              </div>
+
+            <div className="lb-popup-tabs">
+              <button className={`lb-popup-tab${popupTab === 'financial' ? ' active' : ''}`} onClick={() => setPopupTab('financial')}>Financial</button>
+              <button className={`lb-popup-tab${popupTab === 'details' ? ' active' : ''}`} onClick={() => setPopupTab('details')}>Details</button>
             </div>
+
+            {popupTab === 'financial' ? (
+              <div className="lb-popup-metrics">
+                <div className="lb-popup-row">
+                  <span className="lb-popup-label">Rent</span>
+                  <span className="lb-popup-val">{formatMetricValue('rent', selectedProp.rent)}</span>
+                </div>
+                <div className="lb-popup-row">
+                  <span className="lb-popup-label">Monthly Income</span>
+                  <span className="lb-popup-val">{formatMetricValue('monthlyIncome', selectedProp.monthlyIncome)}</span>
+                </div>
+                <div className="lb-popup-row">
+                  <span className="lb-popup-label">GPI</span>
+                  <span className="lb-popup-val">{formatMetricValue('rent', selectedProp.annual.gpi)}</span>
+                </div>
+                <div className="lb-popup-row">
+                  <span className="lb-popup-label">EGI</span>
+                  <span className="lb-popup-val">{formatMetricValue('rent', selectedProp.annual.egi)}</span>
+                </div>
+                <div className="lb-popup-row">
+                  <span className="lb-popup-label">OPEX</span>
+                  <span className="lb-popup-val">{formatMetricValue('rent', selectedProp.annual.totalOpex)}</span>
+                </div>
+                <div className="lb-popup-row">
+                  <span className="lb-popup-label">NOI</span>
+                  <span className="lb-popup-val">{formatMetricValue('noi', selectedProp.annual.noi)}</span>
+                </div>
+                <div className="lb-popup-row">
+                  <span className="lb-popup-label">Net CF</span>
+                  <span className="lb-popup-val">{formatMetricValue('netCf', selectedProp.annual.netCf)}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="lb-popup-metrics">
+                {selectedProp.propertyType && (
+                  <div className="lb-popup-row">
+                    <span className="lb-popup-label">Type</span>
+                    <span className="lb-popup-val">{selectedProp.propertyType}</span>
+                  </div>
+                )}
+                <div className="lb-popup-row">
+                  <span className="lb-popup-label">Area</span>
+                  <span className="lb-popup-val">{selectedProp.area.toLocaleString()} m²</span>
+                </div>
+                {selectedProp.bedrooms > 0 && (
+                  <div className="lb-popup-row">
+                    <span className="lb-popup-label">Bedrooms</span>
+                    <span className="lb-popup-val">{selectedProp.bedrooms}</span>
+                  </div>
+                )}
+                {selectedProp.bathrooms > 0 && (
+                  <div className="lb-popup-row">
+                    <span className="lb-popup-label">Bathrooms</span>
+                    <span className="lb-popup-val">{selectedProp.bathrooms}</span>
+                  </div>
+                )}
+                {selectedProp.parking > 0 && (
+                  <div className="lb-popup-row">
+                    <span className="lb-popup-label">Parking</span>
+                    <span className="lb-popup-val">{selectedProp.parking}</span>
+                  </div>
+                )}
+                {selectedProp.storageUnits > 0 && (
+                  <div className="lb-popup-row">
+                    <span className="lb-popup-label">Storage</span>
+                    <span className="lb-popup-val">{selectedProp.storageUnits}</span>
+                  </div>
+                )}
+                {selectedProp.floors > 0 && (
+                  <div className="lb-popup-row">
+                    <span className="lb-popup-label">Floors</span>
+                    <span className="lb-popup-val">{selectedProp.floors}</span>
+                  </div>
+                )}
+                {selectedProp.terrace > 0 && (
+                  <div className="lb-popup-row">
+                    <span className="lb-popup-label">Terrace</span>
+                    <span className="lb-popup-val">{selectedProp.terrace} m²</span>
+                  </div>
+                )}
+                {selectedProp.balcony > 0 && (
+                  <div className="lb-popup-row">
+                    <span className="lb-popup-label">Balcony</span>
+                    <span className="lb-popup-val">{selectedProp.balcony} m²</span>
+                  </div>
+                )}
+                {selectedProp.concierge && (
+                  <div className="lb-popup-row">
+                    <span className="lb-popup-label">Concierge</span>
+                    <span className="lb-popup-val">Yes</span>
+                  </div>
+                )}
+                {selectedProp.yearBuilt != null && (
+                  <div className="lb-popup-row">
+                    <span className="lb-popup-label">Year built</span>
+                    <span className="lb-popup-val">{selectedProp.yearBuilt}</span>
+                  </div>
+                )}
+                {selectedProp.estrato != null && (
+                  <div className="lb-popup-row">
+                    <span className="lb-popup-label">Estrato</span>
+                    <span className="lb-popup-val">{selectedProp.estrato}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             <button className="lb-popup-detail-btn" onClick={() => onSelectProperty(selectedProp.id)}>
               View details
             </button>

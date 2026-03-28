@@ -6,7 +6,7 @@ import { fmtCurrencyM } from '../lib/format'
 import { type CurrencyCode, type FxRates, CURRENCIES, CURRENCY_LIST, loadFxRates, saveFxRates, flagUrl } from '../lib/currency'
 import { useAppState } from '../context/useAppState'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { YEAR_OPTIONS } from '../lib/constants'
+import { getYearWindow } from '../lib/constants'
 import { KpiInfoIcon } from '../components/KpiInfoIcon'
 import { COUNTRIES, countryFlagUrl } from '../lib/countries'
 import { PropertyLeaderboardMap } from '../components/PropertyLeaderboardMap'
@@ -121,9 +121,15 @@ const IconDeltaUp = () => (
   </svg>
 )
 
+const KpiDeltaPlaceholder = () => (
+  <div className="kpi-delta-pill" style={{ background: '#f3f4f6', color: '#c0c5cc' }}>
+    <span>—</span>
+  </div>
+)
+
 function KpiPctOfEgiDelta({ pct, kind }: { pct: number | null; kind: 'egi100' | 'opex' | 'noi' | 'taxes' | 'net' }) {
   if (kind === 'egi100') {
-    if (pct === null || !Number.isFinite(pct) || pct <= 0) return null
+    if (pct === null || !Number.isFinite(pct) || pct <= 0) return <KpiDeltaPlaceholder />
     return (
       <div className="kpi-delta-pill kpi-delta-pill--up" title="Total EGI ÷ total EGI = 100% (baseline for % of EGI)">
         <IconDeltaUp />
@@ -132,7 +138,7 @@ function KpiPctOfEgiDelta({ pct, kind }: { pct: number | null; kind: 'egi100' | 
     )
   }
 
-  if (pct === null || !Number.isFinite(pct)) return null
+  if (pct === null || !Number.isFinite(pct)) return <KpiDeltaPlaceholder />
 
   if (kind === 'net') {
     const nearZero = Math.abs(pct) < 0.05
@@ -436,6 +442,7 @@ function FxRateEditor({ rates, onSave, onClose }: { rates: FxRates; onSave: (r: 
 export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const _saved = useMemo(loadSavedFilters, [])
   const [selectedYear, setSelectedYear] = useState(() => (typeof _saved.selectedYear === 'number' ? _saved.selectedYear : new Date().getFullYear()))
+  const yearWindow = getYearWindow(selectedYear)
   const withYear = (p: Property): Property => ({ ...p, year: selectedYear })
   const { setAddPropertyOpen, removeProperty } = useAppState()
   const [fxRates, setFxRates] = useState<FxRates>(loadFxRates)
@@ -1230,7 +1237,8 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
           <span className="sec-title">Properties</span>
           <div className="flex align-center gap8">
             <div className="flex gap4 align-center">
-              {YEAR_OPTIONS.map((y) => (
+              <button type="button" className="year-chevron" onClick={() => setSelectedYear((y) => y - 1)}>‹</button>
+              {yearWindow.map((y) => (
                 <button
                   key={y}
                   type="button"
@@ -1240,6 +1248,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                   {y}
                 </button>
               ))}
+              <button type="button" className="year-chevron" onClick={() => setSelectedYear((y) => y + 1)}>›</button>
             </div>
             {showScrollBtns && (
               <>

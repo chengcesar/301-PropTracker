@@ -3,7 +3,7 @@ import type { Property } from '../lib/types'
 import { type CurrencyCode, type FxRates, loadFxRates, convert } from '../lib/currency'
 import { useAppState } from '../context/useAppState'
 import { activeContract } from '../lib/finance'
-import { YEAR_OPTIONS } from '../lib/constants'
+import { getYearWindow } from '../lib/constants'
 import { ContractsTab } from '../components/property/ContractsTab'
 import { CashflowTab } from '../components/property/CashflowTab'
 import { OpexCapexTab } from '../components/property/OpexCapexTab'
@@ -41,6 +41,7 @@ export function PropertyPage({ prop, onUpdateProp }: Props) {
   const [displayCurrency, setDisplayCurrency] = useState<CurrencyCode>(prop.currency)
   const [fxRates] = useState<FxRates>(loadFxRates)
   const cx = (n: number) => displayCurrency === prop.currency ? n : convert(n, prop.currency, displayCurrency, fxRates)
+  const yearWindow = getYearWindow(prop.year)
 
   const startEditName = () => {
     setNameDraft(prop.name)
@@ -103,7 +104,8 @@ export function PropertyPage({ prop, onUpdateProp }: Props) {
           </div>
         </div>
         <div className="flex gap8 align-center">
-          {YEAR_OPTIONS.map((y) => (
+          <button type="button" className="year-chevron" onClick={() => onUpdateProp((p) => ({ ...p, year: p.year - 1 }))}>‹</button>
+          {yearWindow.map((y) => (
             <button
               key={y}
               type="button"
@@ -113,6 +115,7 @@ export function PropertyPage({ prop, onUpdateProp }: Props) {
               {y}
             </button>
           ))}
+          <button type="button" className="year-chevron" onClick={() => onUpdateProp((p) => ({ ...p, year: p.year + 1 }))}>›</button>
           {prop.currency !== 'USD' && (
             <>
               <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />

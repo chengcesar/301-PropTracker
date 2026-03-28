@@ -62,6 +62,20 @@ export async function deletePropertyPhoto(url: string): Promise<void> {
   await deleteObject(fileRef)
 }
 
+/** Upload a document (image or PDF) for a property, returns the download URL.
+ *  Stored under the same photos/ path (which already has Storage rules) with a doc- prefix. */
+export async function uploadPropertyDocument(propertyId: number, file: File): Promise<string> {
+  const name = `doc-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+  const fileRef = ref(photosRef(propertyId).storage, `${photosRef(propertyId).fullPath}/${name}`)
+  await uploadBytes(fileRef, file, { contentType: file.type })
+  return getDownloadURL(fileRef)
+}
+
+/** Delete a document by its download URL. */
+export async function deletePropertyDocument(url: string): Promise<void> {
+  return deletePropertyPhoto(url)
+}
+
 /** Delete all photos for a property. */
 export async function deleteAllPropertyPhotos(propertyId: number): Promise<void> {
   const folder = photosRef(propertyId)

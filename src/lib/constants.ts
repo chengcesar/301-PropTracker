@@ -33,7 +33,9 @@ export const INCREMENT_OPTS = [
   { value: 'none', label: 'None' },
 ] as const
 
-export const YEAR_OPTIONS = [2025, 2026, 2027] as const
+export function getYearWindow(center: number): [number, number, number] {
+  return [center - 1, center, center + 1]
+}
 
 export const PROPERTY_TYPES = ['Apartment', 'House', 'Studio', 'Office', 'Commercial', 'Lot', 'Other'] as const
 
