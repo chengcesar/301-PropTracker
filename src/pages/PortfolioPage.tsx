@@ -197,10 +197,23 @@ const COL_LABELS: Record<ColKey, string> = {
   capex: 'CAPEX', taxes: 'Taxes', netCf: 'Net CF', margin: 'Margin',
 }
 const DETAIL_COLS: ColKey[] = ['propertyType', 'bedrooms', 'area', 'bathrooms', 'parking', 'floor', 'estrato', 'yearBuilt', 'lastRenovation']
-type ColGroup = 'financial' | 'characteristics' | 'all'
-const COL_GROUPS: Record<Exclude<ColGroup, 'all'>, ColKey[]> = {
+type ColGroup = 'financial' | 'characteristics' | 'all' | 'custom0' | 'custom1' | 'custom2'
+const COL_GROUPS: Record<'financial' | 'characteristics', ColKey[]> = {
   financial: ['gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin'],
   characteristics: ['owner', 'country', 'status', 'endDate', 'taxStatus', ...DETAIL_COLS],
+}
+const CUSTOM_SLOTS = ['custom0', 'custom1', 'custom2'] as const
+type CustomPreset = { name: string; cols: ColKey[] }
+const CUSTOM_PRESETS_KEY = 'col-custom-presets'
+function loadCustomPresets(): (CustomPreset | null)[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_PRESETS_KEY)
+    if (raw) { const arr = JSON.parse(raw); if (Array.isArray(arr) && arr.length === 3) return arr }
+  } catch {}
+  return [null, null, null]
+}
+function saveCustomPresets(p: (CustomPreset | null)[]) {
+  localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(p))
 }
 const COL_STORAGE_KEY = 'col-visibility'
 function loadColVisibility(): Record<ColKey, boolean> {
@@ -431,6 +444,9 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const [colVis, setColVis] = useState(loadColVisibility)
   const [colMenuOpen, setColMenuOpen] = useState(false)
   const [colGroupTab, setColGroupTab] = useState<ColGroup>('financial')
+  const [customPresets, setCustomPresets] = useState(loadCustomPresets)
+  const [renamingSlot, setRenamingSlot] = useState<number | null>(null)
+  const [renameValue, setRenameValue] = useState('')
   const colMenuRef = useRef<HTMLDivElement>(null)
 
   // Sort state
@@ -642,6 +658,31 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
       localStorage.setItem(COL_STORAGE_KEY, JSON.stringify(next))
       return next
     })
+  }
+
+  function saveCustomPreset(slot: number, name: string) {
+    const visibleCols = COL_KEYS.filter(k => colVis[k]) as ColKey[]
+    const next = [...customPresets] as (CustomPreset | null)[]
+    next[slot] = { name, cols: visibleCols }
+    setCustomPresets(next)
+    saveCustomPresets(next)
+    setColGroupTab(CUSTOM_SLOTS[slot])
+  }
+
+  function applyCustomPreset(slot: number) {
+    const preset = customPresets[slot]
+    if (!preset) return
+    const next = Object.fromEntries(COL_KEYS.map(k => [k, preset.cols.includes(k)])) as Record<ColKey, boolean>
+    setColVis(next)
+    localStorage.setItem(COL_STORAGE_KEY, JSON.stringify(next))
+  }
+
+  function deleteCustomPreset(slot: number) {
+    const next = [...customPresets] as (CustomPreset | null)[]
+    next[slot] = null
+    setCustomPresets(next)
+    saveCustomPresets(next)
+    if (colGroupTab === CUSTOM_SLOTS[slot]) setColGroupTab('financial')
   }
 
   function toggleKpi(key: KpiKey) {
@@ -856,7 +897,14 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                   <IconSpreadsheet />
                 </button>
                 {colMenuOpen && (() => {
-                  const shownKeys: ColKey[] = colGroupTab === 'all' ? [...COL_KEYS] : COL_GROUPS[colGroupTab]
+                  const customIdx = CUSTOM_SLOTS.indexOf(colGroupTab as typeof CUSTOM_SLOTS[number])
+                  const isCustomTab = customIdx !== -1
+                  const activePreset = isCustomTab ? customPresets[customIdx] : null
+                  const shownKeys: ColKey[] = colGroupTab === 'all'
+                    ? [...COL_KEYS]
+                    : isCustomTab
+                      ? (activePreset ? activePreset.cols : [...COL_KEYS])
+                      : COL_GROUPS[colGroupTab as 'financial' | 'characteristics']
                   return (
                   <div
                     ref={(el) => {
@@ -872,12 +920,13 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                     display: 'flex', flexDirection: 'column',
                     animation: 'selectSlideIn 0.15s ease-out',
                   }}>
-                    <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-                      {(['financial', 'characteristics', 'all'] as ColGroup[]).map(tab => (
+                    {/* Built-in tabs */}
+                    <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+                      {(['financial', 'characteristics', 'all'] as const).map(tab => (
                         <button
                           key={tab}
                           className="ghost"
-                          onClick={() => setColGroupTab(tab)}
+                          onClick={() => { setColGroupTab(tab); setRenamingSlot(null) }}
                           style={{
                             flex: 1, padding: '9px 6px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
                             letterSpacing: '0.5px', borderRadius: 0, textAlign: 'center',
@@ -889,6 +938,89 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                         </button>
                       ))}
                     </div>
+                    {/* Custom preset tabs */}
+                    <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+                      {CUSTOM_SLOTS.map((slot, i) => {
+                        const preset = customPresets[i]
+                        const isActive = colGroupTab === slot
+                        return (
+                          <button
+                            key={slot}
+                            className="ghost"
+                            onClick={() => {
+                              if (preset) { setColGroupTab(slot); applyCustomPreset(i); setRenamingSlot(null) }
+                              else { setRenamingSlot(i); setRenameValue('') }
+                            }}
+                            style={{
+                              flex: 1, padding: '9px 6px', fontSize: 11, fontWeight: 600,
+                              borderRadius: 0, textAlign: 'center', position: 'relative',
+                              color: isActive ? '#3b82f6' : preset ? 'var(--text3)' : '#d1d5db',
+                              boxShadow: isActive ? 'inset 0 -2px 0 #3b82f6' : 'none',
+                            }}
+                            title={preset ? preset.name : 'Save current columns as preset'}
+                          >
+                            {preset ? (
+                              <span style={{ textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: 11 }}>{preset.name}</span>
+                            ) : (
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {/* Inline rename / save input */}
+                    {renamingSlot !== null && (
+                      <form
+                        onSubmit={(e) => { e.preventDefault(); if (renameValue.trim()) { saveCustomPreset(renamingSlot, renameValue.trim()); setRenamingSlot(null) } }}
+                        style={{ display: 'flex', padding: '8px 10px', gap: 6, borderBottom: '1px solid var(--border)', flexShrink: 0 }}
+                      >
+                        <input
+                          autoFocus
+                          type="text"
+                          value={renameValue}
+                          onChange={e => setRenameValue(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Escape') setRenamingSlot(null) }}
+                          placeholder="Preset name…"
+                          maxLength={16}
+                          style={{
+                            flex: 1, fontSize: 13, padding: '5px 10px', minWidth: 0,
+                            background: '#f7f9fc', border: '1px solid var(--border)', borderRadius: 8,
+                            outline: 'none',
+                          }}
+                          onFocus={e => (e.target.style.borderColor = '#3b82f6')}
+                          onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+                        />
+                        <button
+                          type="submit"
+                          disabled={!renameValue.trim()}
+                          style={{
+                            fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 8,
+                            background: renameValue.trim() ? '#3b82f6' : '#e5e7eb', color: renameValue.trim() ? '#fff' : '#9ca3af',
+                            border: 'none', cursor: renameValue.trim() ? 'pointer' : 'default',
+                          }}
+                        >Save</button>
+                      </form>
+                    )}
+                    {/* Delete / update actions for active custom preset */}
+                    {isCustomTab && activePreset && renamingSlot === null && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+                        <button
+                          className="ghost"
+                          onClick={() => { saveCustomPreset(customIdx, activePreset.name) }}
+                          style={{ fontSize: 11, fontWeight: 600, color: '#3b82f6', padding: '2px 6px', borderRadius: 6 }}
+                        >Update preset</button>
+                        <button
+                          className="ghost"
+                          onClick={() => { setRenamingSlot(customIdx); setRenameValue(activePreset.name) }}
+                          style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', padding: '2px 6px', borderRadius: 6 }}
+                        >Rename</button>
+                        <button
+                          className="ghost"
+                          onClick={() => deleteCustomPreset(customIdx)}
+                          style={{ fontSize: 11, fontWeight: 600, color: '#ef4444', padding: '2px 6px', borderRadius: 6 }}
+                        >Delete</button>
+                      </div>
+                    )}
                     <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
                     {shownKeys.filter(k => colVis[k]).length > 0 && (
                       <>
