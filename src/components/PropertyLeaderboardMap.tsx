@@ -3,7 +3,7 @@ import Map, { type ViewStateChangeEvent, type MapRef } from 'react-map-gl/maplib
 import { DeckGLOverlay } from './DeckGLOverlay'
 import { ScatterplotLayer } from 'deck.gl'
 import type { Property } from '../lib/types'
-import type { AnnualResult } from '../lib/finance'
+import { activeContract, type AnnualResult } from '../lib/finance'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 type MetricKey = 'area' | 'rent' | 'monthlyIncome' | 'noi' | 'netCf'
@@ -36,6 +36,61 @@ interface PropertyWithMetrics {
   noi: number
   netCf: number
   annual: AnnualResult
+  monthsLeft: number | null
+  vacant: boolean
+}
+
+/* ── Alert rules ── */
+type AlertSeverity = 'critical' | 'warning' | 'info'
+
+interface AlertRule {
+  key: string
+  label: string
+  severity: AlertSeverity
+  check: (p: PropertyWithMetrics) => boolean
+  describe: (p: PropertyWithMetrics) => string
+  color: [number, number, number] // RGB for pulse ring
+}
+
+const ALERT_RULES: AlertRule[] = [
+  {
+    key: 'vacant',
+    label: 'Vacant',
+    severity: 'critical',
+    check: (p) => p.vacant,
+    describe: () => 'No active contract — property is vacant',
+    color: [185, 28, 28],
+  },
+  {
+    key: 'contractExpiring1',
+    label: 'Expiring < 1 mo',
+    severity: 'critical',
+    check: (p) => p.monthsLeft != null && p.monthsLeft <= 1,
+    describe: (p) => `Contract expires in ${Math.max(0, p.monthsLeft!)} month${p.monthsLeft === 1 ? '' : 's'}`,
+    color: [185, 28, 28],
+  },
+  {
+    key: 'contractExpiring3',
+    label: 'Expiring < 3 mo',
+    severity: 'warning',
+    check: (p) => p.monthsLeft != null && p.monthsLeft > 1 && p.monthsLeft <= 3,
+    describe: (p) => `Contract expires in ${p.monthsLeft} months`,
+    color: [217, 119, 6],
+  },
+  {
+    key: 'contractExpiring6',
+    label: 'Expiring < 6 mo',
+    severity: 'info',
+    check: (p) => p.monthsLeft != null && p.monthsLeft > 3 && p.monthsLeft <= 6,
+    describe: (p) => `Contract expires in ${p.monthsLeft} months`,
+    color: [59, 130, 246],
+  },
+]
+
+function monthsUntil(dateStr: string): number {
+  const end = new Date(dateStr)
+  const now = new Date()
+  return (end.getFullYear() - now.getFullYear()) * 12 + (end.getMonth() - now.getMonth())
 }
 
 function formatMetricValue(key: MetricKey, value: number): string {
@@ -56,6 +111,9 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('area')
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [alertOn, setAlertOn] = useState(false)
+  const [panelTab, setPanelTab] = useState<'list' | 'alerts'>('list')
+  const [severityFilter, setSeverityFilter] = useState<AlertSeverity | 'all'>('all')
   const [viewState, setViewState] = useState({
     longitude: -74.08,
     latitude: 4.65,
@@ -84,6 +142,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
       .map(p => {
         const annual = annuals.get(p.id)!
         const contract = activeContractMap.get(p.id)
+        const ac = activeContract(p)
         return {
           id: p.id,
           name: p.name,
@@ -97,6 +156,8 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
           noi: annual?.noi ?? 0,
           netCf: annual?.netCf ?? 0,
           annual: annual ?? { gpi: 0, vacancy: 0, egi: 0, totalOpex: 0, noi: 0, totalCapex: 0, taxes: 0, netCf: 0 },
+          monthsLeft: ac?.endDate ? monthsUntil(ac.endDate) : null,
+          vacant: !ac,
         }
       })
   }, [properties, annuals, activeContractMap])
@@ -196,7 +257,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
       onClick: ({ object }: { object?: PropertyWithMetrics }) => {
         if (object) {
           setSelectedId(object.id)
-          // Scroll row into view
+          flyTo(object.longitude, object.latitude)
           const row = document.getElementById(`lb-row-${object.id}`)
           row?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
         }
@@ -208,6 +269,70 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
       },
     })
   }, [data, normalizedMap, selectedId, selectedMetric])
+
+  // Alert: filter properties that trigger any rule
+  const alertData = useMemo(() => {
+    const criticalRules = ALERT_RULES.filter(r => r.severity === 'critical')
+    return data.filter(p => criticalRules.some(r => r.check(p)))
+  }, [data])
+
+  const alertIds = useMemo(() => new Set(alertData.map(d => d.id)), [alertData])
+
+  // Build structured alert notifications grouped by severity
+  const alertNotifications = useMemo(() => {
+    const items: { prop: PropertyWithMetrics; rule: AlertRule }[] = []
+    for (const p of data) {
+      for (const r of ALERT_RULES) {
+        if (r.check(p)) { items.push({ prop: p, rule: r }); break } // first matching rule wins (highest severity)
+      }
+    }
+    const order: Record<AlertSeverity, number> = { critical: 0, warning: 1, info: 2 }
+    return items.sort((a, b) => order[a.rule.severity] - order[b.rule.severity])
+  }, [data])
+
+  // Animation tick for pulse ring
+  const [pulseTime, setPulseTime] = useState(0)
+  const rafRef = useRef(0)
+
+  useEffect(() => {
+    if (!alertOn || alertData.length === 0) {
+      cancelAnimationFrame(rafRef.current)
+      return
+    }
+    let start: number | null = null
+    const tick = (ts: number) => {
+      if (start === null) start = ts
+      setPulseTime(ts - start)
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [alertOn, alertData.length])
+
+  // Pulsating ring layer
+  const pulseLayer = useMemo(() => {
+    if (!alertOn || alertData.length === 0) return null
+    const cycle = (pulseTime % 2000) / 2000 // 0→1 over 2s
+    const ruleColor = ALERT_RULES[0].color
+    return new ScatterplotLayer({
+      id: 'alert-pulse',
+      data: alertData,
+      getPosition: (d: PropertyWithMetrics) => [d.longitude, d.latitude],
+      getRadius: () => 200 + cycle * 800,
+      getFillColor: () => [...ruleColor, Math.round((1 - cycle) * 80)] as [number, number, number, number],
+      getLineColor: () => [...ruleColor, Math.round((1 - cycle) * 180)] as [number, number, number, number],
+      stroked: true,
+      lineWidthMinPixels: 2,
+      radiusMinPixels: 8 + cycle * 20,
+      radiusMaxPixels: 40,
+      pickable: false,
+      updateTriggers: {
+        getRadius: [pulseTime],
+        getFillColor: [pulseTime],
+        getLineColor: [pulseTime],
+      },
+    })
+  }, [alertOn, alertData, pulseTime])
 
   const handleMove = useCallback((evt: ViewStateChangeEvent) => {
     setViewState(evt.viewState as typeof viewState)
@@ -221,61 +346,131 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
     <div className="lb-map-container">
       {/* Left: Leaderboard */}
       <div className="lb-panel">
-        <div className="lb-header">
-          <span className="lb-count">{data.length} properties</span>
-          <div ref={dropdownRef} style={{ position: 'relative' }}>
-            <button
-              className="lb-dropdown-btn"
-              onClick={() => setDropdownOpen(v => !v)}
-            >
-              {metricLabel}
-              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ transform: dropdownOpen ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s ease' }}>
-                <path d="M1 1l4 4 4-4" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            {dropdownOpen && (
-              <div className="lb-dropdown-menu">
-                {METRIC_OPTIONS.map(opt => (
+        <div className="lb-tabs">
+          <button className={`lb-tab${panelTab === 'list' ? ' active' : ''}`} onClick={() => setPanelTab('list')}>List</button>
+          <button className={`lb-tab${panelTab === 'alerts' ? ' active' : ''}`} onClick={() => { setPanelTab('alerts'); setAlertOn(true) }}>
+            Alerts({alertNotifications.length})
+          </button>
+        </div>
+        {panelTab === 'list' && (
+          <div className="lb-header">
+            <span className="lb-count">{data.length} properties</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div ref={dropdownRef} style={{ position: 'relative' }}>
+                <button
+                  className="lb-dropdown-btn"
+                  onClick={() => setDropdownOpen(v => !v)}
+                >
+                  {metricLabel}
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ transform: dropdownOpen ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s ease' }}>
+                    <path d="M1 1l4 4 4-4" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                {dropdownOpen && (
+                  <div className="lb-dropdown-menu">
+                    {METRIC_OPTIONS.map(opt => (
+                      <button
+                        key={opt.key}
+                        className={`lb-dropdown-item${selectedMetric === opt.key ? ' active' : ''}`}
+                        onClick={() => { setSelectedMetric(opt.key); setDropdownOpen(false) }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button
+                className={`lb-map-control-btn${alertOn ? ' active' : ''}`}
+                onClick={() => setAlertOn(prev => !prev)}
+                title={alertOn ? 'Disable alerts' : 'Enable alerts'}
+              >
+                <img src={alertOn ? '/Alert - On.svg' : '/Alert - Off.svg'} alt="Alert toggle" width="16" height="16" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {panelTab === 'list' && (
+          <div className="lb-list" ref={leaderboardRef}>
+            {sorted.map(prop => {
+              const pct = normalizedMap.get(prop.id) ?? 0
+              const isActive = prop.id === selectedId
+              return (
+                <div
+                  key={prop.id}
+                  id={`lb-row-${prop.id}`}
+                  className={`lb-row${isActive ? ' active' : ''}`}
+                  onClick={() => handleRowClick(prop)}
+                >
+                  <div className="lb-row-left">
+                    <span className={`lb-row-dot${alertOn && alertIds.has(prop.id) ? ' alert' : ''}`} />
+                    <div>
+                      <div className="lb-row-name">{prop.name}</div>
+                      <div className="lb-row-city">{prop.city}</div>
+                    </div>
+                  </div>
+                  <div className="lb-row-right">
+                    <span className="lb-row-value">{formatMetricValue(selectedMetric, prop[selectedMetric])}</span>
+                    <div className="lb-bar-container">
+                      <div className="lb-bar-track">
+                        <div className="lb-bar" style={{ width: `${Math.max(pct, 2)}%` }} />
+                      </div>
+                      <span className="lb-bar-pct">{pct}%</span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {panelTab === 'alerts' && (
+          <>
+            <div className="lb-header">
+              <div className="lb-severity-filters">
+                {(['all', 'critical', 'warning', 'info'] as const).map(s => (
                   <button
-                    key={opt.key}
-                    className={`lb-dropdown-item${selectedMetric === opt.key ? ' active' : ''}`}
-                    onClick={() => { setSelectedMetric(opt.key); setDropdownOpen(false) }}
+                    key={s}
+                    className={`lb-severity-btn lb-severity-btn-${s}${severityFilter === s ? ' active' : ''}`}
+                    onClick={() => setSeverityFilter(s)}
                   >
-                    {opt.label}
+                    {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
                   </button>
                 ))}
               </div>
-            )}
-          </div>
-        </div>
-        <div className="lb-list" ref={leaderboardRef}>
-          {sorted.map(prop => {
-            const pct = normalizedMap.get(prop.id) ?? 0
-            const isActive = prop.id === selectedId
-            return (
-              <div
-                key={prop.id}
-                id={`lb-row-${prop.id}`}
-                className={`lb-row${isActive ? ' active' : ''}`}
-                onClick={() => handleRowClick(prop)}
+              <button
+                className={`lb-map-control-btn${alertOn ? ' active' : ''}`}
+                onClick={() => setAlertOn(prev => !prev)}
+                title={alertOn ? 'Disable alerts' : 'Enable alerts'}
               >
-                <div className="lb-row-left">
-                  <div className="lb-row-name">{prop.name}</div>
-                  <div className="lb-row-city">{prop.city}</div>
-                </div>
-                <div className="lb-row-right">
-                  <span className="lb-row-value">{formatMetricValue(selectedMetric, prop[selectedMetric])}</span>
-                  <div className="lb-bar-container">
-                    <div className="lb-bar-track">
-                      <div className="lb-bar" style={{ width: `${Math.max(pct, 2)}%` }} />
+                <img src={alertOn ? '/Alert - On.svg' : '/Alert - Off.svg'} alt="Alert toggle" width="16" height="16" />
+              </button>
+            </div>
+            <div className="lb-list">
+              {alertNotifications.filter(a => (severityFilter === 'all' || a.rule.severity === severityFilter) && (selectedId == null || a.prop.id === selectedId)).length === 0 ? (
+                <div className="lb-alerts-empty">No active alerts</div>
+              ) : (
+                alertNotifications
+                  .filter(a => (severityFilter === 'all' || a.rule.severity === severityFilter) && (selectedId == null || a.prop.id === selectedId))
+                  .map(({ prop, rule }) => (
+                    <div
+                      key={`${prop.id}-${rule.key}`}
+                      className={`lb-alert-item lb-alert-${rule.severity}`}
+                      onClick={() => handleRowClick(prop)}
+                    >
+                      <div className="lb-alert-severity-bar" />
+                      <div className="lb-alert-content">
+                        <div className="lb-alert-name">{prop.name}</div>
+                        <div className="lb-alert-desc">{rule.describe(prop)}</div>
+                      </div>
+                      <span className={`lb-alert-badge lb-alert-badge-${rule.severity}`}>{rule.label}</span>
                     </div>
-                    <span className="lb-bar-pct">{pct}%</span>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
+                  ))
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Right: Map */}
@@ -291,7 +486,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
           cursor={selectedProp ? 'default' : 'grab'}
           attributionControl={true}
         >
-          <DeckGLOverlay layers={[scatterLayer]} />
+          <DeckGLOverlay layers={pulseLayer ? [pulseLayer, scatterLayer] : [scatterLayer]} />
         </Map>
 
         {/* Map controls */}

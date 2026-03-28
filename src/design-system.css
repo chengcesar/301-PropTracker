@@ -827,10 +827,16 @@
     border-left-color: var(--accent-bg);
   }
 
+  .lb-row-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--border2); flex-shrink: 0; margin-top: 6px;
+  }
+  .lb-row-dot.alert { background: var(--red); }
+
   .lb-row-left {
     flex: 1;
     min-width: 0;
     margin-right: 12px;
+    display: flex; gap: 8px; align-items: flex-start;
   }
 
   .lb-row-name {
@@ -925,6 +931,53 @@
     box-shadow: 0 1px 4px rgba(0,0,0,0.08);
   }
   .lb-map-control-btn:hover { background: var(--surface2); }
+  .lb-map-control-btn.active { background: var(--red-bg); border: 1px solid var(--red); }
+  .lb-map-control-btn.active img { filter: invert(14%) sepia(95%) saturate(4000%) hue-rotate(350deg) brightness(0.75); }
+
+  /* Tabs */
+  .lb-tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .lb-tab {
+    flex: 1; padding: 12px 0; font-size: 14px; font-weight: 600; color: var(--text3);
+    background: none; border: none; border-radius: 0; cursor: pointer; border-bottom: 2px solid transparent;
+    text-align: center; transition: color 0.15s, border-color 0.15s; margin-bottom: -1px;
+  }
+  .lb-tab:hover { color: var(--text2); }
+  .lb-tab.active { color: var(--accent-bg); border-bottom-color: var(--accent-bg); }
+
+  /* Alert severity filters */
+  .lb-severity-filters { display: flex; gap: 4px; }
+  .lb-severity-btn {
+    font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text3);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .lb-severity-btn:hover { background: var(--surface2); }
+  .lb-severity-btn-all.active { background: var(--text); color: #fff; border-color: var(--text); }
+  .lb-severity-btn-critical.active { background: var(--red-bg); color: var(--red); border-color: var(--red); }
+  .lb-severity-btn-warning.active { background: var(--amber-bg); color: var(--amber); border-color: #d97706; }
+  .lb-severity-btn-info.active { background: #eff6ff; color: var(--accent-bg); border-color: var(--accent-bg); }
+
+  /* Alert items */
+  .lb-alerts-empty { padding: 32px 20px; text-align: center; color: var(--text3); font-size: 13px; }
+  .lb-alert-item {
+    display: flex; align-items: center; gap: 10px; padding: 10px 20px;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .lb-alert-item:hover { background: var(--surface2); }
+  .lb-alert-severity-bar { width: 3px; border-radius: 2px; align-self: stretch; flex-shrink: 0; }
+  .lb-alert-critical .lb-alert-severity-bar { background: var(--red); }
+  .lb-alert-warning .lb-alert-severity-bar { background: #d97706; }
+  .lb-alert-info .lb-alert-severity-bar { background: var(--accent-bg); }
+  .lb-alert-content { flex: 1; min-width: 0; }
+  .lb-alert-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lb-alert-desc { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .lb-alert-badge {
+    font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 6px;
+    white-space: nowrap; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .lb-alert-badge-critical { background: var(--red-bg); color: var(--red); }
+  .lb-alert-badge-warning { background: var(--amber-bg); color: var(--amber); }
+  .lb-alert-badge-info { background: #eff6ff; color: var(--accent-bg); }
 
   /* Map popup */
   .lb-popup {
