@@ -9,6 +9,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { YEAR_OPTIONS } from '../lib/constants'
 import { KpiInfoIcon } from '../components/KpiInfoIcon'
 import { COUNTRIES, countryFlagUrl } from '../lib/countries'
+import { PropertyLeaderboardMap } from '../components/PropertyLeaderboardMap'
 
 type Props = {
   properties: Property[]
@@ -408,6 +409,32 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const [colMenuOpen, setColMenuOpen] = useState(false)
   const colMenuRef = useRef<HTMLDivElement>(null)
 
+  // Sort state
+  type SortKey = 'name' | 'owner' | 'country' | 'status' | 'gpi' | 'egi' | 'opex' | 'noi' | 'capex' | 'taxes' | 'netCf' | 'margin'
+  type SortDir = 'asc' | 'desc'
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      if (sortDir === 'asc') setSortDir('desc')
+      else { setSortKey(null); setSortDir('asc') }
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+  const SortTh = ({ col, children, className, style }: { col: SortKey; children: React.ReactNode; className?: string; style?: React.CSSProperties }) => (
+    <th className={`wf-sortable ${className ?? ''}`} style={{ cursor: 'pointer', userSelect: 'none', ...style }} onClick={() => handleSort(col)}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        {children}
+        <span className="wf-sort-arrows">
+          <span className={`wf-arr-up${sortKey === col && sortDir === 'asc' ? ' active' : ''}`}>▲</span>
+          <span className={`wf-arr-dn${sortKey === col && sortDir === 'desc' ? ' active' : ''}`}>▼</span>
+        </span>
+      </span>
+    </th>
+  )
+
   const FILTER_COLUMNS = useMemo(() => {
     const statusValues = ['Rented', 'Vacant']
     const owners = Array.from(new Set(properties.map(p => p.owner).filter(Boolean))).sort()
@@ -447,7 +474,52 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
     return result
   }, [properties, activeFilters, searchQuery])
 
+  const sortedProperties = useMemo(() => {
+    if (!sortKey) return filteredProperties
+    const sorted = [...filteredProperties]
+    sorted.sort((a, b) => {
+      let va: number | string = 0, vb: number | string = 0
+      if (sortKey === 'name') { va = a.name.toLowerCase(); vb = b.name.toLowerCase() }
+      else if (sortKey === 'owner') { va = (a.owner ?? '').toLowerCase(); vb = (b.owner ?? '').toLowerCase() }
+      else if (sortKey === 'country') { va = (a.country ?? '').toLowerCase(); vb = (b.country ?? '').toLowerCase() }
+      else if (sortKey === 'status') { va = activeContract(a) ? 1 : 0; vb = activeContract(b) ? 1 : 0 }
+      else {
+        const aa = convertAnnual(calcAnnual(withYear(a)), a.currency, displayCurrency, fxRates)
+        const ab = convertAnnual(calcAnnual(withYear(b)), b.currency, displayCurrency, fxRates)
+        if (sortKey === 'gpi') { va = aa.gpi; vb = ab.gpi }
+        else if (sortKey === 'egi') { va = aa.egi; vb = ab.egi }
+        else if (sortKey === 'opex') { va = aa.totalOpex; vb = ab.totalOpex }
+        else if (sortKey === 'noi') { va = aa.noi; vb = ab.noi }
+        else if (sortKey === 'capex') { va = aa.totalCapex ?? 0; vb = ab.totalCapex ?? 0 }
+        else if (sortKey === 'taxes') { va = aa.taxes ?? 0; vb = ab.taxes ?? 0 }
+        else if (sortKey === 'netCf') { va = aa.netCf; vb = ab.netCf }
+        else if (sortKey === 'margin') { va = aa.gpi ? (aa.netCf / aa.gpi) : 0; vb = ab.gpi ? (ab.netCf / ab.gpi) : 0 }
+      }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1
+      if (va > vb) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+    return sorted
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredProperties, sortKey, sortDir, displayCurrency, fxRates, selectedYear])
+
   const totals = calcPortfolioTotalsIn(filteredProperties.map(withYear), displayCurrency, fxRates)
+
+  const annualsMap = useMemo(() => {
+    const m = new Map<number, ReturnType<typeof calcAnnual>>()
+    for (const p of properties) m.set(p.id, calcAnnual(withYear(p)))
+    return m
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [properties, selectedYear])
+
+  const activeContractMap = useMemo(() => {
+    const m = new Map<number, { monthlyRent: number } | null>()
+    for (const p of properties) {
+      const ac = activeContract(p)
+      m.set(p.id, ac ? { monthlyRent: ac.monthlyRent } : null)
+    }
+    return m
+  }, [properties])
 
   const egiRatioRow = useMemo(() => {
     const e = totals.egi
@@ -589,11 +661,11 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
           <div>
             <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.3px' }}>Portfolio</div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{properties.length} properties · Values in {displayCurrency}</div>
+            <div className="hide-mobile" style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{properties.length} properties · Values in {displayCurrency}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <CurrencyPicker value={displayCurrency} onChange={setDisplayCurrency} />
-            <div ref={fxRef} style={{ position: 'relative' }}>
+            <div ref={fxRef} className="hide-mobile" style={{ position: 'relative' }}>
               <button
                 className="ghost"
                 style={{ padding: '5px 8px', fontSize: 12, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4 }}
@@ -610,7 +682,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                 />
               )}
             </div>
-            <button className="primary" onClick={() => setAddPropertyOpen(true)}>+ Add Property</button>
+            <button className="primary" onClick={() => setAddPropertyOpen(true)}><span className="hide-mobile">+ Add Property</span><span className="show-mobile">+ Add</span></button>
             <div ref={kpiMenuRef} style={{ position: 'relative' }}>
               <button className="ghost" style={{ padding: '5px 8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} title="KPI settings" onClick={() => setKpiMenuOpen(v => !v)}>
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 11.25C10.2426 11.25 11.25 10.2426 11.25 9C11.25 7.75736 10.2426 6.75 9 6.75C7.75736 6.75 6.75 7.75736 6.75 9C6.75 10.2426 7.75736 11.25 9 11.25Z" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M14.55 11.25C14.4502 11.4762 14.4204 11.7271 14.4645 11.9704C14.5086 12.2137 14.6246 12.4382 14.7975 12.615L14.8425 12.66C14.9819 12.7994 15.0924 12.9648 15.1678 13.1469C15.2433 13.329 15.2821 13.5242 15.2821 13.7213C15.2821 13.9183 15.2433 14.1135 15.1678 14.2956C15.0924 14.4777 14.9819 14.6431 14.8425 14.7825C14.7031 14.9219 14.5377 15.0324 14.3556 15.1078C14.1735 15.1833 13.9783 15.2221 13.7812 15.2221C13.5842 15.2221 13.389 15.1833 13.2069 15.1078C13.0248 15.0324 12.8594 14.9219 12.72 14.7825L12.675 14.7375C12.4982 14.5646 12.2737 14.4486 12.0304 14.4045C11.7871 14.3604 11.5362 14.3902 11.31 14.49C11.0882 14.5851 10.899 14.7429 10.7657 14.9442C10.6325 15.1454 10.561 15.3812 10.56 15.6225V15.75C10.56 16.1478 10.402 16.5294 10.1207 16.8107C9.83936 17.092 9.45782 17.25 9.06 17.25C8.66218 17.25 8.28064 17.092 7.99934 16.8107C7.71804 16.5294 7.56 16.1478 7.56 15.75V15.6825C7.55419 15.4343 7.47384 15.1935 7.32938 14.9915C7.18493 14.7896 6.98305 14.6357 6.75 14.55C6.52379 14.4502 6.27286 14.4204 6.02956 14.4645C5.78626 14.5086 5.56176 14.6246 5.385 14.7975L5.34 14.8425C5.05854 15.124 4.6768 15.2821 4.27875 15.2821C3.8807 15.2821 3.49896 15.124 3.2175 14.8425C2.93604 14.561 2.77792 14.1793 2.77792 13.7812C2.77792 13.3832 2.93604 13.0015 3.2175 12.72L3.2625 12.675C3.44798 12.4934 3.57168 12.2581 3.6161 12.0024C3.66052 11.7467 3.6234 11.4835 3.51 11.25C3.41493 11.0282 3.25707 10.839 3.05585 10.7057C2.85463 10.5725 2.61884 10.501 2.3775 10.5H2.25C1.85218 10.5 1.47064 10.342 1.18934 10.0607C0.908035 9.77936 0.75 9.39782 0.75 9C0.75 8.60218 0.908035 8.22064 1.18934 7.93934C1.47064 7.65804 1.85218 7.5 2.25 7.5H2.3175C2.55884 7.49904 2.79463 7.42753 2.99585 7.29427C3.19707 7.16101 3.35493 6.97183 3.45 6.75C3.54984 6.52379 3.57962 6.27286 3.5355 6.02956C3.49139 5.78626 3.3754 5.56176 3.2025 5.385L3.1575 5.34C3.01813 5.20063 2.90758 5.03518 2.83216 4.85309C2.75674 4.671 2.71792 4.47584 2.71792 4.27875C2.71792 4.08166 2.75674 3.8865 2.83216 3.70441C2.90758 3.52232 3.01813 3.35687 3.1575 3.2175C3.29687 3.07813 3.46232 2.96758 3.64441 2.89216C3.8265 2.81674 4.02166 2.77792 4.21875 2.77792C4.41584 2.77792 4.611 2.81674 4.79309 2.89216C4.97518 2.96758 5.14063 3.07813 5.28 3.2175L5.325 3.2625C5.50656 3.44798 5.74185 3.57168 5.99758 3.6161C6.25331 3.66052 6.51653 3.6234 6.75 3.51C6.97183 3.41493 7.16101 3.25707 7.29427 3.05585C7.42753 2.85463 7.49904 2.61884 7.5 2.3775V2.25C7.5 1.85218 7.65804 1.47064 7.93934 1.18934C8.22064 0.908035 8.60218 0.75 9 0.75C9.39782 0.75 9.77936 0.908035 10.0607 1.18934C10.342 1.47064 10.5 1.85218 10.5 2.25V2.3175C10.501 2.55884 10.5725 2.79463 10.7057 2.99585C10.839 3.19707 11.0282 3.35493 11.25 3.45C11.4762 3.54984 11.7271 3.57962 11.9704 3.5355C12.2137 3.49139 12.4382 3.3754 12.615 3.2025L12.66 3.1575C12.9415 2.87604 13.3232 2.71792 13.7213 2.71792C13.9183 2.71792 14.1135 2.75674 14.2956 2.83216C14.4777 2.90758 14.6431 3.01813 14.7825 3.1575C14.9219 3.29687 15.0324 3.46232 15.1078 3.64441C15.1833 3.8265 15.2221 4.02166 15.2221 4.21875C15.2221 4.41584 15.1833 4.611 15.1078 4.79309C15.0324 4.97518 14.9219 5.14063 14.7825 5.28L14.7375 5.325C14.5618 5.51345 14.4493 5.75204 14.4157 6.00749C14.3821 6.26294 14.429 6.52252 14.55 6.75C14.6451 6.97183 14.8029 7.16101 15.0042 7.29427C15.2054 7.42753 15.4412 7.49904 15.6825 7.5H15.75C16.1478 7.5 16.5294 7.65804 16.8107 7.93934C17.092 8.22064 17.25 8.60218 17.25 9C17.25 9.39782 17.092 9.77936 16.8107 10.0607C16.5294 10.342 16.1478 10.5 15.75 10.5H15.6825C15.4412 10.501 15.2054 10.5725 15.0042 10.7057C14.8029 10.839 14.6451 11.0282 14.55 11.25Z" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -904,18 +976,18 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
             <table className="wf-table">
               <thead>
                 <tr>
-                  <th>Property</th>
-                  {colVis.owner && <th>Owner</th>}
-                  {colVis.country && <th className="wf-align-left">Country</th>}
-                  {colVis.status && <th>Status</th>}
-                  {colVis.gpi && <th>GPI</th>}
-                  {colVis.egi && <th>EGI</th>}
-                  {colVis.opex && <th>OPEX</th>}
-                  {colVis.noi && <th>NOI</th>}
-                  {colVis.capex && <th>CAPEX</th>}
-                  {colVis.taxes && <th>Taxes</th>}
-                  {colVis.netCf && <th>Net CF</th>}
-                  {colVis.margin && <th>Margin</th>}
+                  <SortTh col="name">Property</SortTh>
+                  {colVis.owner && <SortTh col="owner">Owner</SortTh>}
+                  {colVis.country && <SortTh col="country" className="wf-align-left">Country</SortTh>}
+                  {colVis.status && <SortTh col="status">Status</SortTh>}
+                  {colVis.gpi && <SortTh col="gpi">GPI</SortTh>}
+                  {colVis.egi && <SortTh col="egi">EGI</SortTh>}
+                  {colVis.opex && <SortTh col="opex">OPEX</SortTh>}
+                  {colVis.noi && <SortTh col="noi">NOI</SortTh>}
+                  {colVis.capex && <SortTh col="capex">CAPEX</SortTh>}
+                  {colVis.taxes && <SortTh col="taxes">Taxes</SortTh>}
+                  {colVis.netCf && <SortTh col="netCf">Net CF</SortTh>}
+                  {colVis.margin && <SortTh col="margin">Margin</SortTh>}
                   <th style={{ width: 52, textAlign: 'center', padding: '8px 12px 8px 0' }}>
                     <button
                       className="ghost"
@@ -929,7 +1001,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {filteredProperties.map((p) => {
+                {sortedProperties.map((p) => {
                   const a = convertAnnual(calcAnnual(withYear(p)), p.currency, displayCurrency, fxRates)
                   const ac = activeContract(p)
                   const countryCode = COUNTRIES.find(c => c.name === p.country)?.code
@@ -999,6 +1071,13 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
             </table>
           </div>
         </div>
+
+        <PropertyLeaderboardMap
+          properties={filteredProperties.map(withYear)}
+          annuals={annualsMap}
+          onSelectProperty={onSelectProperty}
+          activeContractMap={activeContractMap}
+        />
       </div>
       {deleteTarget && (
         <ConfirmDialog

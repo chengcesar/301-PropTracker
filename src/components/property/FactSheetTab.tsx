@@ -1,10 +1,14 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
+import Map, { Marker, type MapRef } from 'react-map-gl/maplibre'
+import 'maplibre-gl/dist/maplibre-gl.css'
 import type { FactSheet, Property, PropertyContact, OwnershipEntry, MortgageInfo } from '../../lib/types'
 import { fmt } from '../../lib/format'
 import type { CurrencyCode } from '../../lib/currency'
 import { COUNTRIES } from '../../lib/countries'
 import { uploadPropertyPhoto, deletePropertyPhoto } from '../../lib/photoStorage'
 import { PROPERTY_TYPES, getSpatialFields } from '../../lib/constants'
+
+const CARTO_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
 
 const IconCopy = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
@@ -69,6 +73,49 @@ function ReadOnlyField({ label, value }: { label: string; value: string | number
 export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
   const fs = prop.factSheet ?? EMPTY
   const [editingChars, setEditingChars] = useState(false)
+  const [editingLocation, setEditingLocation] = useState(false)
+  const [repositionPin, setRepositionPin] = useState(false)
+  const [geoQuery, setGeoQuery] = useState('')
+  const [geoResults, setGeoResults] = useState<{ display_name: string; lat: string; lon: string }[]>([])
+  const [geoLoading, setGeoLoading] = useState(false)
+  const geoTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
+  const geoBoxRef = useRef<HTMLDivElement>(null)
+
+  // Debounced Nominatim search
+  useEffect(() => {
+    if (geoQuery.trim().length < 3) { setGeoResults([]); return }
+    if (geoTimerRef.current) clearTimeout(geoTimerRef.current)
+    geoTimerRef.current = setTimeout(async () => {
+      setGeoLoading(true)
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(geoQuery)}`)
+        const data = await res.json()
+        setGeoResults(data)
+      } catch { setGeoResults([]) }
+      finally { setGeoLoading(false) }
+    }, 400)
+    return () => { if (geoTimerRef.current) clearTimeout(geoTimerRef.current) }
+  }, [geoQuery])
+
+  // Click outside to close results
+  useEffect(() => {
+    if (geoResults.length === 0) return
+    const handler = (e: MouseEvent) => {
+      if (geoBoxRef.current && !geoBoxRef.current.contains(e.target as Node)) setGeoResults([])
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [geoResults.length])
+
+  const selectGeoResult = (r: { lat: string; lon: string }) => {
+    const lat = Math.round(parseFloat(r.lat) * 1e6) / 1e6
+    const lng = Math.round(parseFloat(r.lon) * 1e6) / 1e6
+    setProp('latitude', lat)
+    setProp('longitude', lng)
+    setGeoQuery('')
+    setGeoResults([])
+  }
+
   const [editingLegal, setEditingLegal] = useState(false)
   const [editingOwnership, setEditingOwnership] = useState(false)
   const [editingMortgage, setEditingMortgage] = useState(false)
@@ -344,46 +391,6 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
               {editingChars ? 'Done' : 'Edit'}
             </button>
           </div>
-          {/* ── Location ── */}
-          <div className="ct-field-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 8, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Location</div>
-          {editingChars ? (
-            <div className="contract-grid" style={{ marginBottom: 20 }}>
-              <div className="field">
-                <label>Address</label>
-                <input type="text" placeholder="Calle 78 #5-32" value={prop.address} onChange={(e) => setProp('address', e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Neighbourhood</label>
-                <input type="text" placeholder="Chicó" value={prop.neighbourhood} onChange={(e) => setProp('neighbourhood', e.target.value)} />
-              </div>
-              <div className="field">
-                <label>City</label>
-                <input type="text" placeholder="Bogotá" value={prop.city} onChange={(e) => setProp('city', e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Postal code</label>
-                <input type="text" placeholder="110221" value={prop.postalCode || ''} onChange={(e) => setProp('postalCode', e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Country</label>
-                <select value={prop.country} onChange={(e) => setProp('country', e.target.value)}>
-                  <option value="">Select...</option>
-                  {COUNTRIES.map((c) => (
-                    <option key={c.code} value={c.name}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          ) : (
-            <div className="ct-fields" style={{ marginBottom: 20 }}>
-              <ReadOnlyField label="Address" value={prop.address} />
-              <ReadOnlyField label="Neighbourhood" value={prop.neighbourhood} />
-              <ReadOnlyField label="City" value={prop.city} />
-              <ReadOnlyField label="Postal code" value={prop.postalCode} />
-              <ReadOnlyField label="Country" value={prop.country} />
-            </div>
-          )}
-
           {/* ── Properties ── */}
           <div className="ct-field-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 8, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Properties</div>
           {editingChars ? (
@@ -467,6 +474,181 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
           )}
         </div>
       </div>
+      </div>
+
+      {/* Map + Location info */}
+      <div className="fs-duo">
+        {/* Map */}
+        <div className="card" style={{ overflow: 'hidden' }}>
+          <div className="card-inner" style={{ padding: 0 }}>
+            {prop.latitude != null && prop.longitude != null ? (
+              <div className="fs-map-wrap">
+                <Map
+                  initialViewState={{ longitude: prop.longitude, latitude: prop.latitude, zoom: 15 }}
+                  mapStyle={CARTO_STYLE}
+                  style={{ width: '100%', height: '100%' }}
+                  attributionControl={false}
+                  interactive={true}
+                  cursor={repositionPin ? 'crosshair' : 'grab'}
+                  onClick={repositionPin ? (e) => {
+                    setProp('latitude', Math.round(e.lngLat.lat * 1e6) / 1e6)
+                    setProp('longitude', Math.round(e.lngLat.lng * 1e6) / 1e6)
+                  } : undefined}
+                >
+                  <Marker
+                    longitude={prop.longitude}
+                    latitude={prop.latitude}
+                    anchor="bottom"
+                    draggable={repositionPin}
+                    onDragEnd={(e) => {
+                      setProp('latitude', Math.round(e.lngLat.lat * 1e6) / 1e6)
+                      setProp('longitude', Math.round(e.lngLat.lng * 1e6) / 1e6)
+                    }}
+                  >
+                    <svg width="28" height="36" viewBox="0 0 28 36" fill="none" style={{ cursor: repositionPin ? 'grab' : undefined }}>
+                      <path d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.268 21.732 0 14 0z" fill="#3b82f6"/>
+                      <circle cx="14" cy="13" r="5" fill="#fff"/>
+                    </svg>
+                  </Marker>
+                </Map>
+                {repositionPin && (
+                  <div className="fs-map-search" ref={geoBoxRef}>
+                    <svg className="fs-map-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                    <input
+                      type="text"
+                      className="fs-map-search-input"
+                      placeholder="Search location…"
+                      value={geoQuery}
+                      onChange={(e) => setGeoQuery(e.target.value)}
+                    />
+                    {geoLoading && <span className="fs-map-search-spin" />}
+                    {geoResults.length > 0 && (
+                      <div className="fs-map-search-results">
+                        {geoResults.map((r, i) => (
+                          <button key={i} type="button" className="fs-map-search-item" onClick={() => selectGeoResult(r)}>
+                            {r.display_name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {repositionPin ? (
+                  <div className="fs-map-edit-hint">
+                    <span>Drag the pin or click to reposition</span>
+                    <button type="button" className="fs-map-done-btn" onClick={() => setRepositionPin(false)}>Done</button>
+                  </div>
+                ) : (
+                  <button type="button" className="fs-map-edit-btn" onClick={() => setRepositionPin(true)}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+                    </svg>
+                    Edit location
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="fs-map-empty">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#c4c9d4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+                  <circle cx="12" cy="10" r="3"/>
+                </svg>
+                <div style={{ fontSize: 14, color: '#6b7280', marginTop: 8 }}>No coordinates set</div>
+                <div className="fs-map-search fs-map-search-empty" ref={geoBoxRef}>
+                  <svg className="fs-map-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  <input
+                    type="text"
+                    className="fs-map-search-input"
+                    placeholder="Search location…"
+                    value={geoQuery}
+                    onChange={(e) => setGeoQuery(e.target.value)}
+                  />
+                  {geoLoading && <span className="fs-map-search-spin" />}
+                  {geoResults.length > 0 && (
+                    <div className="fs-map-search-results">
+                      {geoResults.map((r, i) => (
+                        <button key={i} type="button" className="fs-map-search-item" onClick={() => selectGeoResult(r)}>
+                          {r.display_name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Location info */}
+        <div className="card">
+          <div className="card-inner">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <span className="sec-title" style={{ margin: 0 }}>Location</span>
+              <button
+                type="button"
+                style={{ fontSize: 12, padding: '4px 14px', border: '1px solid var(--accent-bg)', color: 'var(--accent-bg)', background: 'transparent', borderRadius: 'var(--radius-sm)', fontWeight: 500, cursor: 'pointer' }}
+                onClick={() => setEditingLocation(!editingLocation)}
+              >
+                {editingLocation ? 'Done' : 'Edit'}
+              </button>
+            </div>
+            {editingLocation ? (
+              <div className="contract-grid">
+                <div className="field">
+                  <label>Address</label>
+                  <input type="text" placeholder="Calle 78 #5-32" value={prop.address} onChange={(e) => setProp('address', e.target.value)} />
+                </div>
+                <div className="field">
+                  <label>Neighbourhood</label>
+                  <input type="text" placeholder="Chicó" value={prop.neighbourhood} onChange={(e) => setProp('neighbourhood', e.target.value)} />
+                </div>
+                <div className="field">
+                  <label>City</label>
+                  <input type="text" placeholder="Bogotá" value={prop.city} onChange={(e) => setProp('city', e.target.value)} />
+                </div>
+                <div className="field">
+                  <label>Postal code</label>
+                  <input type="text" placeholder="110221" value={prop.postalCode || ''} onChange={(e) => setProp('postalCode', e.target.value)} />
+                </div>
+                <div className="field">
+                  <label>Country</label>
+                  <select value={prop.country} onChange={(e) => setProp('country', e.target.value)}>
+                    <option value="">Select...</option>
+                    {COUNTRIES.map((c) => (
+                      <option key={c.code} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Latitude</label>
+                  <input type="text" placeholder="4.711" value={prop.latitude ?? ''} onChange={(e) => {
+                    const v = e.target.value
+                    if (v === '' || v === '-') setProp('latitude', undefined as unknown as number)
+                    else { const n = parseFloat(v); if (!isNaN(n)) setProp('latitude', n) }
+                  }} />
+                </div>
+                <div className="field">
+                  <label>Longitude</label>
+                  <input type="text" placeholder="-74.005" value={prop.longitude ?? ''} onChange={(e) => {
+                    const v = e.target.value
+                    if (v === '' || v === '-') setProp('longitude', undefined as unknown as number)
+                    else { const n = parseFloat(v); if (!isNaN(n)) setProp('longitude', n) }
+                  }} />
+                </div>
+              </div>
+            ) : (
+              <div className="ct-fields">
+                <ReadOnlyField label="Address" value={prop.address} />
+                <ReadOnlyField label="Neighbourhood" value={prop.neighbourhood} />
+                <ReadOnlyField label="City" value={prop.city} />
+                <ReadOnlyField label="Postal code" value={prop.postalCode} />
+                <ReadOnlyField label="Country" value={prop.country} />
+                <ReadOnlyField label="Latitude" value={prop.latitude} />
+                <ReadOnlyField label="Longitude" value={prop.longitude} />
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Ownership */}

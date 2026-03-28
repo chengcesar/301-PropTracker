@@ -128,6 +128,8 @@ export interface Property {
   postalCode: string
   country: string
   currency: CurrencyCode
+  latitude?: number
+  longitude?: number
   area: number
   bedrooms: number
   bathrooms: number
