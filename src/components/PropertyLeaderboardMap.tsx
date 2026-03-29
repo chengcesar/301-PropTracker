@@ -1,7 +1,8 @@
 import { useState, useMemo, useCallback, useRef, useEffect, type Ref } from 'react'
 import Map, { type ViewStateChangeEvent, type MapRef } from 'react-map-gl/maplibre'
 import { DeckGLOverlay } from './DeckGLOverlay'
-import { ScatterplotLayer } from 'deck.gl'
+import { ScatterplotLayer, IconLayer, TextLayer, WebMercatorViewport } from 'deck.gl'
+import Supercluster from 'supercluster'
 import type { Property } from '../lib/types'
 import { activeContract, type AnnualResult } from '../lib/finance'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -22,6 +23,9 @@ const METRIC_OPTIONS: MetricOption[] = [
 ]
 
 const CARTO_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
+
+/** Design token: primary blue (`#0539FF`) */
+const PRIMARY_BLUE: [number, number, number, number] = [5, 57, 255, 255]
 
 interface PropertyWithMetrics {
   id: number
@@ -138,6 +142,33 @@ function formatMetricValue(key: MetricKey, value: number): string {
   return `$${value.toLocaleString()}`
 }
 
+type MapClusterBBox = [number, number, number, number]
+
+/** Single atlas frame: white silhouette on transparent — IconLayer tints via getColor (mask). */
+function buildPropertyMarkerAtlasDataUrl(): string {
+  if (typeof document === 'undefined') return ''
+  const size = 64
+  const c = document.createElement('canvas')
+  c.width = size
+  c.height = size
+  const ctx = c.getContext('2d')
+  if (!ctx) return ''
+  ctx.clearRect(0, 0, size, size)
+  const cx = size / 2
+  const cy = size / 2
+  ctx.beginPath()
+  ctx.arc(cx, cy, 14, 0, Math.PI * 2)
+  ctx.fillStyle = '#ffffff'
+  ctx.fill()
+  return c.toDataURL()
+}
+
+interface ClusterCircle {
+  position: [number, number]
+  clusterId: number
+  pointCount: number
+}
+
 interface Props {
   properties: Property[]
   annuals: Map<number, AnnualResult>
@@ -149,6 +180,8 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('area')
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  /** Property ids grouped when user clicks a map cluster (supercluster); enables "2 of 3" popup navigation. */
+  const [clusterMemberIds, setClusterMemberIds] = useState<number[] | null>(null)
   const [alertOn, setAlertOn] = useState(false)
   const [panelTab, setPanelTab] = useState<'list' | 'alerts'>('list')
   const [severityFilter, setSeverityFilter] = useState<AlertSeverity | 'all'>('all')
@@ -160,6 +193,12 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
     bearing: 0,
     pitch: 0,
   })
+  /** Viewport for supercluster.getClusters — updated from the Map instance on move/load. */
+  const [mapView, setMapView] = useState<{ bbox: MapClusterBBox; zoom: number }>({
+    bbox: [-180, -85, 180, 85],
+    zoom: 10,
+  })
+  const markerAtlas = useMemo(() => buildPropertyMarkerAtlasDataUrl(), [])
   const dropdownRef = useRef<HTMLDivElement>(null)
   const leaderboardRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapRef>(null)
@@ -234,33 +273,141 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
     return map
   }, [data, selectedMetric])
 
+  const propById = useMemo(
+    () => new window.Map<number, PropertyWithMetrics>(data.map(d => [d.id, d])),
+    [data],
+  )
+
+  const clusterIndex = useMemo(() => {
+    const sc = new Supercluster({ radius: 52, maxZoom: 16, minPoints: 2 })
+    sc.load(
+      data.map(d => ({
+        type: 'Feature' as const,
+        properties: { propId: d.id },
+        geometry: { type: 'Point' as const, coordinates: [d.longitude, d.latitude] as [number, number] },
+      })),
+    )
+    return sc
+  }, [data])
+
+  const { clusterCircles, unclusteredPoints } = useMemo(() => {
+    const z = Math.max(0, Math.floor(mapView.zoom))
+    const raw = clusterIndex.getClusters(mapView.bbox, z) as Array<{
+      type: 'Feature'
+      properties: { cluster?: boolean; cluster_id?: number; point_count?: number; propId?: number }
+      geometry: { type: 'Point'; coordinates: [number, number] }
+    }>
+    const clusterCircles: ClusterCircle[] = []
+    const unclusteredPoints: PropertyWithMetrics[] = []
+    for (const f of raw) {
+      const p = f.properties
+      const [lng, lat] = f.geometry.coordinates
+      if (p.cluster && p.cluster_id != null && p.point_count != null) {
+        clusterCircles.push({ position: [lng, lat], clusterId: p.cluster_id, pointCount: p.point_count })
+      } else if (p.propId != null) {
+        const row = propById.get(p.propId)
+        if (row) unclusteredPoints.push(row)
+      }
+    }
+    return { clusterCircles, unclusteredPoints }
+  }, [clusterIndex, mapView.bbox, mapView.zoom, propById])
+
   // Sort by percentage descending
   const sorted = useMemo(() => {
     return [...data].sort((a, b) => (normalizedMap.get(b.id) ?? 0) - (normalizedMap.get(a.id) ?? 0))
   }, [data, normalizedMap])
 
-  // Fit map bounds to all property points on initial load
-  const fitBounds = useCallback(() => {
-    const map = mapRef.current
-    if (!map || data.length === 0) return
-    if (data.length === 1) {
-      setViewState(prev => ({ ...prev, longitude: data[0].longitude, latitude: data[0].latitude, zoom: 13 }))
-      return
+  /** Keep React `viewState` + supercluster `mapView` aligned with the native MapLibre camera.
+   *  Otherwise a controlled <Map> can snap back after `fitBounds`, and clusters/labels use the wrong bbox/zoom until the user moves. */
+  const syncViewportFromNativeMap = useCallback(() => {
+    const ml = mapRef.current?.getMap()
+    if (!ml) return
+    const b = ml.getBounds()
+    setMapView({ bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()], zoom: ml.getZoom() })
+    const c = ml.getCenter()
+    setViewState(prev => ({
+      ...prev,
+      longitude: c.lng,
+      latitude: c.lat,
+      zoom: ml.getZoom(),
+      bearing: ml.getBearing(),
+      pitch: ml.getPitch(),
+    }))
+  }, [])
+
+  const scheduleSyncAfterCameraChange = useCallback((options?: { animationMs?: number }) => {
+    const ml = mapRef.current?.getMap()
+    if (!ml) return
+    const run = () => syncViewportFromNativeMap()
+    ml.once('moveend', run)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(run)
+    })
+    const ms = options?.animationMs
+    if (ms != null) {
+      window.setTimeout(run, ms + 50)
+      window.setTimeout(run, ms + 180)
     }
-    const lngs = data.map(d => d.longitude)
-    const lats = data.map(d => d.latitude)
-    map.fitBounds(
-      [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
-      { padding: 60, duration: 0 },
-    )
-  }, [data])
+  }, [syncViewportFromNativeMap])
+
+  /** Supercluster uses `mapView`; after programmatic `flyTo` it can lag React's `viewState`. Align bbox/zoom to the camera target immediately. */
+  const applyClusterViewForCamera = useCallback((lng: number, lat: number, zoom: number) => {
+    const ml = mapRef.current?.getMap()
+    const el = ml?.getContainer()
+    const width = Math.max(200, el?.clientWidth ?? 800)
+    const height = Math.max(200, el?.clientHeight ?? 600)
+    const vp = new WebMercatorViewport({ longitude: lng, latitude: lat, zoom, width, height })
+    const [lngA, latA] = vp.unproject([0, 0])
+    const [lngB, latB] = vp.unproject([width, height])
+    setMapView({
+      bbox: [Math.min(lngA, lngB), Math.min(latA, latB), Math.max(lngA, lngB), Math.max(latA, latB)],
+      zoom,
+    })
+  }, [])
+
+  // Fit map bounds to all property points on initial load
+  const fitBounds = useCallback(
+    (opts?: { transitionMs?: number }) => {
+      const map = mapRef.current
+      if (!map || data.length === 0) return
+      const duration = opts?.transitionMs ?? 0
+      if (data.length === 1) {
+        setViewState(prev => ({
+          ...prev,
+          longitude: data[0].longitude,
+          latitude: data[0].latitude,
+          zoom: 13,
+          transitionDuration: duration,
+        }))
+        scheduleSyncAfterCameraChange(duration > 0 ? { animationMs: duration } : undefined)
+        return
+      }
+      const lngs = data.map(d => d.longitude)
+      const lats = data.map(d => d.latitude)
+      map.fitBounds(
+        [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+        { padding: 60, duration },
+      )
+      scheduleSyncAfterCameraChange(duration > 0 ? { animationMs: duration } : undefined)
+    },
+    [data, scheduleSyncAfterCameraChange],
+  )
+
+  /** Leave property focus: clear popup state and show the full portfolio extent. */
+  const exitMapSelection = useCallback(() => {
+    setClusterMemberIds(null)
+    setSelectedId(null)
+    fitBounds({ transitionMs: 520 })
+  }, [fitBounds])
 
   const onMapLoad = useCallback(() => {
     if (!didFitRef.current) {
       didFitRef.current = true
       fitBounds()
+      return
     }
-  }, [fitBounds])
+    syncViewportFromNativeMap()
+  }, [fitBounds, syncViewportFromNativeMap])
 
   // Re-fit bounds when filtered data changes
   const dataKey = useMemo(() => data.map(d => d.id).join(','), [data])
@@ -268,24 +415,32 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
     if (didFitRef.current) fitBounds()
   }, [dataKey, fitBounds])
 
-  const flyTo = useCallback((lng: number, lat: number) => {
-    setViewState(prev => ({
-      ...prev,
-      longitude: lng,
-      latitude: lat,
-      zoom: 15,
-      transitionDuration: 800,
-    }))
-  }, [])
+  const flyTo = useCallback(
+    (lng: number, lat: number) => {
+      const z = 15
+      applyClusterViewForCamera(lng, lat, z)
+      setViewState(prev => ({
+        ...prev,
+        longitude: lng,
+        latitude: lat,
+        zoom: z,
+        transitionDuration: 800,
+      }))
+      scheduleSyncAfterCameraChange({ animationMs: 800 })
+    },
+    [applyClusterViewForCamera, scheduleSyncAfterCameraChange],
+  )
 
   const handleRowClick = useCallback((prop: PropertyWithMetrics) => {
+    setClusterMemberIds(null)
     setSelectedId(prop.id)
     flyTo(prop.longitude, prop.latitude)
   }, [flyTo])
 
   const handleMapClick = useCallback(() => {
-    setSelectedId(null)
-  }, [])
+    if (selectedId == null && clusterMemberIds == null) return
+    exitMapSelection()
+  }, [exitMapSelection, selectedId, clusterMemberIds])
 
   const resetNorth = useCallback(() => {
     setViewState(prev => ({ ...prev, bearing: 0, pitch: 0 }))
@@ -293,39 +448,186 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
 
   const selectedProp = selectedId != null ? data.find(d => d.id === selectedId) : null
 
-  const scatterLayer = useMemo(() => {
-    return new ScatterplotLayer({
-      id: 'properties',
-      data,
-      getPosition: (d: PropertyWithMetrics) => [d.longitude, d.latitude],
-      getRadius: (d: PropertyWithMetrics) => {
-        const pct = normalizedMap.get(d.id) ?? 50
-        return 5 + (pct / 100) * 395
-      },
-      getFillColor: (d: PropertyWithMetrics) =>
-        d.id === selectedId ? [41, 204, 151, 153] : [55, 81, 255, 153],
-      getLineColor: (d: PropertyWithMetrics) =>
-        d.id === selectedId ? [41, 204, 151, 255] : [55, 81, 255, 255],
-      stroked: true,
-      lineWidthMinPixels: 2,
-      radiusMinPixels: 6,
-      radiusMaxPixels: 30,
-      pickable: true,
-      onClick: ({ object }: { object?: PropertyWithMetrics }) => {
-        if (object) {
-          setSelectedId(object.id)
-          flyTo(object.longitude, object.latitude)
-          const row = document.getElementById(`lb-row-${object.id}`)
-          row?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-        }
-      },
-      updateTriggers: {
-        getFillColor: [selectedId],
-        getLineColor: [selectedId],
-        getRadius: [selectedMetric],
-      },
-    })
-  }, [data, normalizedMap, selectedId, selectedMetric])
+  const animateClusterExpand = useCallback(
+    (center: [number, number], clusterId: number) => {
+      const z = clusterIndex.getClusterExpansionZoom(clusterId)
+      const [lng, lat] = center
+      applyClusterViewForCamera(lng, lat, z)
+      mapRef.current?.getMap()?.easeTo({ center, zoom: z, duration: 380 })
+      scheduleSyncAfterCameraChange({ animationMs: 380 })
+    },
+    [applyClusterViewForCamera, clusterIndex, scheduleSyncAfterCameraChange],
+  )
+
+  const handleClusterMarkerClick = useCallback(
+    (d: ClusterCircle) => {
+      let ids: number[] = []
+      try {
+        const leaves = clusterIndex.getLeaves(d.clusterId, 512, 0) as Array<{ properties?: { propId?: number } }>
+        ids = [
+          ...new Set(
+            leaves.map(f => f.properties?.propId).filter((x): x is number => typeof x === 'number'),
+          ),
+        ]
+      } catch {
+        animateClusterExpand(d.position, d.clusterId)
+        return
+      }
+      if (ids.length === 0) {
+        animateClusterExpand(d.position, d.clusterId)
+        return
+      }
+      const rows = ids
+        .map(id => propById.get(id))
+        .filter((x): x is PropertyWithMetrics => x != null)
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+      if (rows.length === 0) {
+        animateClusterExpand(d.position, d.clusterId)
+        return
+      }
+      setClusterMemberIds(rows.map(r => r.id))
+      setSelectedId(rows[0].id)
+      animateClusterExpand(d.position, d.clusterId)
+      document.getElementById(`lb-row-${rows[0].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    },
+    [animateClusterExpand, clusterIndex, propById],
+  )
+
+  const clusterNav = useMemo(() => {
+    if (clusterMemberIds == null || clusterMemberIds.length <= 1 || selectedId == null) return null
+    const idx = clusterMemberIds.indexOf(selectedId)
+    if (idx < 0) return null
+    return { index: idx, total: clusterMemberIds.length }
+  }, [clusterMemberIds, selectedId])
+
+  const goClusterPrev = useCallback(() => {
+    if (!clusterMemberIds || selectedId == null) return
+    const idx = clusterMemberIds.indexOf(selectedId)
+    if (idx <= 0) return
+    const id = clusterMemberIds[idx - 1]
+    setSelectedId(id)
+    document.getElementById(`lb-row-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [clusterMemberIds, selectedId])
+
+  const goClusterNext = useCallback(() => {
+    if (!clusterMemberIds || selectedId == null) return
+    const idx = clusterMemberIds.indexOf(selectedId)
+    if (idx < 0 || idx >= clusterMemberIds.length - 1) return
+    const id = clusterMemberIds[idx + 1]
+    setSelectedId(id)
+    document.getElementById(`lb-row-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [clusterMemberIds, selectedId])
+
+  /* Deck `onClick` runs on pointer events only; ref is not read during React render. */
+  /* eslint-disable react-hooks/refs */
+  const clusterLayer = new ScatterplotLayer({
+    id: 'clusters',
+    data: clusterCircles,
+    radiusUnits: 'pixels',
+    getPosition: (d: ClusterCircle) => d.position,
+    getRadius: (d: ClusterCircle) => Math.min(46, 14 + Math.sqrt(d.pointCount) * 5),
+    getFillColor: [PRIMARY_BLUE[0], PRIMARY_BLUE[1], PRIMARY_BLUE[2], 236],
+    getLineColor: [255, 255, 255, 245],
+    stroked: true,
+    lineWidthMinPixels: 1.5,
+    pickable: false,
+  })
+
+  const clusterLabelLayer = new TextLayer<ClusterCircle>({
+    id: 'cluster-counts',
+    data: clusterCircles,
+    pickable: false,
+    getPosition: (d: ClusterCircle) => d.position,
+    getText: (d: ClusterCircle) => String(d.pointCount),
+    getSize: (d: ClusterCircle) => Math.min(22, 12 + Math.sqrt(d.pointCount) * 1.35),
+    sizeUnits: 'pixels',
+    getColor: [255, 255, 255, 255],
+    getTextAnchor: 'middle',
+    getAlignmentBaseline: 'center',
+    fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, sans-serif',
+    fontWeight: 700,
+    outlineWidth: 3,
+    outlineColor: [26, 29, 35, 160],
+  })
+
+  /** Larger invisible disks on top of clusters so clicks are easy; picks before lower layers. */
+  const clusterHitLayer = new ScatterplotLayer({
+    id: 'cluster-hit',
+    data: clusterCircles,
+    radiusUnits: 'pixels',
+    getPosition: (d: ClusterCircle) => d.position,
+    getRadius: (d: ClusterCircle) => Math.max(36, Math.min(72, 22 + Math.sqrt(d.pointCount) * 7)),
+    getFillColor: [255, 255, 255, 12],
+    stroked: false,
+    pickable: true,
+    onClick: ({ object }) => {
+      const d = object as ClusterCircle | undefined
+      if (!d) return true
+      handleClusterMarkerClick(d)
+      return true
+    },
+  })
+
+  const pointRadius = (d: PropertyWithMetrics) => {
+    const pct = normalizedMap.get(d.id) ?? 50
+    return 20 + (pct / 100) * 16
+  }
+  const onPointClick = ({ object }: { object?: PropertyWithMetrics }) => {
+    const p = object
+    if (p) {
+      setClusterMemberIds(null)
+      setSelectedId(p.id)
+      flyTo(p.longitude, p.latitude)
+      document.getElementById(`lb-row-${p.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+    return true
+  }
+  const propertyIconLayer = markerAtlas
+    ? new IconLayer({
+        id: 'properties-icons',
+        data: unclusteredPoints,
+        pickable: true,
+        iconAtlas: markerAtlas,
+        iconMapping: {
+          marker: { x: 0, y: 0, width: 64, height: 64, mask: true },
+        },
+        getIcon: () => 'marker',
+        sizeUnits: 'pixels',
+        getPosition: (d: PropertyWithMetrics) => [d.longitude, d.latitude],
+        getSize: pointRadius,
+        getColor: (d: PropertyWithMetrics) =>
+          d.id === selectedId ? [41, 204, 151, 255] : PRIMARY_BLUE,
+        sizeMinPixels: 20,
+        sizeMaxPixels: 40,
+        onClick: onPointClick,
+        updateTriggers: {
+          getColor: [selectedId],
+          getSize: [selectedMetric],
+        },
+      })
+    : new ScatterplotLayer({
+        id: 'properties-icons',
+        data: unclusteredPoints,
+        pickable: true,
+        radiusUnits: 'pixels',
+        getPosition: (d: PropertyWithMetrics) => [d.longitude, d.latitude],
+        getRadius: pointRadius,
+        radiusMinPixels: 20,
+        radiusMaxPixels: 40,
+        getFillColor: (d: PropertyWithMetrics) =>
+          d.id === selectedId ? [41, 204, 151, 220] : [5, 57, 255, 210],
+        getLineColor: (d: PropertyWithMetrics) =>
+          d.id === selectedId ? [41, 204, 151, 255] : [255, 255, 255, 200],
+        stroked: true,
+        lineWidthMinPixels: 1.5,
+        onClick: onPointClick,
+        updateTriggers: {
+          getFillColor: [selectedId],
+          getLineColor: [selectedId],
+          getRadius: [selectedMetric],
+        },
+      })
+  /* eslint-enable react-hooks/refs */
 
   // Alert: filter properties that trigger any rule
   const alertData = useMemo(() => {
@@ -396,6 +698,9 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
 
   const handleMove = useCallback((evt: ViewStateChangeEvent) => {
     setViewState(evt.viewState as typeof viewState)
+    const map = evt.target as { getBounds: () => { getWest: () => number; getSouth: () => number; getEast: () => number; getNorth: () => number }; getZoom: () => number }
+    const b = map.getBounds()
+    setMapView({ bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()], zoom: map.getZoom() })
   }, [])
 
   const metricLabel = METRIC_OPTIONS.find(m => m.key === selectedMetric)!.label
@@ -546,7 +851,13 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
           cursor={selectedProp ? 'default' : 'grab'}
           attributionControl={true}
         >
-          <DeckGLOverlay layers={pulseLayer ? [pulseLayer, scatterLayer] : [scatterLayer]} />
+          <DeckGLOverlay
+            layers={
+              pulseLayer
+                ? [pulseLayer, clusterLayer, clusterLabelLayer, clusterHitLayer, propertyIconLayer]
+                : [clusterLayer, clusterLabelLayer, clusterHitLayer, propertyIconLayer]
+            }
+          />
         </Map>
 
         {/* Map controls */}
@@ -576,12 +887,55 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
                   {selectedProp.vacant ? 'Vacant' : selectedProp.monthsLeft != null ? `Rented · ${selectedProp.monthsLeft}mo left` : 'Rented'}
                 </span>
               </div>
-              <button className="lb-popup-close" onClick={() => setSelectedId(null)}>
+              <button type="button" className="lb-popup-close" onClick={exitMapSelection}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                   <path d="M3 3l8 8M11 3l-8 8" />
                 </svg>
               </button>
             </div>
+
+            {clusterMemberIds != null && clusterMemberIds.length > 1 && (
+              <>
+                <div className="lb-popup-cluster-banner">
+                  {clusterMemberIds.length} properties at this map location
+                </div>
+                {clusterNav != null && (
+                  <div className="lb-popup-cluster-nav">
+                    <button
+                      type="button"
+                      className="lb-popup-cluster-arrow"
+                      onClick={e => {
+                        e.stopPropagation()
+                        goClusterPrev()
+                      }}
+                      disabled={clusterNav.index === 0}
+                      aria-label="Previous property in cluster"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M10 3L5 8l5 5" />
+                      </svg>
+                    </button>
+                    <span className="lb-popup-cluster-position">
+                      {clusterNav.index + 1} of {clusterNav.total}
+                    </span>
+                    <button
+                      type="button"
+                      className="lb-popup-cluster-arrow"
+                      onClick={e => {
+                        e.stopPropagation()
+                        goClusterNext()
+                      }}
+                      disabled={clusterNav.index >= clusterNav.total - 1}
+                      aria-label="Next property in cluster"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6 3l5 5-5 5" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
 
             <div className="lb-popup-tabs">
               <button className={`lb-popup-tab${popupTab === 'financial' ? ' active' : ''}`} onClick={() => setPopupTab('financial')}>Financial</button>

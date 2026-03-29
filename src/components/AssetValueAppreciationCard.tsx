@@ -13,6 +13,7 @@ import type { Property } from '../lib/types'
 import { type CurrencyCode, type FxRates, convert } from '../lib/currency'
 import { estimatedPropertyValueAtYear } from '../lib/finance'
 import { fmtCurrency, fmtCurrencyM } from '../lib/format'
+import { KpiInfoIcon } from './KpiInfoIcon'
 
 export type AppreciationViewMode = 'absolute' | 'indexed' | 'aligned' | 'muted' | 'aggregate'
 
@@ -118,21 +119,6 @@ function valueSeriesStartYear(p: Property, chartMinY: number): number | null {
   if (canModel) return purchaseYear
   if (fs.currentValue != null && fs.currentValue > 0) return chartMinY
   return null
-}
-
-function pillStyle(active: boolean): CSSProperties {
-  return {
-    border: 'none',
-    borderRadius: 999,
-    padding: '8px 14px',
-    fontSize: 12,
-    fontWeight: 600,
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-    background: active ? '#2563eb' : 'transparent',
-    color: active ? '#fff' : 'var(--text2)',
-    transition: 'background 0.15s ease, color 0.15s ease',
-  }
 }
 
 function seriesChipStyle(on: boolean, lineColor: string): CSSProperties {
@@ -363,27 +349,27 @@ export function AssetValueAppreciationCard({ properties, displayCurrency, fxRate
 
   return (
     <div
-      className="lb-panel"
+      className="lb-panel ava-appreciation-panel"
       style={{ marginTop: 24, height: 'auto', minHeight: 0, display: 'block', padding: '20px 24px 24px' }}
     >
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
-        <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>Asset value appreciation</div>
-          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4, maxWidth: 640, lineHeight: 1.45 }}>
-            Estimated values use the same rules as the portfolio table (purchase + appreciation + price history, or manual appraisal). Amounts are converted to{' '}
-            <strong style={{ fontWeight: 600 }}>{displayCurrency}</strong> using your FX rates (header).
-          </div>
+          <KpiInfoIcon
+            multiline
+            tip={`Estimated values use the same rules as the portfolio table (purchase + appreciation + price history, or manual appraisal). Amounts are converted to ${displayCurrency} using your FX rates (header).`}
+          />
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }} role="tablist" aria-label="Comparison mode">
+      <div className="ava-tabs" role="tablist" aria-label="Comparison mode">
         {VIEW_OPTIONS.map((opt) => (
           <button
             key={opt.key}
             type="button"
             role="tab"
             aria-selected={mode === opt.key}
-            style={pillStyle(mode === opt.key)}
+            className={`ava-tab${mode === opt.key ? ' active' : ''}`}
             onClick={() => setMode(opt.key)}
           >
             {opt.label}

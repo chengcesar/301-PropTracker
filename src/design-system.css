@@ -87,6 +87,13 @@
   .kpi-info-tip { display: none; position: absolute; right: -4px; bottom: calc(100% + 8px); background: #1a1d23; color: #fff; font-size: 11px; font-weight: 400; letter-spacing: 0; text-transform: none; line-height: 1.45; padding: 6px 10px; border-radius: 8px; white-space: nowrap; z-index: 20; pointer-events: none; }
   .kpi-info-tip::after { content: ''; position: absolute; right: 8px; top: 100%; border: 5px solid transparent; border-top-color: #1a1d23; }
   .kpi-info:hover .kpi-info-tip { display: block; }
+  .kpi-info-tip--multiline {
+    white-space: normal;
+    max-width: min(360px, 90vw);
+    font-size: 12px;
+    line-height: 1.45;
+    letter-spacing: 0;
+  }
   .kpi-value { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
   .kpi-value.green { color: var(--green); } .kpi-value.red { color: var(--red); } .kpi-value.purple { color: var(--purple); }
   .kpi-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
@@ -932,6 +939,23 @@
     overflow: hidden;
   }
 
+  /* Appreciation card: allow KPI-style hover tips above the title; default lb-panel clips them */
+  .lb-panel.ava-appreciation-panel {
+    overflow: visible;
+  }
+  .ava-appreciation-panel .kpi-info {
+    z-index: 40;
+  }
+  .ava-appreciation-panel .kpi-info-tip {
+    z-index: 41;
+  }
+  /* Multiline tip: without a width, shrink-to-fit uses the tiny icon box and stacks text */
+  .ava-appreciation-panel .kpi-info-tip--multiline {
+    width: min(440px, calc(100vw - 40px));
+    max-width: min(440px, calc(100vw - 40px));
+    padding: 10px 14px;
+  }
+
   .lb-header {
     display: flex;
     align-items: center;
@@ -1132,6 +1156,44 @@
   .lb-tab:hover { color: var(--text2); }
   .lb-tab.active { color: var(--accent-bg); border-bottom-color: var(--accent-bg); }
 
+  /* Asset value appreciation — same tab affordance as leaderboard List / Alerts */
+  .ava-tabs {
+    display: flex;
+    align-items: flex-end;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+    /* overflow-x: auto alone can imply overflow-y: auto and draw a vertical scrollbar */
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .ava-tabs::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+  .ava-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 12px 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text3);
+    background: none;
+    border: none;
+    border-radius: 0;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    text-align: center;
+    line-height: 1.3;
+    white-space: normal;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  .ava-tab:hover { color: var(--text2); }
+  .ava-tab.active { color: var(--accent-bg); border-bottom-color: var(--accent-bg); }
+
   /* Alert severity filters */
   .lb-severity-filters { display: flex; gap: 4px; }
   .lb-severity-btn {
@@ -1188,6 +1250,61 @@
     justify-content: space-between;
     padding: 14px 16px 10px;
     border-bottom: 1px solid var(--border);
+  }
+
+  .lb-popup-cluster-banner {
+    padding: 8px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text2);
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    letter-spacing: 0.02em;
+  }
+
+  .lb-popup-cluster-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: #fafbfc;
+  }
+
+  .lb-popup-cluster-position {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    min-width: 4.5em;
+    text-align: center;
+  }
+
+  .lb-popup-cluster-arrow {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .lb-popup-cluster-arrow:hover:not(:disabled) {
+    background: var(--surface2);
+    border-color: var(--accent-bg);
+    color: var(--accent-bg);
+  }
+
+  .lb-popup-cluster-arrow:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
   }
 
   .lb-popup-name {
