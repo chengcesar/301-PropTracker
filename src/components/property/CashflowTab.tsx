@@ -17,7 +17,6 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
   const ann = calcAnnual(prop)
 
   const scheduleRows = useMemo(() => {
-    const annual = calcAnnual(prop)
     let cumulative = 0
     const rows: {
       fullName: string
@@ -139,7 +138,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
             <tr className="section-hdr">
               <td colSpan={5}>Operating expenses</td>
             </tr>
-            {expenseRowsForYear(prop).filter((r) => r.type !== 'auto').map((def) => {
+            {expenseRowsForYear(prop).filter((r) => (r.type as string) !== 'auto').map((def) => {
               const ym = yearMonths(prop)
               const total = Object.values(ym).reduce(
                 (a, m) => a + (parseFloat(String(m.expenses?.[def.key] ?? '')) || 0),

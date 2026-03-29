@@ -1,6 +1,6 @@
 import type { FactSheet, Property } from './types'
 
-const FS_MORTGAGE_OFF: FactSheet['mortgage'] = {
+const FS_MORTGAGE_OFF: NonNullable<FactSheet['mortgage']> = {
   hasMortgage: false,
   lender: '',
   loanNumber: '',
@@ -196,7 +196,7 @@ export function createSeedProperties(): Property[] {
         appreciationRate: 4.5,
         projectionYears: 15,
         valueEquityView: 'history',
-        mortgage: { ...FS_MORTGAGE_OFF },
+        mortgage: { ...FS_MORTGAGE_OFF } as NonNullable<FactSheet['mortgage']>,
       },
     },
 
@@ -255,7 +255,7 @@ export function createSeedProperties(): Property[] {
         appreciationRate: 5,
         projectionYears: 15,
         valueEquityView: 'history',
-        mortgage: { ...FS_MORTGAGE_OFF },
+        mortgage: { ...FS_MORTGAGE_OFF } as NonNullable<FactSheet['mortgage']>,
       },
     },
 
@@ -336,7 +336,7 @@ export function createSeedProperties(): Property[] {
         appreciationRate: 3.25,
         projectionYears: 12,
         valueEquityView: 'history',
-        mortgage: { ...FS_MORTGAGE_OFF },
+        mortgage: { ...FS_MORTGAGE_OFF } as NonNullable<FactSheet['mortgage']>,
       },
     },
   ]

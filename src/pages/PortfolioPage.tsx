@@ -366,7 +366,7 @@ function CurrencyPicker({ value, onChange }: { value: CurrencyCode; onChange: (c
     return c.toLowerCase().includes(q) || cfg.label.toLowerCase().includes(q)
   })
 
-  const selected = CURRENCIES[value]
+  const _selected = CURRENCIES[value]
   const recentCodes: CurrencyCode[] = ['USD', 'COP', 'PEN']
   const recent = recentCodes.filter(c => !search || filtered.includes(c))
   const rest = filtered.filter(c => !recentCodes.includes(c))

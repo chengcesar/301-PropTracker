@@ -924,7 +924,7 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
                                       }}
                                     />
                                     <Tooltip
-                                      formatter={(value: number | string) =>
+                                      formatter={(value) =>
                                         fmtCurrency(cx(typeof value === 'number' ? value : Number(value)), dc)}
                                       labelFormatter={(y) => `Year ${y}`}
                                       contentStyle={{
@@ -1377,7 +1377,7 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
                                     }}
                                   />
                                   <Tooltip
-                                    formatter={(value: number | string) =>
+                                    formatter={(value) =>
                                       fmtCurrency(cx(typeof value === 'number' ? value : Number(value)), dc)}
                                     labelFormatter={(y) => `Year ${y}`}
                                     contentStyle={{
@@ -1451,7 +1451,7 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
                                     }}
                                   />
                                   <Tooltip
-                                    formatter={(value: number | string) =>
+                                    formatter={(value) =>
                                       fmtCurrency(cx(typeof value === 'number' ? value : Number(value)), dc)}
                                     labelFormatter={(y) => `Year ${y}`}
                                     contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13 }}

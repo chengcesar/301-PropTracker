@@ -849,7 +849,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
           mapStyle={CARTO_STYLE}
           style={{ width: '100%', height: '100%' }}
           cursor={selectedProp ? 'default' : 'grab'}
-          attributionControl={true}
+          attributionControl
         >
           <DeckGLOverlay
             layers={
@@ -862,7 +862,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
 
         {/* Map controls */}
         <div className="lb-map-controls">
-          <button className="lb-map-control-btn" onClick={fitBounds} title="Zoom to all properties">
+          <button className="lb-map-control-btn" onClick={() => fitBounds()} title="Zoom to all properties">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M2 6V3a1 1 0 011-1h3M10 2h3a1 1 0 011 1v3M14 10v3a1 1 0 01-1 1h-3M6 14H3a1 1 0 01-1-1v-3" />
             </svg>

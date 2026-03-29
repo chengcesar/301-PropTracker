@@ -1,8 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import Map, { Marker, type MapRef } from 'react-map-gl/maplibre'
+import Map, { Marker } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { FactSheet, Property, PropertyContact, MortgageInfo } from '../../lib/types'
-import { fmt } from '../../lib/format'
 import type { CurrencyCode } from '../../lib/currency'
 import { COUNTRIES } from '../../lib/countries'
 import { uploadPropertyPhoto, deletePropertyPhoto, uploadPropertyDocument, deletePropertyDocument } from '../../lib/photoStorage'
@@ -70,7 +69,7 @@ function ReadOnlyField({ label, value }: { label: string; value: string | number
   )
 }
 
-export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
+export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }: Props) {
   const fs = prop.factSheet ?? EMPTY
   const [editingChars, setEditingChars] = useState(false)
   const [editingLocation, setEditingLocation] = useState(false)

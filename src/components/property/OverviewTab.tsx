@@ -3,7 +3,7 @@ import { MONTHS, MONTHS_FULL } from '../../lib/constants'
 import type { MonthData, Occupant, Property } from '../../lib/types'
 import { activeContract, calcAnnual, contractForMonth, expenseRowsForYear, getMonthData, resolveServices, yearMonths } from '../../lib/finance'
 import { type CurrencyCode } from '../../lib/currency'
-import { fmt, fmtCurrency, fmtCurrencyM, parseNum } from '../../lib/format'
+import { fmt, fmtCurrency, fmtCurrencyM } from '../../lib/format'
 import { MonthModal } from '../modals/MonthModal'
 import { OccupantModal } from '../modals/OccupantModal'
 import { KpiInfoIcon } from '../KpiInfoIcon'
@@ -590,8 +590,8 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
 
         // Net row (income - expenses)
         const netVals = MONTHS.map((_, i) => incomeVals[i] - totals[i])
-        const netTotal = incTotal - grandTotal
-        const netFilled = netVals.filter((v) => v !== 0).length
+        const _netTotal = incTotal - grandTotal
+        const _netFilled = netVals.filter((v) => v !== 0).length
 
         const stickyLabel: React.CSSProperties = {
           position: 'sticky', left: 0, zIndex: 2,
