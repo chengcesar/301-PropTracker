@@ -67,7 +67,14 @@ export function createSeedProperties(): Property[] {
         },
       },
       capex: [
-        { id: now + 2, date: '2025-08-15', desc: 'Kitchen renovation', cat: 'Improvement', amount: 12500 },
+        {
+          id: now + 2,
+          date: '2025-08-15',
+          dateEnd: '2025-09-20',
+          desc: 'Kitchen renovation',
+          cat: 'Improvement',
+          amount: 12500,
+        },
       ],
       taxes: { items: [{ id: now + 3, taxId: 'NYC-2026', amount: 4800, dueDate: '2026-07-01', status: 'pending' }] },
       services: {

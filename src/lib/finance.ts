@@ -238,3 +238,70 @@ export function calcPortfolioTotalsIn(properties: Property[], to: CurrencyCode, 
     { gpi: 0, egi: 0, opex: 0, noi: 0, capex: 0, taxes: 0, net: 0 },
   )
 }
+
+/** Same rules as Value & Equity: purchase + appreciation + price history; otherwise manual appraisal. */
+export type PropertyValueEstimate = { value: number | null; source: 'model' | 'appraisal' | null }
+
+export function estimatedPropertyValueAtYear(property: Property, year: number): PropertyValueEstimate {
+  const fs = property.factSheet
+  if (!fs) return { value: null, source: null }
+
+  const purchasePrice = fs.purchasePrice
+  const purchaseDate = fs.purchaseDate
+  const purchaseYear = purchaseDate ? new Date(purchaseDate).getFullYear() : NaN
+  const canModel =
+    purchasePrice != null && purchasePrice > 0 && Boolean(purchaseDate) && !Number.isNaN(purchaseYear)
+
+  if (canModel && purchasePrice != null) {
+    if (year < purchaseYear) return { value: null, source: 'model' }
+    const appreciationRate = fs.appreciationRate ?? 5
+    const priceHistory = fs.priceHistory ?? {}
+    let prev = purchasePrice
+    let value = purchasePrice
+    for (let y = purchaseYear + 1; y <= year; y++) {
+      if (priceHistory[y] != null) value = priceHistory[y]!
+      else value = prev * (1 + appreciationRate / 100)
+      prev = value
+    }
+    return { value, source: 'model' }
+  }
+
+  if (fs.currentValue != null) return { value: fs.currentValue, source: 'appraisal' }
+  return { value: null, source: null }
+}
+
+export interface PortfolioAssetKpis {
+  totalValue: number
+  valuedCount: number
+  /** Mean YoY % for properties with a modeled series (excludes appraisal-only). */
+  avgYoYpct: number | null
+  yoyCount: number
+}
+
+export function calcPortfolioAssetKpis(
+  properties: Property[],
+  year: number,
+  to: CurrencyCode,
+  rates: FxRates,
+): PortfolioAssetKpis {
+  let totalValue = 0
+  let valuedCount = 0
+  const yoyPcts: number[] = []
+
+  for (const p of properties) {
+    const now = estimatedPropertyValueAtYear(p, year)
+    if (now.value != null && now.value > 0) {
+      totalValue += convert(now.value, p.currency, to, rates)
+      valuedCount++
+    }
+    if (now.source === 'model') {
+      const prevY = estimatedPropertyValueAtYear(p, year - 1)
+      if (prevY.value != null && now.value != null && prevY.value > 0) {
+        yoyPcts.push(((now.value - prevY.value) / prevY.value) * 100)
+      }
+    }
+  }
+
+  const avgYoYpct = yoyPcts.length > 0 ? yoyPcts.reduce((a, b) => a + b, 0) / yoyPcts.length : null
+  return { totalValue, valuedCount, avgYoYpct, yoyCount: yoyPcts.length }
+}

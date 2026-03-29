@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import type { Contract, Property } from '../lib/types'
-import { activeContract, calcAnnual, calcPortfolioTotalsIn, convertAnnual } from '../lib/finance'
+import { activeContract, calcAnnual, calcPortfolioAssetKpis, calcPortfolioTotalsIn, convertAnnual, estimatedPropertyValueAtYear } from '../lib/finance'
 import { fmtCurrencyM } from '../lib/format'
-import { type CurrencyCode, type FxRates, CURRENCIES, CURRENCY_LIST, loadFxRates, saveFxRates, flagUrl } from '../lib/currency'
+import { type CurrencyCode, type FxRates, CURRENCIES, CURRENCY_LIST, convert, loadFxRates, saveFxRates, flagUrl } from '../lib/currency'
 import { useAppState } from '../context/useAppState'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { getYearWindow } from '../lib/constants'
@@ -177,7 +177,51 @@ function KpiPctOfEgiDelta({ pct, kind }: { pct: number | null; kind: 'egi100' | 
   )
 }
 
-const KPI_KEYS = ['gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'net'] as const
+function formatOwnedSinceCell(iso: string | undefined | null): string {
+  if (!iso?.trim()) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+function propertyValueYoYPct(p: Property, year: number): number | null {
+  const now = estimatedPropertyValueAtYear(p, year)
+  if (now.source !== 'model') return null
+  const prev = estimatedPropertyValueAtYear(p, year - 1)
+  if (prev.value == null || now.value == null || prev.value <= 0) return null
+  return ((now.value - prev.value) / prev.value) * 100
+}
+
+/** Full calendar years (and fraction) from now until mortgage end; 0 if matured. */
+function mortgageYearsRemaining(endDateStr: string | undefined | null): number | null {
+  if (!endDateStr?.trim()) return null
+  const end = new Date(endDateStr)
+  if (Number.isNaN(end.getTime())) return null
+  const years = (end.getTime() - Date.now()) / (365.25 * 24 * 60 * 60 * 1000)
+  if (years <= 0) return 0
+  return Math.round(years * 10) / 10
+}
+
+function KpiAvgAssetYoYPill({ pct }: { pct: number | null }) {
+  if (pct === null || !Number.isFinite(pct)) return <KpiDeltaPlaceholder />
+  const nearZero = Math.abs(pct) < 0.05
+  const shown = nearZero ? '0' : Math.abs(pct).toFixed(1)
+  const positive = pct > 0 || nearZero
+  const title = 'Average year-over-year % change (modeled values only)'
+  return positive ? (
+    <div className="kpi-delta-pill kpi-delta-pill--up" title={title}>
+      <IconDeltaUp />
+      <span>{shown}%</span>
+    </div>
+  ) : (
+    <div className="kpi-delta-pill kpi-delta-pill--down" title={title}>
+      <IconDeltaDown />
+      <span>−{shown}%</span>
+    </div>
+  )
+}
+
+const KPI_KEYS = ['gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'net', 'assetValue', 'assetYoY'] as const
 type KpiKey = typeof KPI_KEYS[number]
 const KPI_META: Record<KpiKey, { label: string; cls?: string; negPrefix?: boolean; tip: string }> = {
   gpi: { label: 'Total GPI', tip: 'Gross Potential Income — total rent if fully occupied' },
@@ -187,11 +231,14 @@ const KPI_META: Record<KpiKey, { label: string; cls?: string; negPrefix?: boolea
   capex: { label: 'Total CAPEX', cls: 'red', negPrefix: true, tip: 'Capital Expenditures — major repairs & improvements' },
   taxes: { label: 'Total Taxes', cls: 'red', negPrefix: true, tip: 'Annual property and income taxes' },
   net: { label: 'Net cashflow', cls: 'green', tip: 'Final cashflow after all income and expenses' },
+  assetValue: { label: 'Total asset value', cls: 'purple', tip: 'Sum of estimated values for the selected year (purchase + appreciation and price history, or manual appraisal), in display currency' },
+  assetYoY: { label: 'Avg value change (YoY)', tip: 'Average year-over-year % change across properties with a modeled value history; appraisal-only holdings are excluded' },
 }
 
 const COL_KEYS = [
   'owner', 'country', 'status', 'endDate', 'taxStatus',
   'propertyType', 'bedrooms', 'area', 'bathrooms', 'parking', 'floor', 'estrato', 'yearBuilt', 'lastRenovation',
+  'estValue', 'valueYoY', 'ownedSince', 'debt', 'mtgYearsLeft',
   'gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin',
 ] as const
 type ColKey = typeof COL_KEYS[number]
@@ -199,14 +246,19 @@ const COL_LABELS: Record<ColKey, string> = {
   owner: 'Owner', country: 'Country', status: 'Status', endDate: 'Months Left', taxStatus: 'Tax Status',
   propertyType: 'Type', bedrooms: 'Beds', area: 'Area', bathrooms: 'Baths', parking: 'Parking',
   floor: 'Floor', estrato: 'Estrato', yearBuilt: 'Year Built', lastRenovation: 'Renovation',
+  estValue: 'Est. value', valueYoY: 'Value YoY', ownedSince: 'Owned since', debt: 'Debt', mtgYearsLeft: 'Mortgage (yrs)',
   gpi: 'GPI', egi: 'EGI', opex: 'OPEX', noi: 'NOI',
   capex: 'CAPEX', taxes: 'Taxes', netCf: 'Net CF', margin: 'Margin',
 }
 const DETAIL_COLS: ColKey[] = ['propertyType', 'bedrooms', 'area', 'bathrooms', 'parking', 'floor', 'estrato', 'yearBuilt', 'lastRenovation']
 const BUILT_IN_PRESETS: { id: string; label: string; cols: ColKey[] }[] = [
-  { id: 'financial', label: 'View 1', cols: ['gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin'] },
-  { id: 'details', label: 'View 2', cols: ['owner', 'country', 'status', 'endDate', 'taxStatus', ...DETAIL_COLS] },
-  { id: 'all', label: 'View 3', cols: [...COL_KEYS] },
+  {
+    id: 'financial',
+    label: 'Financial',
+    cols: ['estValue', 'valueYoY', 'ownedSince', 'debt', 'mtgYearsLeft', 'gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin'],
+  },
+  { id: 'details', label: 'Details', cols: ['owner', 'country', 'status', 'endDate', 'taxStatus', ...DETAIL_COLS] },
+  { id: 'all', label: 'All', cols: [...COL_KEYS] },
 ]
 const CUSTOM_SLOT_COUNT = 3
 type CustomPreset = { name: string; cols: ColKey[] }
@@ -253,6 +305,21 @@ function loadKpiVisibility(): Record<KpiKey, boolean> {
     if (raw) return JSON.parse(raw)
   } catch {}
   return Object.fromEntries(KPI_KEYS.map(k => [k, true])) as Record<KpiKey, boolean>
+}
+
+const KPI_ORDER_KEY = 'kpi-order'
+function loadKpiOrder(): KpiKey[] {
+  try {
+    const raw = localStorage.getItem(KPI_ORDER_KEY)
+    if (raw) {
+      const arr = JSON.parse(raw) as KpiKey[]
+      const known = new Set<string>(KPI_KEYS)
+      const valid = arr.filter((k): k is KpiKey => known.has(k))
+      const missing = ([...KPI_KEYS] as KpiKey[]).filter(k => !valid.includes(k))
+      return [...valid, ...missing]
+    }
+  } catch {}
+  return [...KPI_KEYS]
 }
 
 const IconEye = ({ visible }: { visible: boolean }) => (
@@ -454,6 +521,9 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<Property | null>(null)
   const [copied, setCopied] = useState(false)
   const [kpiVis, setKpiVis] = useState(loadKpiVisibility)
+  const [kpiOrder, setKpiOrder] = useState(loadKpiOrder)
+  const [dragKpi, setDragKpi] = useState<KpiKey | null>(null)
+  const [dragOverKpi, setDragOverKpi] = useState<KpiKey | null>(null)
   const [kpiMenuOpen, setKpiMenuOpen] = useState(false)
   const kpiMenuRef = useRef<HTMLDivElement>(null)
   const tableScrollRef = useRef<HTMLDivElement>(null)
@@ -576,6 +646,30 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
       else if (sortKey === 'estrato') { va = a.factSheet?.estrato ?? 0; vb = b.factSheet?.estrato ?? 0 }
       else if (sortKey === 'yearBuilt') { va = a.factSheet?.yearBuilt ?? 0; vb = b.factSheet?.yearBuilt ?? 0 }
       else if (sortKey === 'lastRenovation') { va = a.factSheet?.lastRenovation ?? 0; vb = b.factSheet?.lastRenovation ?? 0 }
+      else if (sortKey === 'estValue') {
+        const ea = estimatedPropertyValueAtYear(withYear(a), selectedYear)
+        const eb = estimatedPropertyValueAtYear(withYear(b), selectedYear)
+        va = ea.value != null ? convert(ea.value, a.currency, displayCurrency, fxRates) : -Infinity
+        vb = eb.value != null ? convert(eb.value, b.currency, displayCurrency, fxRates) : -Infinity
+      }
+      else if (sortKey === 'valueYoY') {
+        va = propertyValueYoYPct(withYear(a), selectedYear) ?? -Infinity
+        vb = propertyValueYoYPct(withYear(b), selectedYear) ?? -Infinity
+      }
+      else if (sortKey === 'ownedSince') {
+        const da = a.factSheet?.purchaseDate, db = b.factSheet?.purchaseDate
+        va = da ? new Date(da).getTime() : -Infinity
+        vb = db ? new Date(db).getTime() : -Infinity
+      }
+      else if (sortKey === 'debt') {
+        const ma = a.factSheet?.mortgage, mb = b.factSheet?.mortgage
+        va = ma?.hasMortgage && ma.outstandingBalance != null ? convert(ma.outstandingBalance, a.currency, displayCurrency, fxRates) : 0
+        vb = mb?.hasMortgage && mb.outstandingBalance != null ? convert(mb.outstandingBalance, b.currency, displayCurrency, fxRates) : 0
+      }
+      else if (sortKey === 'mtgYearsLeft') {
+        va = mortgageYearsRemaining(a.factSheet?.mortgage?.endDate) ?? -Infinity
+        vb = mortgageYearsRemaining(b.factSheet?.mortgage?.endDate) ?? -Infinity
+      }
       else {
         const aa = convertAnnual(calcAnnual(withYear(a)), a.currency, displayCurrency, fxRates)
         const ab = convertAnnual(calcAnnual(withYear(b)), b.currency, displayCurrency, fxRates)
@@ -597,6 +691,25 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   }, [filteredProperties, sortKey, sortDir, displayCurrency, fxRates, selectedYear])
 
   const totals = calcPortfolioTotalsIn(filteredProperties.map(withYear), displayCurrency, fxRates)
+
+  const valueEquityTotals = useMemo(() => {
+    let estValue = 0
+    let debt = 0
+    for (const p of filteredProperties) {
+      const e = estimatedPropertyValueAtYear(withYear(p), selectedYear)
+      if (e.value != null && e.value > 0) estValue += convert(e.value, p.currency, displayCurrency, fxRates)
+      const m = p.factSheet?.mortgage
+      if (m?.hasMortgage && m.outstandingBalance != null && m.outstandingBalance > 0) {
+        debt += convert(m.outstandingBalance, p.currency, displayCurrency, fxRates)
+      }
+    }
+    return { estValue, debt }
+  }, [filteredProperties, selectedYear, displayCurrency, fxRates])
+
+  const assetKpis = useMemo(
+    () => calcPortfolioAssetKpis(filteredProperties, selectedYear, displayCurrency, fxRates),
+    [filteredProperties, selectedYear, displayCurrency, fxRates],
+  )
 
   const annualsMap = useMemo(() => {
     const m = new Map<number, ReturnType<typeof calcAnnual>>()
@@ -718,7 +831,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
     })
   }
 
-  const visibleKpis = KPI_KEYS.filter(k => kpiVis[k])
+  const visibleKpis = kpiOrder.filter(k => kpiVis[k])
 
   function colExportDefs(dc: CurrencyCode) {
     const raw = (n: number | null | undefined) => n != null ? String(Math.round(n * 100) / 100) : ''
@@ -741,6 +854,37 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
       estrato: { label: 'Estrato', value: (p) => p.factSheet?.estrato != null ? String(p.factSheet.estrato) : '' },
       yearBuilt: { label: 'Year Built', value: (p) => p.factSheet?.yearBuilt != null ? String(p.factSheet.yearBuilt) : '' },
       lastRenovation: { label: 'Renovation', value: (p) => p.factSheet?.lastRenovation != null ? String(p.factSheet.lastRenovation) : '' },
+      estValue: {
+        label: `Est. value (${dc})`,
+        value: (p) => {
+          const e = estimatedPropertyValueAtYear(withYear(p), selectedYear)
+          if (e.value == null) return ''
+          return raw(convert(e.value, p.currency, dc, fxRates))
+        },
+      },
+      valueYoY: {
+        label: 'Value YoY %',
+        value: (p) => {
+          const y = propertyValueYoYPct(withYear(p), selectedYear)
+          return y != null && Number.isFinite(y) ? String(Math.round(y * 100) / 100) : ''
+        },
+      },
+      ownedSince: { label: 'Owned since', value: (p) => p.factSheet?.purchaseDate?.trim() ?? '' },
+      debt: {
+        label: `Debt (${dc})`,
+        value: (p) => {
+          const m = p.factSheet?.mortgage
+          if (!m?.hasMortgage || m.outstandingBalance == null) return ''
+          return raw(convert(m.outstandingBalance, p.currency, dc, fxRates))
+        },
+      },
+      mtgYearsLeft: {
+        label: 'Mortgage yrs left',
+        value: (p) => {
+          const y = mortgageYearsRemaining(p.factSheet?.mortgage?.endDate)
+          return y != null ? String(y) : ''
+        },
+      },
       gpi: { label: `GPI (${dc})`, value: (_p, a) => raw(a.gpi) },
       egi: { label: `EGI (${dc})`, value: (_p, a) => raw(a.egi) },
       opex: { label: `OPEX (${dc})`, value: (_p, a) => raw(-a.totalOpex) },
@@ -831,27 +975,63 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                   boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 220,
                   animation: 'selectSlideIn 0.15s ease-out',
                 }}>
-                  <div style={{ padding: '10px 14px 6px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                    Visible in dashboard
-                  </div>
-                  {KPI_KEYS.filter(k => kpiVis[k]).map(key => (
-                    <button
-                      key={key}
-                      className="ghost"
-                      style={{ width: '100%', textAlign: 'left', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 0 }}
-                      onClick={() => toggleKpi(key)}
-                    >
-                      <span style={{ fontSize: 13 }}>{KPI_META[key].label}</span>
-                      <IconEye visible={true} />
-                    </button>
-                  ))}
-                  {KPI_KEYS.some(k => !kpiVis[k]) && (
+                  {kpiOrder.some(k => kpiVis[k]) && (
+                    <>
+                      <div style={{ padding: '10px 14px 6px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                        Visible — drag to reorder
+                      </div>
+                      {kpiOrder.filter(k => kpiVis[k]).map(key => (
+                        <div
+                          key={key}
+                          draggable
+                          onDragStart={(e) => { setDragKpi(key); e.dataTransfer.effectAllowed = 'move' }}
+                          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragOverKpi !== key) setDragOverKpi(key) }}
+                          onDragLeave={() => setDragOverKpi(prev => prev === key ? null : prev)}
+                          onDrop={(e) => {
+                            e.preventDefault()
+                            if (dragKpi && dragKpi !== key) {
+                              setKpiOrder(prev => {
+                                const next = [...prev], from = next.indexOf(dragKpi), to = next.indexOf(key)
+                                next.splice(from, 1); next.splice(to, 0, dragKpi)
+                                localStorage.setItem(KPI_ORDER_KEY, JSON.stringify(next))
+                                return next
+                              })
+                            }
+                            setDragKpi(null); setDragOverKpi(null)
+                          }}
+                          onDragEnd={() => { setDragKpi(null); setDragOverKpi(null) }}
+                          style={{
+                            display: 'flex', alignItems: 'center', padding: '8px 14px', cursor: 'grab',
+                            opacity: dragKpi === key ? 0.35 : 1,
+                            borderTop: dragOverKpi === key && dragKpi !== key ? '2px solid #3b82f6' : '2px solid transparent',
+                            transition: 'border-color 0.1s, opacity 0.1s',
+                          }}
+                        >
+                          <svg width="10" height="14" viewBox="0 0 10 14" fill="#c4c9d2" style={{ flexShrink: 0, marginRight: 8 }}>
+                            <circle cx="3" cy="2" r="1.3"/><circle cx="7" cy="2" r="1.3"/>
+                            <circle cx="3" cy="7" r="1.3"/><circle cx="7" cy="7" r="1.3"/>
+                            <circle cx="3" cy="12" r="1.3"/><circle cx="7" cy="12" r="1.3"/>
+                          </svg>
+                          <span style={{ fontSize: 13, flex: 1 }}>{KPI_META[key].label}</span>
+                          <button
+                            className="ghost"
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); toggleKpi(key) }}
+                            style={{ padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0 }}
+                          >
+                            <IconEye visible={true} />
+                          </button>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {kpiOrder.some(k => !kpiVis[k]) && (
                     <>
                       <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
                       <div style={{ padding: '10px 14px 6px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
                         Hidden
                       </div>
-                      {KPI_KEYS.filter(k => !kpiVis[k]).map(key => (
+                      {kpiOrder.filter(k => !kpiVis[k]).map(key => (
                         <button
                           key={key}
                           className="ghost"
@@ -872,20 +1052,40 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
         </div>
         {visibleKpis.length > 0 && (
           <div className="kpi-row mb24">
-            {visibleKpis.map(key => (
-              <div className="kpi-card" key={key}>
-                <div className="kpi-label">{KPI_META[key].label} <KpiInfoIcon tip={KPI_META[key].tip} /></div>
-                <div className={`kpi-value ${KPI_META[key].cls || ''}`}>
-                  {KPI_META[key].negPrefix && totals[key] ? '−' : ''}
-                  {fm(totals[key])}
+            {visibleKpis.map(key => {
+              const valueCls =
+                key === 'assetYoY'
+                  ? (assetKpis.avgYoYpct == null ? '' : assetKpis.avgYoYpct < -0.05 ? 'neg' : 'pos')
+                  : KPI_META[key].cls || ''
+              const cashflowPct =
+                key === 'gpi' || key === 'egi' || key === 'opex' || key === 'noi' || key === 'capex' || key === 'taxes' || key === 'net'
+              let mainValue: string = '—'
+              if (key === 'assetValue') {
+                mainValue = assetKpis.valuedCount > 0 ? fm(assetKpis.totalValue) : '—'
+              } else if (key === 'assetYoY') {
+                if (assetKpis.avgYoYpct != null && Number.isFinite(assetKpis.avgYoYpct)) {
+                  const p = assetKpis.avgYoYpct
+                  const nearZero = Math.abs(p) < 0.05
+                  const abs = nearZero ? '0' : Math.abs(p).toFixed(1)
+                  mainValue = p > 0 || nearZero ? `+${abs}%` : `−${abs}%`
+                }
+              } else if (cashflowPct) {
+                const tk = key as keyof typeof totals
+                mainValue = `${KPI_META[key].negPrefix && totals[tk] ? '−' : ''}${fm(totals[tk])}`
+              }
+              return (
+                <div className="kpi-card" key={key}>
+                  <div className="kpi-label">{KPI_META[key].label} <KpiInfoIcon tip={KPI_META[key].tip} /></div>
+                  <div className={`kpi-value ${valueCls}`}>{mainValue}</div>
+                  {key === 'egi' && <KpiPctOfEgiDelta pct={totals.egi} kind="egi100" />}
+                  {key === 'opex' && <KpiPctOfEgiDelta pct={egiRatioRow.opexPct} kind="opex" />}
+                  {key === 'noi' && <KpiPctOfEgiDelta pct={egiRatioRow.noiPct} kind="noi" />}
+                  {key === 'taxes' && <KpiPctOfEgiDelta pct={egiRatioRow.taxesPct} kind="taxes" />}
+                  {key === 'net' && <KpiPctOfEgiDelta pct={egiRatioRow.netPct} kind="net" />}
+                  {key === 'assetYoY' && <KpiAvgAssetYoYPill pct={assetKpis.avgYoYpct} />}
                 </div>
-                {key === 'egi' && <KpiPctOfEgiDelta pct={totals.egi} kind="egi100" />}
-                {key === 'opex' && <KpiPctOfEgiDelta pct={egiRatioRow.opexPct} kind="opex" />}
-                {key === 'noi' && <KpiPctOfEgiDelta pct={egiRatioRow.noiPct} kind="noi" />}
-                {key === 'taxes' && <KpiPctOfEgiDelta pct={egiRatioRow.taxesPct} kind="taxes" />}
-                {key === 'net' && <KpiPctOfEgiDelta pct={egiRatioRow.netPct} kind="net" />}
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
         {/* Filter bar */}
@@ -1321,6 +1521,45 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                     estrato: <td key="estrato" className="text3">{p.factSheet?.estrato ?? '—'}</td>,
                     yearBuilt: <td key="yearBuilt" className="text3">{p.factSheet?.yearBuilt ?? '—'}</td>,
                     lastRenovation: <td key="lastRenovation" className="text3">{p.factSheet?.lastRenovation ?? '—'}</td>,
+                    estValue: (() => {
+                      const e = estimatedPropertyValueAtYear(withYear(p), selectedYear)
+                      const conv = e.value != null ? convert(e.value, p.currency, displayCurrency, fxRates) : null
+                      return (
+                        <td key="estValue" className={conv != null ? 'purple' : 'text3'}>
+                          {conv != null ? fm(conv) : '—'}
+                        </td>
+                      )
+                    })(),
+                    valueYoY: (() => {
+                      const y = propertyValueYoYPct(withYear(p), selectedYear)
+                      if (y == null || !Number.isFinite(y)) return <td key="valueYoY" className="text3">—</td>
+                      const near = Math.abs(y) < 0.05
+                      const shown = near ? '0' : Math.abs(y).toFixed(1)
+                      const positive = y > 0 || near
+                      return (
+                        <td key="valueYoY" className={positive ? 'pos' : 'neg'}>
+                          {positive ? '+' : '−'}{shown}%
+                        </td>
+                      )
+                    })(),
+                    ownedSince: (
+                      <td key="ownedSince" className="text3" style={{ whiteSpace: 'nowrap' }}>
+                        {formatOwnedSinceCell(p.factSheet?.purchaseDate)}
+                      </td>
+                    ),
+                    debt: (() => {
+                      const m = p.factSheet?.mortgage
+                      if (!m?.hasMortgage || m.outstandingBalance == null) {
+                        return <td key="debt" className="text3">—</td>
+                      }
+                      const conv = convert(m.outstandingBalance, p.currency, displayCurrency, fxRates)
+                      return <td key="debt" className="neg">−{fm(conv)}</td>
+                    })(),
+                    mtgYearsLeft: (() => {
+                      const y = mortgageYearsRemaining(p.factSheet?.mortgage?.endDate)
+                      if (y == null) return <td key="mtgYearsLeft" className="text3">—</td>
+                      return <td key="mtgYearsLeft">{y === 0 ? '0' : y}</td>
+                    })(),
                     gpi: <td key="gpi">{fm(a.gpi)}</td>,
                     egi: <td key="egi" className="pos">{fm(a.egi)}</td>,
                     opex: <td key="opex" className="neg">−{fm(a.totalOpex)}</td>,
@@ -1350,6 +1589,15 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                 })}
                 {(() => {
                   const totalMap: Partial<Record<ColKey, React.ReactNode>> = {
+                    estValue: <td key="estValue" className="purple">{valueEquityTotals.estValue > 0 ? fm(valueEquityTotals.estValue) : '—'}</td>,
+                    valueYoY: <td key="valueYoY" />,
+                    ownedSince: <td key="ownedSince" />,
+                    debt: (
+                      <td key="debt" className={valueEquityTotals.debt > 0 ? 'neg' : 'text3'}>
+                        {valueEquityTotals.debt > 0 ? `−${fm(valueEquityTotals.debt)}` : '—'}
+                      </td>
+                    ),
+                    mtgYearsLeft: <td key="mtgYearsLeft" />,
                     gpi: <td key="gpi">{fm(totals.gpi)}</td>,
                     egi: <td key="egi">{fm(totals.egi)}</td>,
                     opex: <td key="opex" className="neg">−{fm(totals.opex)}</td>,

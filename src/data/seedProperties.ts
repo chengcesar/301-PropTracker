@@ -127,6 +127,7 @@ export function seedProperties(): Property[] {
         {
           id: 1,
           date: '2026-03-15',
+          dateEnd: '2026-04-05',
           desc: 'Bathroom fixtures replacement',
           cat: 'Improvement',
           amount: 2400000,

@@ -34,6 +34,7 @@ export interface MonthData {
 export interface CapexItem {
   id: number
   date: string
+  dateEnd?: string
   desc: string
   cat: 'Improvement' | 'Equipment' | 'Repair' | 'Other'
   amount: number

@@ -252,7 +252,7 @@ export function AddPropertyModal({ onSave, onClose }: Props) {
         chip: '',
         customId: '',
         purchasePrice: null,
-        purchaseDate: '',
+        purchaseDate: form.startDate,
         currentValue: null,
         valuationDate: '',
         photos: [],
