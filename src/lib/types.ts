@@ -80,6 +80,8 @@ export interface MortgageInfo {
   lender: string
   loanNumber: string
   originalAmount: number | null
+  /** Cash down at purchase — mortgage setup / valuation */
+  downPayment?: number | null
   outstandingBalance: number | null
   monthlyPayment: number | null
   interestRate: number | null
@@ -101,6 +103,7 @@ export interface FactSheet {
   customId: string
   purchasePrice: number | null
   purchaseDate: string
+  /** Manual appraisal fallback when purchase + appreciation model is unavailable; modeled value is edited in Value & Equity. */
   currentValue: number | null
   valuationDate: string
   photos: string[]
@@ -109,6 +112,14 @@ export interface FactSheet {
   mortgage?: MortgageInfo
   contacts: PropertyContact[]
   notes: string
+  /** Year → local-currency value overrides entered by the user */
+  priceHistory?: Record<number, number>
+  /** Default annual appreciation % used for projections (e.g. 5 = 5%) */
+  appreciationRate?: number
+  /** How many years beyond the current year to project */
+  projectionYears?: number
+  /** Value & Equity tab: amortization charts vs price-history focus */
+  valueEquityView?: 'mortgage' | 'history'
 }
 
 export interface PropertyContact {

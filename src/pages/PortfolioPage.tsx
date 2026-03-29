@@ -204,9 +204,9 @@ const COL_LABELS: Record<ColKey, string> = {
 }
 const DETAIL_COLS: ColKey[] = ['propertyType', 'bedrooms', 'area', 'bathrooms', 'parking', 'floor', 'estrato', 'yearBuilt', 'lastRenovation']
 const BUILT_IN_PRESETS: { id: string; label: string; cols: ColKey[] }[] = [
-  { id: 'financial', label: 'Financial', cols: ['gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin'] },
-  { id: 'details', label: 'Details', cols: ['owner', 'country', 'status', 'endDate', 'taxStatus', ...DETAIL_COLS] },
-  { id: 'all', label: 'All', cols: [...COL_KEYS] },
+  { id: 'financial', label: 'View 1', cols: ['gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin'] },
+  { id: 'details', label: 'View 2', cols: ['owner', 'country', 'status', 'endDate', 'taxStatus', ...DETAIL_COLS] },
+  { id: 'all', label: 'View 3', cols: [...COL_KEYS] },
 ]
 const CUSTOM_SLOT_COUNT = 3
 type CustomPreset = { name: string; cols: ColKey[] }
@@ -237,7 +237,8 @@ function loadColOrder(): ColKey[] {
 }
 const COL_STORAGE_KEY = 'col-visibility'
 function loadColVisibility(): Record<ColKey, boolean> {
-  const defaults = Object.fromEntries(COL_KEYS.map(k => [k, !DETAIL_COLS.includes(k)])) as Record<ColKey, boolean>
+  const view1 = new Set<ColKey>(BUILT_IN_PRESETS[0].cols)
+  const defaults = Object.fromEntries(COL_KEYS.map(k => [k, view1.has(k)])) as Record<ColKey, boolean>
   try {
     const raw = localStorage.getItem(COL_STORAGE_KEY)
     if (raw) return { ...defaults, ...JSON.parse(raw) }
@@ -465,8 +466,8 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const [colVis, setColVis] = useState(loadColVisibility)
   const [colOrder, setColOrder] = useState(loadColOrder)
   const [colMenuOpen, setColMenuOpen] = useState(false)
-  // activePreset: built-in id string ('financial'|'details'|'all') or custom slot index (0|1|2) or null
-  const [activePreset, setActivePreset] = useState<string | number | null>('financial')
+  // activePreset: built-in id string ('financial'|'details'|'all') — UI labels View 1–3 — or custom slot index (0|1|2) or null
+  const [activePreset, setActivePreset] = useState<string | number | null>(BUILT_IN_PRESETS[0].id)
   const [customPresets, setCustomPresets] = useState(loadCustomPresets)
   const [renamingSlot, setRenamingSlot] = useState<number | null>(null)
   const [renameValue, setRenameValue] = useState('')

@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import Map, { Marker, type MapRef } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import type { FactSheet, Property, PropertyContact, OwnershipEntry, MortgageInfo } from '../../lib/types'
+import type { FactSheet, Property, PropertyContact, MortgageInfo } from '../../lib/types'
 import { fmt } from '../../lib/format'
 import type { CurrencyCode } from '../../lib/currency'
 import { COUNTRIES } from '../../lib/countries'
@@ -118,9 +118,6 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
   }
 
   const [editingLegal, setEditingLegal] = useState(false)
-  const [editingOwnership, setEditingOwnership] = useState(false)
-  const [editingMortgage, setEditingMortgage] = useState(false)
-
   const set = <K extends keyof FactSheet>(k: K, v: FactSheet[K]) => {
     onUpdateProp((p) => ({ ...p, factSheet: { ...(p.factSheet ?? EMPTY), [k]: v } }))
   }
@@ -136,58 +133,6 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
 
   const setPropNum = (k: keyof Property, raw: string) => {
     setProp(k, (parseFloat(raw.replace(/[^\d.]/g, '')) || 0) as Property[keyof Property])
-  }
-
-  /* ── Ownership ── */
-  const owners: OwnershipEntry[] = fs.owners?.length
-    ? fs.owners
-    : prop.owner
-      ? [{ id: 0, name: prop.owner, idNumber: '', equityPct: 100, notes: '' }]
-      : []
-  const ownersTotalPct = owners.reduce((s, o) => s + o.equityPct, 0)
-
-  const addOwner = () => {
-    const entry: OwnershipEntry = { id: Date.now(), name: '', idNumber: '', equityPct: 0, notes: '' }
-    onUpdateProp((p) => {
-      const f = p.factSheet ?? EMPTY
-      const current = f.owners?.length ? f.owners : p.owner ? [{ id: 0, name: p.owner, idNumber: '', equityPct: 100, notes: '' }] : []
-      return { ...p, factSheet: { ...f, owners: [...current, entry] } }
-    })
-  }
-
-  const updateOwner = (id: number, patch: Partial<OwnershipEntry>) => {
-    onUpdateProp((p) => {
-      const f = p.factSheet ?? EMPTY
-      const current = f.owners?.length ? f.owners : p.owner ? [{ id: 0, name: p.owner, idNumber: '', equityPct: 100, notes: '' }] : []
-      const updated = current.map((o) => (o.id === id ? { ...o, ...patch } : o))
-      const primaryOwner = updated[0]?.name || ''
-      const ownerDisplay = updated.length <= 2 ? updated.map((o) => o.name).filter(Boolean).join(', ') : `${primaryOwner} +${updated.length - 1}`
-      return { ...p, owner: ownerDisplay, factSheet: { ...f, owners: updated } }
-    })
-  }
-
-  const removeOwner = (id: number) => {
-    onUpdateProp((p) => {
-      const f = p.factSheet ?? EMPTY
-      const current = (f.owners ?? []).filter((o) => o.id !== id)
-      const ownerDisplay = current.length <= 2 ? current.map((o) => o.name).filter(Boolean).join(', ') : `${current[0]?.name || ''} +${current.length - 1}`
-      return { ...p, owner: ownerDisplay, factSheet: { ...f, owners: current } }
-    })
-  }
-
-  /* ── Mortgage ── */
-  const mortgage = fs.mortgage ?? EMPTY_MORTGAGE
-
-  const setMortgage = <K extends keyof MortgageInfo>(k: K, v: MortgageInfo[K]) => {
-    onUpdateProp((p) => {
-      const f = p.factSheet ?? EMPTY
-      return { ...p, factSheet: { ...f, mortgage: { ...(f.mortgage ?? EMPTY_MORTGAGE), [k]: v } } }
-    })
-  }
-
-  const setMortgageNum = (k: keyof MortgageInfo, raw: string) => {
-    const n = parseFloat(raw.replace(/[^\d.]/g, '')) || null
-    setMortgage(k, n as MortgageInfo[keyof MortgageInfo])
   }
 
   const contacts = fs.contacts ?? []
@@ -392,12 +337,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
           />
           {uploading && photos.length === 0 ? (
             <div className="fs-photo-skeleton">
-              <svg className="fs-photo-spinner" width="30" height="30" viewBox="0 0 90 90" fill="none">
-                <path d="M35.4551 56.9697C35.4551 56.384 35.9299 55.9091 36.5157 55.9091H54.546C55.1317 55.9091 55.6066 56.384 55.6066 56.9697V84.5455C55.6066 85.1312 55.1317 85.6061 54.546 85.6061H36.5157C35.9299 85.6061 35.4551 85.1312 35.4551 84.5455V56.9697Z" fill="#0539FF"/>
-                <path d="M10 73.9394C10 73.3536 10.4748 72.8788 11.0606 72.8788H29.0909C29.6767 72.8788 30.1515 73.3536 30.1515 73.9394V84.5455C30.1515 85.1312 29.6767 85.6061 29.0909 85.6061H11.0606C10.4749 85.6061 10 85.1312 10 84.5455L10 73.9394Z" fill="#0539FF"/>
-                <path d="M59.8477 46.2459C59.8477 45.6601 60.3225 45.1852 60.9083 45.1852H78.9386C79.5243 45.1852 79.9992 45.6601 79.9992 46.2458V84.4277C79.9992 85.0134 79.5243 85.4883 78.9386 85.4883H60.9083C60.3225 85.4883 59.8477 85.0134 59.8477 84.4277V46.2459Z" fill="#0539FF"/>
-                <path d="M10 40C10 20.67 25.67 5 45 5C63.6176 5 78.8401 19.5364 79.9368 37.8785C80.0067 39.0479 79.0503 40 77.8788 40H61.3805C60.209 40 59.2758 39.0448 59.1036 37.886C58.0822 31.0133 52.1568 25.7407 45 25.7407C37.1248 25.7407 30.7407 32.1248 30.7407 40V65.9848C30.7407 67.1564 29.791 68.1061 28.6195 68.1061H12.1212C10.9497 68.1061 10 67.1564 10 65.9848V40Z" fill="#0539FF"/>
-              </svg>
+              <img className="fs-photo-spinner" src="/App-Icon.svg" alt="" width={30} height={30} />
               <div style={{ fontSize: 14, color: '#6b7280', marginTop: 12 }}>Loading…</div>
             </div>
           ) : photos.length > 0 ? (
@@ -405,12 +345,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
               <div className="fs-photo-hero">
                 {uploading && (
                   <div className="fs-photo-uploading-overlay">
-                    <svg className="fs-photo-spinner" width="28" height="28" viewBox="0 0 90 90" fill="none">
-                      <path d="M35.4551 56.9697C35.4551 56.384 35.9299 55.9091 36.5157 55.9091H54.546C55.1317 55.9091 55.6066 56.384 55.6066 56.9697V84.5455C55.6066 85.1312 55.1317 85.6061 54.546 85.6061H36.5157C35.9299 85.6061 35.4551 85.1312 35.4551 84.5455V56.9697Z" fill="#fff"/>
-                      <path d="M10 73.9394C10 73.3536 10.4748 72.8788 11.0606 72.8788H29.0909C29.6767 72.8788 30.1515 73.3536 30.1515 73.9394V84.5455C30.1515 85.1312 29.6767 85.6061 29.0909 85.6061H11.0606C10.4749 85.6061 10 85.1312 10 84.5455L10 73.9394Z" fill="#fff"/>
-                      <path d="M59.8477 46.2459C59.8477 45.6601 60.3225 45.1852 60.9083 45.1852H78.9386C79.5243 45.1852 79.9992 45.6601 79.9992 46.2458V84.4277C79.9992 85.0134 79.5243 85.4883 78.9386 85.4883H60.9083C60.3225 85.4883 59.8477 85.0134 59.8477 84.4277V46.2459Z" fill="#fff"/>
-                      <path d="M10 40C10 20.67 25.67 5 45 5C63.6176 5 78.8401 19.5364 79.9368 37.8785C80.0067 39.0479 79.0503 40 77.8788 40H61.3805C60.209 40 59.2758 39.0448 59.1036 37.886C58.0822 31.0133 52.1568 25.7407 45 25.7407C37.1248 25.7407 30.7407 32.1248 30.7407 40V65.9848C30.7407 67.1564 29.791 68.1061 28.6195 68.1061H12.1212C10.9497 68.1061 10 67.1564 10 65.9848V40Z" fill="#fff"/>
-                    </svg>
+                    <img className="fs-photo-spinner" src="/App-Icon.svg" alt="" width={28} height={28} style={{ filter: 'brightness(0) invert(1)' }} />
                     <div style={{ fontSize: 13, color: '#fff', marginTop: 8 }}>Loading…</div>
                   </div>
                 )}
@@ -760,12 +695,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
           />
           {uploadingDoc && documents.length === 0 ? (
             <div className="fs-doc-skeleton">
-              <svg className="fs-photo-spinner" width="30" height="30" viewBox="0 0 90 90" fill="none">
-                <path d="M35.4551 56.9697C35.4551 56.384 35.9299 55.9091 36.5157 55.9091H54.546C55.1317 55.9091 55.6066 56.384 55.6066 56.9697V84.5455C55.6066 85.1312 55.1317 85.6061 54.546 85.6061H36.5157C35.9299 85.6061 35.4551 85.1312 35.4551 84.5455V56.9697Z" fill="#0539FF"/>
-                <path d="M10 73.9394C10 73.3536 10.4748 72.8788 11.0606 72.8788H29.0909C29.6767 72.8788 30.1515 73.3536 30.1515 73.9394V84.5455C30.1515 85.1312 29.6767 85.6061 29.0909 85.6061H11.0606C10.4749 85.6061 10 85.1312 10 84.5455L10 73.9394Z" fill="#0539FF"/>
-                <path d="M59.8477 46.2459C59.8477 45.6601 60.3225 45.1852 60.9083 45.1852H78.9386C79.5243 45.1852 79.9992 45.6601 79.9992 46.2458V84.4277C79.9992 85.0134 79.5243 85.4883 78.9386 85.4883H60.9083C60.3225 85.4883 59.8477 85.0134 59.8477 84.4277V46.2459Z" fill="#0539FF"/>
-                <path d="M10 40C10 20.67 25.67 5 45 5C63.6176 5 78.8401 19.5364 79.9368 37.8785C80.0067 39.0479 79.0503 40 77.8788 40H61.3805C60.209 40 59.2758 39.0448 59.1036 37.886C58.0822 31.0133 52.1568 25.7407 45 25.7407C37.1248 25.7407 30.7407 32.1248 30.7407 40V65.9848C30.7407 67.1564 29.791 68.1061 28.6195 68.1061H12.1212C10.9497 68.1061 10 67.1564 10 65.9848V40Z" fill="#0539FF"/>
-              </svg>
+              <img className="fs-photo-spinner" src="/App-Icon.svg" alt="" width={30} height={30} />
               <div style={{ fontSize: 14, color: '#6b7280', marginTop: 12 }}>Uploading…</div>
             </div>
           ) : documents.length > 0 ? (
@@ -785,12 +715,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
               <div className="fs-doc-viewer">
                 {uploadingDoc && (
                   <div className="fs-photo-uploading-overlay">
-                    <svg className="fs-photo-spinner" width="28" height="28" viewBox="0 0 90 90" fill="none">
-                      <path d="M35.4551 56.9697C35.4551 56.384 35.9299 55.9091 36.5157 55.9091H54.546C55.1317 55.9091 55.6066 56.384 55.6066 56.9697V84.5455C55.6066 85.1312 55.1317 85.6061 54.546 85.6061H36.5157C35.9299 85.6061 35.4551 85.1312 35.4551 84.5455V56.9697Z" fill="#fff"/>
-                      <path d="M10 73.9394C10 73.3536 10.4748 72.8788 11.0606 72.8788H29.0909C29.6767 72.8788 30.1515 73.3536 30.1515 73.9394V84.5455C30.1515 85.1312 29.6767 85.6061 29.0909 85.6061H11.0606C10.4749 85.6061 10 85.1312 10 84.5455L10 73.9394Z" fill="#fff"/>
-                      <path d="M59.8477 46.2459C59.8477 45.6601 60.3225 45.1852 60.9083 45.1852H78.9386C79.5243 45.1852 79.9992 45.6601 79.9992 46.2458V84.4277C79.9992 85.0134 79.5243 85.4883 78.9386 85.4883H60.9083C60.3225 85.4883 59.8477 85.0134 59.8477 84.4277V46.2459Z" fill="#fff"/>
-                      <path d="M10 40C10 20.67 25.67 5 45 5C63.6176 5 78.8401 19.5364 79.9368 37.8785C80.0067 39.0479 79.0503 40 77.8788 40H61.3805C60.209 40 59.2758 39.0448 59.1036 37.886C58.0822 31.0133 52.1568 25.7407 45 25.7407C37.1248 25.7407 30.7407 32.1248 30.7407 40V65.9848C30.7407 67.1564 29.791 68.1061 28.6195 68.1061H12.1212C10.9497 68.1061 10 67.1564 10 65.9848V40Z" fill="#fff"/>
-                    </svg>
+                    <img className="fs-photo-spinner" src="/App-Icon.svg" alt="" width={28} height={28} style={{ filter: 'brightness(0) invert(1)' }} />
                     <div style={{ fontSize: 13, color: '#fff', marginTop: 8 }}>Uploading…</div>
                   </div>
                 )}
@@ -892,163 +817,6 @@ export function FactSheetTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
               <div style={{ fontSize: 14, color: '#6b7280', marginTop: 8 }}>Upload documents</div>
               <div style={{ fontSize: 12, color: '#9ca3af' }}>Floor plans, maps, blueprints — JPEG, PNG or PDF</div>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Ownership */}
-      <div className="card mb24">
-        <div className="card-inner">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <span className="sec-title" style={{ margin: 0 }}>Ownership</span>
-            <button
-              type="button"
-              style={{ fontSize: 12, padding: '4px 14px', border: '1px solid var(--accent-bg)', color: 'var(--accent-bg)', background: 'transparent', borderRadius: 'var(--radius-sm)', fontWeight: 500, cursor: 'pointer' }}
-              onClick={() => setEditingOwnership(!editingOwnership)}
-            >
-              {editingOwnership ? 'Done' : 'Edit'}
-            </button>
-          </div>
-          {editingOwnership ? (
-            <div>
-              {owners.map((o) => (
-                <div key={o.id} className="contract-grid" style={{ marginBottom: 12, alignItems: 'end' }}>
-                  <div className="field">
-                    <label>Name</label>
-                    <input type="text" placeholder="Juan Pérez" value={o.name} onChange={(e) => updateOwner(o.id, { name: e.target.value })} />
-                  </div>
-                  <div className="field">
-                    <label>ID / NIT</label>
-                    <input type="text" placeholder="80.123.456" value={o.idNumber} onChange={(e) => updateOwner(o.id, { idNumber: e.target.value })} />
-                  </div>
-                  <div className="field">
-                    <label>Equity %</label>
-                    <input type="text" placeholder="100" value={o.equityPct || ''} onChange={(e) => updateOwner(o.id, { equityPct: parseFloat(e.target.value.replace(/[^\d.]/g, '')) || 0 })} />
-                  </div>
-                  <div className="field" style={{ flex: 'none' }}>
-                    <label>&nbsp;</label>
-                    <button type="button" className="ghost danger" style={{ padding: '8px 10px' }} onClick={() => removeOwner(o.id)} title="Remove owner">×</button>
-                  </div>
-                </div>
-              ))}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-                <button type="button" className="primary" style={{ fontSize: 12, padding: '5px 14px' }} onClick={addOwner}>+ Add owner</button>
-                {owners.length > 0 && (
-                  <span style={{ fontSize: 12, fontWeight: 500, color: Math.abs(ownersTotalPct - 100) < 0.1 ? 'var(--green)' : '#b91c1c' }}>
-                    Total: {ownersTotalPct.toFixed(ownersTotalPct % 1 ? 1 : 0)}%{Math.abs(ownersTotalPct - 100) >= 0.1 ? ' (should be 100%)' : ''}
-                  </span>
-                )}
-              </div>
-            </div>
-          ) : (
-            owners.length > 0 ? (
-              <div>
-                <div className="ct-fields">
-                  {owners.map((o) => (
-                    <ReadOnlyField key={o.id} label={o.name || '—'} value={`${o.equityPct}%${o.idNumber ? ` · ${o.idNumber}` : ''}`} />
-                  ))}
-                </div>
-                <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text3)' }}>
-                  {owners.length} owner{owners.length !== 1 ? 's' : ''} · Total equity: {ownersTotalPct}%
-                </div>
-              </div>
-            ) : (
-              <div style={{ fontSize: 13, color: 'var(--text3)' }}>No owners registered</div>
-            )
-          )}
-        </div>
-      </div>
-
-      {/* Mortgage */}
-      <div className="card mb24">
-        <div className="card-inner">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <span className="sec-title" style={{ margin: 0 }}>Mortgage</span>
-            <button
-              type="button"
-              style={{ fontSize: 12, padding: '4px 14px', border: '1px solid var(--accent-bg)', color: 'var(--accent-bg)', background: 'transparent', borderRadius: 'var(--radius-sm)', fontWeight: 500, cursor: 'pointer' }}
-              onClick={() => setEditingMortgage(!editingMortgage)}
-            >
-              {editingMortgage ? 'Done' : 'Edit'}
-            </button>
-          </div>
-          {editingMortgage ? (
-            <div>
-              <div className="field" style={{ marginBottom: 16 }}>
-                <label>Financing status</label>
-                <select value={mortgage.hasMortgage ? 'yes' : 'no'} onChange={(e) => setMortgage('hasMortgage', e.target.value === 'yes')}>
-                  <option value="no">No mortgage (outright owned)</option>
-                  <option value="yes">Has mortgage</option>
-                </select>
-              </div>
-              {mortgage.hasMortgage && (
-                <div className="contract-grid">
-                  <div className="field">
-                    <label>Lender</label>
-                    <input type="text" placeholder="Bancolombia" value={mortgage.lender} onChange={(e) => setMortgage('lender', e.target.value)} />
-                  </div>
-                  <div className="field">
-                    <label>Loan number</label>
-                    <input type="text" placeholder="Crédito hipotecario #" value={mortgage.loanNumber} onChange={(e) => setMortgage('loanNumber', e.target.value)} />
-                  </div>
-                  <div className="field">
-                    <label>Rate type</label>
-                    <select value={mortgage.rateType} onChange={(e) => setMortgage('rateType', e.target.value as 'fixed' | 'variable' | '')}>
-                      <option value="">Select...</option>
-                      <option value="fixed">Fixed (Tasa fija)</option>
-                      <option value="variable">Variable (UVR)</option>
-                    </select>
-                  </div>
-                  <div className="field">
-                    <label>Original amount ({prop.currency})</label>
-                    <input type="text" placeholder="250,000,000" value={mortgage.originalAmount ?? ''} onChange={(e) => setMortgageNum('originalAmount', e.target.value)} />
-                  </div>
-                  <div className="field">
-                    <label>Outstanding balance ({prop.currency})</label>
-                    <input type="text" placeholder="180,000,000" value={mortgage.outstandingBalance ?? ''} onChange={(e) => setMortgageNum('outstandingBalance', e.target.value)} />
-                  </div>
-                  <div className="field">
-                    <label>Monthly payment ({prop.currency})</label>
-                    <input type="text" placeholder="2,500,000" value={mortgage.monthlyPayment ?? ''} onChange={(e) => setMortgageNum('monthlyPayment', e.target.value)} />
-                  </div>
-                  <div className="field">
-                    <label>Interest rate</label>
-                    <input type="text" placeholder="12.5" value={mortgage.interestRate ?? ''} onChange={(e) => setMortgage('interestRate', parseFloat(e.target.value.replace(/[^\d.]/g, '')) || null)} />
-                    <span className="hint">% E.A.</span>
-                  </div>
-                  <div className="field">
-                    <label>Term (months)</label>
-                    <input type="text" placeholder="180" value={mortgage.termMonths ?? ''} onChange={(e) => setMortgageNum('termMonths', e.target.value)} />
-                    {mortgage.termMonths ? <span className="hint">{(mortgage.termMonths / 12).toFixed(1)} years</span> : null}
-                  </div>
-                  <div className="field">
-                    <label>Start date</label>
-                    <input type="date" value={mortgage.startDate} onChange={(e) => setMortgage('startDate', e.target.value)} />
-                  </div>
-                  <div className="field">
-                    <label>End date</label>
-                    <input type="date" value={mortgage.endDate} onChange={(e) => setMortgage('endDate', e.target.value)} />
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            mortgage.hasMortgage ? (
-              <div className="ct-fields">
-                <ReadOnlyField label="Lender" value={mortgage.lender} />
-                <ReadOnlyField label="Loan number" value={mortgage.loanNumber} />
-                <ReadOnlyField label="Original amount" value={mortgage.originalAmount ? fmt(cx(mortgage.originalAmount)) : null} />
-                <ReadOnlyField label="Outstanding balance" value={mortgage.outstandingBalance ? fmt(cx(mortgage.outstandingBalance)) : null} />
-                <ReadOnlyField label="Monthly payment" value={mortgage.monthlyPayment ? fmt(cx(mortgage.monthlyPayment)) : null} />
-                <ReadOnlyField label="Interest rate" value={mortgage.interestRate ? `${mortgage.interestRate}% E.A.` : null} />
-                <ReadOnlyField label="Rate type" value={mortgage.rateType === 'fixed' ? 'Fixed (Tasa fija)' : mortgage.rateType === 'variable' ? 'Variable (UVR)' : null} />
-                <ReadOnlyField label="Term" value={mortgage.termMonths ? `${mortgage.termMonths} months (${(mortgage.termMonths / 12).toFixed(1)} yrs)` : null} />
-                <ReadOnlyField label="Start date" value={mortgage.startDate} />
-                <ReadOnlyField label="End date" value={mortgage.endDate} />
-              </div>
-            ) : (
-              <span className="badge rented" style={{ background: '#d1fae5', color: '#047857' }}>Outright owned</span>
-            )
           )}
         </div>
       </div>

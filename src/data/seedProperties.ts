@@ -1,11 +1,38 @@
-import type { Property } from '../lib/types'
+import type { FactSheet, Property } from '../lib/types'
 
-/** Initial sample data — matches rental-manager.html */
+const MORTGAGE_OFF: NonNullable<FactSheet['mortgage']> = {
+  hasMortgage: false,
+  lender: '',
+  loanNumber: '',
+  originalAmount: null,
+  outstandingBalance: null,
+  monthlyPayment: null,
+  interestRate: null,
+  rateType: '',
+  termMonths: null,
+  startDate: '',
+  endDate: '',
+}
+
+const baseFields = {
+  postalCode: '',
+  area: 85,
+  bedrooms: 2,
+  bathrooms: 2,
+  parking: 1,
+  storageUnits: 0,
+  concierge: false,
+  terrace: 0,
+  balcony: 8,
+  floors: 14,
+}
+
+/** Initial sample data — Bogotá examples (optional legacy import). */
 export function seedProperties(): Property[] {
   return [
     {
       id: 1,
-      owner: '',
+      owner: 'María López',
       name: 'Apto 102',
       address: 'Calle 38 #4-32',
       neighbourhood: 'Chicó',
@@ -14,9 +41,8 @@ export function seedProperties(): Property[] {
       currency: 'COP',
       latitude: 4.6687,
       longitude: -74.0540,
-      type: '2-bed',
-      ref: 'AAA0093HHNN',
       year: 2026,
+      ...baseFields,
       contracts: [
         {
           id: 101,
@@ -113,12 +139,45 @@ export function seedProperties(): Property[] {
           { id: 1003, taxId: 'CL 78 5 32 - GS 18', amount: 225000, dueDate: '2025-04-25', status: 'paid' },
           { id: 1004, taxId: 'CL 78 5 32 - DP 14', amount: 36000, dueDate: '2025-04-25', status: 'paid' },
         ],
-
+      },
+      factSheet: {
+        propertyType: 'Apartment',
+        estrato: 5,
+        yearBuilt: 2016,
+        lastRenovation: 2026,
+        floor: 10,
+        matriculaInmobiliaria: '',
+        cedulaCatastral: '',
+        chip: '',
+        customId: '',
+        purchasePrice: 445_000_000,
+        purchaseDate: '2020-08-01',
+        currentValue: 510_000_000,
+        valuationDate: '2026-01-01',
+        photos: [],
+        contacts: [],
+        notes: '',
+        appreciationRate: 5.5,
+        valueEquityView: 'mortgage',
+        mortgage: {
+          hasMortgage: true,
+          lender: 'Bancolombia',
+          loanNumber: 'HIP-991045',
+          originalAmount: 285_000_000,
+          downPayment: 160_000_000,
+          outstandingBalance: 198_000_000,
+          monthlyPayment: null,
+          interestRate: 11.2,
+          rateType: 'fixed',
+          termMonths: 180,
+          startDate: '2020-08-01',
+          endDate: '2035-08-01',
+        },
       },
     },
     {
       id: 2,
-      owner: '',
+      owner: 'Carlos Vargas',
       name: 'Apto 103',
       address: 'Carrera 15 #93-47',
       neighbourhood: 'Chicó Norte',
@@ -127,9 +186,8 @@ export function seedProperties(): Property[] {
       currency: 'COP',
       latitude: 4.6780,
       longitude: -74.0485,
-      type: '2-bed',
-      ref: 'AAA0093HH0E',
       year: 2026,
+      ...baseFields,
       contracts: [
         {
           id: 201,
@@ -161,7 +219,28 @@ export function seedProperties(): Property[] {
         items: [
           { id: 2001, taxId: 'CL 78 5 32 - AP 103', amount: 6674000, dueDate: '2025-04-25', status: 'paid' },
         ],
-
+      },
+      factSheet: {
+        propertyType: 'Apartment',
+        estrato: 6,
+        yearBuilt: 2019,
+        lastRenovation: null,
+        floor: 6,
+        matriculaInmobiliaria: '',
+        cedulaCatastral: '',
+        chip: '',
+        customId: '',
+        purchasePrice: 520_000_000,
+        purchaseDate: '2019-05-15',
+        currentValue: 620_000_000,
+        valuationDate: '2026-01-15',
+        photos: [],
+        contacts: [],
+        notes: '',
+        appreciationRate: 6,
+        projectionYears: 15,
+        valueEquityView: 'history',
+        mortgage: { ...MORTGAGE_OFF },
       },
     },
   ]

@@ -11,8 +11,9 @@ import { OverviewTab } from '../components/property/OverviewTab'
 import { TaxesTab } from '../components/property/TaxesTab'
 import { ServicesTab } from '../components/property/ServicesTab'
 import { FactSheetTab } from '../components/property/FactSheetTab'
+import { ValueEquityTab } from '../components/property/ValueEquityTab'
 
-type TabId = 'overview' | 'contracts' | 'cashflow' | 'opex' | 'taxes' | 'services' | 'factsheet'
+type TabId = 'overview' | 'contracts' | 'cashflow' | 'opex' | 'taxes' | 'services' | 'valuation' | 'factsheet'
 
 type Props = {
   prop: Property
@@ -29,6 +30,7 @@ const TABS: [TabId, string][] = [
 ]
 
 const RIGHT_TABS: [TabId, string][] = [
+  ['valuation', 'Value & Equity'],
   ['factsheet', 'Fact Sheet'],
 ]
 
@@ -168,6 +170,7 @@ export function PropertyPage({ prop, onUpdateProp }: Props) {
         {tab === 'opex' && <OpexCapexTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
         {tab === 'taxes' && <TaxesTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
         {tab === 'services' && <ServicesTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
+        {tab === 'valuation' && <ValueEquityTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
         {tab === 'factsheet' && <FactSheetTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
       </div>
     </div>
