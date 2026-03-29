@@ -849,7 +849,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
           mapStyle={CARTO_STYLE}
           style={{ width: '100%', height: '100%' }}
           cursor={selectedProp ? 'default' : 'grab'}
-          attributionControl
+
         >
           <DeckGLOverlay
             layers={

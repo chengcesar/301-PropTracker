@@ -590,8 +590,6 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
 
         // Net row (income - expenses)
         const netVals = MONTHS.map((_, i) => incomeVals[i] - totals[i])
-        const _netTotal = incTotal - grandTotal
-        const _netFilled = netVals.filter((v) => v !== 0).length
 
         const stickyLabel: React.CSSProperties = {
           position: 'sticky', left: 0, zIndex: 2,

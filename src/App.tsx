@@ -31,7 +31,7 @@ function AppContent() {
 }
 
 function AppRoutes() {
-  const { user, loading } = useAuth()
+  const { user, loading } = useAuth() as { user: any; loading: boolean }
   if (loading) return (
     <div className="app-loading">
       <svg width="48" height="48" viewBox="0 0 90 90" fill="none" xmlns="http://www.w3.org/2000/svg">
