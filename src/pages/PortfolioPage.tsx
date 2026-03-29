@@ -10,6 +10,7 @@ import { getYearWindow } from '../lib/constants'
 import { KpiInfoIcon } from '../components/KpiInfoIcon'
 import { COUNTRIES, countryFlagUrl } from '../lib/countries'
 import { PropertyLeaderboardMap } from '../components/PropertyLeaderboardMap'
+import { AssetValueAppreciationCard } from '../components/AssetValueAppreciationCard'
 
 type Props = {
   properties: Property[]
@@ -1625,6 +1626,11 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
           annuals={annualsMap}
           onSelectProperty={onSelectProperty}
           activeContractMap={activeContractMap}
+        />
+        <AssetValueAppreciationCard
+          properties={filteredProperties}
+          displayCurrency={displayCurrency}
+          fxRates={fxRates}
         />
       </div>
       {deleteTarget && (
