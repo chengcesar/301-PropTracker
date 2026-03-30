@@ -4,6 +4,7 @@ import { AppStateProvider } from './context/AppStateProvider'
 import { useAppState } from './context/useAppState'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
+import AdminPage from './pages/AdminPage'
 import AuthHeader from './components/AuthHeader'
 import { PortfolioPage } from './pages/PortfolioPage'
 import { PropertyPage } from './pages/PropertyPage'
@@ -47,6 +48,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
+      <Route path="/admin" element={<AdminPage />} />
       <Route
         path="/"
         element={
