@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, useEffect, type Ref } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect, type Ref } from 'react'
 import Map, { type ViewStateChangeEvent, type MapRef } from 'react-map-gl/maplibre'
 import { DeckGLOverlay } from './DeckGLOverlay'
 import { ScatterplotLayer, IconLayer, TextLayer, WebMercatorViewport } from 'deck.gl'
@@ -410,11 +410,41 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
     syncViewportFromNativeMap()
   }, [fitBounds, syncViewportFromNativeMap])
 
-  // Re-fit bounds when filtered data changes
-  const dataKey = useMemo(() => data.map(d => d.id).join(','), [data])
+  /** Sorted — pill filter order must not block refit when the visible id set changes. */
+  const dataFitKey = useMemo(
+    () => [...data].map(d => d.id).sort((a, b) => a - b).join(','),
+    [data],
+  )
+
+  /**
+   * When portfolio filters change, vis.gl react-map-libre runs `setProps` in a layout effect and may
+   * `jumpTo` the last React viewState. Refit after that frame so bounds match the filtered points.
+   */
+  useLayoutEffect(() => {
+    if (data.length === 0) return
+    let cancelled = false
+    const tryFit = () => {
+      if (cancelled || !mapRef.current) return
+      const native = mapRef.current.getMap?.()
+      if (!native?.loaded?.()) return
+      fitBounds({ transitionMs: 420 })
+    }
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(tryFit)
+    })
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(id)
+    }
+  }, [dataFitKey, data.length, fitBounds])
+
   useEffect(() => {
-    if (didFitRef.current) fitBounds()
-  }, [dataKey, fitBounds])
+    if (selectedId == null) return
+    if (!data.some(d => d.id === selectedId)) {
+      setSelectedId(null)
+      setClusterMemberIds(null)
+    }
+  }, [data, selectedId])
 
   const flyTo = useCallback(
     (lng: number, lat: number) => {

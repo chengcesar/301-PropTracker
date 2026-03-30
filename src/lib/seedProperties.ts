@@ -1,5 +1,29 @@
 import type { FactSheet, Property } from './types'
 
+/** Aligned sample valuation series (new users). Years 2016–2025; amounts use comma thousands in source — ÷1000 for app scale. */
+const SAMPLE_VALUATION_YEARS = [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025] as const
+
+const SAMPLE_PROPERTY_VALUE_ROWS = [
+  [386_993_000, 441_974_000, 539_351_000, 484_511_000, 507_629_000, 510_878_000, 458_390_000, 534_298_000, 522_709_000, 567_352_000],
+  [372_087_000, 382_783_000, 438_182_000, 421_641_000, 466_498_000, 469_484_000, 470_803_000, 500_321_000, 488_788_000, 559_119_000],
+  [614_491_000, 700_710_000, 681_204_000, 763_409_000, 801_576_000, 806_706_000, 726_738_000, 828_201_000, 800_011_000, 864_754_000],
+  [258_496_000, 261_497_000, 248_463_000, 259_484_000, 315_211_000, 317_228_000, 343_705_000, 333_073_000, 336_184_000, 457_499_000],
+  [611_713_000, 548_604_000, 486_033_000, 506_862_000, 601_091_000, 604_938_000, 558_120_000, 538_422_000, 540_138_000, 614_540_000],
+] as const
+
+function seedPurchaseAndPriceHistory(row: (typeof SAMPLE_PROPERTY_VALUE_ROWS)[number]): {
+  purchasePrice: number
+  priceHistory: Record<number, number>
+} {
+  const scale = (raw: number) => Math.round(raw / 1000)
+  const purchasePrice = scale(row[0])
+  const priceHistory: Record<number, number> = {}
+  for (let i = 1; i < SAMPLE_VALUATION_YEARS.length; i++) {
+    priceHistory[SAMPLE_VALUATION_YEARS[i]] = scale(row[i])
+  }
+  return { purchasePrice, priceHistory }
+}
+
 const FS_MORTGAGE_OFF: NonNullable<FactSheet['mortgage']> = {
   hasMortgage: false,
   lender: '',
@@ -14,9 +38,20 @@ const FS_MORTGAGE_OFF: NonNullable<FactSheet['mortgage']> = {
   endDate: '',
 }
 
-/** Four sample properties for new accounts. Only the first is mortgaged; the other three are owned outright. */
+/** Five sample properties for new accounts. Only the first is mortgaged; the others are owned outright. Valuations align from 2016. */
 export function createSeedProperties(): Property[] {
   const now = Date.now()
+  const v0 = seedPurchaseAndPriceHistory(SAMPLE_PROPERTY_VALUE_ROWS[0])
+  const v1 = seedPurchaseAndPriceHistory(SAMPLE_PROPERTY_VALUE_ROWS[1])
+  const v2 = seedPurchaseAndPriceHistory(SAMPLE_PROPERTY_VALUE_ROWS[2])
+  const v3 = seedPurchaseAndPriceHistory(SAMPLE_PROPERTY_VALUE_ROWS[3])
+  const v4 = seedPurchaseAndPriceHistory(SAMPLE_PROPERTY_VALUE_ROWS[4])
+  const purchaseStart = '2016-01-15'
+  const mortgageEnd = '2046-01-15'
+  const p0 = v0.purchasePrice
+  const mDown = Math.round((119_000 / 595_000) * p0)
+  const mOrig = p0 - mDown
+  const mOutstanding = Math.round((465_000 / 595_000) * p0)
 
   return [
     // 1 — Downtown apartment, rented
@@ -86,15 +121,15 @@ export function createSeedProperties(): Property[] {
       factSheet: {
         propertyType: 'Apartment',
         estrato: null,
-        yearBuilt: 2018,
+        yearBuilt: 2015,
         lastRenovation: 2025,
         floor: 12,
         matriculaInmobiliaria: '',
         cedulaCatastral: '',
         chip: '',
         customId: '',
-        purchasePrice: 595000,
-        purchaseDate: '2024-01-15',
+        purchasePrice: v0.purchasePrice,
+        purchaseDate: purchaseStart,
         currentValue: null,
         valuationDate: '',
         photos: [],
@@ -103,19 +138,20 @@ export function createSeedProperties(): Property[] {
         appreciationRate: 3.5,
         projectionYears: 15,
         valueEquityView: 'mortgage',
+        priceHistory: v0.priceHistory,
         mortgage: {
           hasMortgage: true,
           lender: 'First National Bank',
           loanNumber: 'MTG-88421',
-          originalAmount: 476000,
-          downPayment: 119000,
-          outstandingBalance: 465000,
+          originalAmount: mOrig,
+          downPayment: mDown,
+          outstandingBalance: mOutstanding,
           monthlyPayment: null,
           interestRate: 6.625,
           rateType: 'fixed',
           termMonths: 360,
-          startDate: '2024-01-15',
-          endDate: '2054-01-15',
+          startDate: purchaseStart,
+          endDate: mortgageEnd,
         },
       },
     },
@@ -186,8 +222,8 @@ export function createSeedProperties(): Property[] {
         cedulaCatastral: '',
         chip: '',
         customId: '',
-        purchasePrice: 410000,
-        purchaseDate: '2020-08-01',
+        purchasePrice: v1.purchasePrice,
+        purchaseDate: purchaseStart,
         currentValue: null,
         valuationDate: '',
         photos: [],
@@ -196,6 +232,7 @@ export function createSeedProperties(): Property[] {
         appreciationRate: 4.5,
         projectionYears: 15,
         valueEquityView: 'history',
+        priceHistory: v1.priceHistory,
         mortgage: { ...FS_MORTGAGE_OFF } as NonNullable<FactSheet['mortgage']>,
       },
     },
@@ -238,15 +275,15 @@ export function createSeedProperties(): Property[] {
       factSheet: {
         propertyType: 'Apartment',
         estrato: null,
-        yearBuilt: 2020,
+        yearBuilt: 2008,
         lastRenovation: null,
         floor: 8,
         matriculaInmobiliaria: '',
         cedulaCatastral: '',
         chip: '',
         customId: '',
-        purchasePrice: 548000,
-        purchaseDate: '2018-03-01',
+        purchasePrice: v2.purchasePrice,
+        purchaseDate: purchaseStart,
         currentValue: null,
         valuationDate: '',
         photos: [],
@@ -255,6 +292,7 @@ export function createSeedProperties(): Property[] {
         appreciationRate: 5,
         projectionYears: 15,
         valueEquityView: 'history',
+        priceHistory: v2.priceHistory,
         mortgage: { ...FS_MORTGAGE_OFF } as NonNullable<FactSheet['mortgage']>,
       },
     },
@@ -324,8 +362,8 @@ export function createSeedProperties(): Property[] {
         cedulaCatastral: '',
         chip: '',
         customId: '',
-        purchasePrice: 318000,
-        purchaseDate: '2016-06-01',
+        purchasePrice: v3.purchasePrice,
+        purchaseDate: purchaseStart,
         currentValue: null,
         valuationDate: '',
         photos: [],
@@ -336,6 +374,87 @@ export function createSeedProperties(): Property[] {
         appreciationRate: 3.25,
         projectionYears: 12,
         valueEquityView: 'history',
+        priceHistory: v3.priceHistory,
+        mortgage: { ...FS_MORTGAGE_OFF } as NonNullable<FactSheet['mortgage']>,
+      },
+    },
+
+    // 5 — Urban duplex, rented
+    {
+      id: now + 400,
+      owner: 'James Rivera',
+      name: 'Riverside Duplex',
+      address: '892 Wacker Drive, Unit A/B',
+      neighbourhood: 'River North',
+      postalCode: '',
+      city: 'Chicago',
+      country: 'United States',
+      currency: 'USD',
+      latitude: 41.8925,
+      longitude: -87.6364,
+      area: 165,
+      bedrooms: 4,
+      bathrooms: 3,
+      parking: 1,
+      storageUnits: 0,
+      concierge: false,
+      terrace: 0,
+      balcony: 0,
+      floors: 2,
+      year: 2026,
+      contracts: [
+        {
+          id: now + 401,
+          status: 'active',
+          tenant: 'Jordan Lee & Avery Park',
+          contractManager: '',
+          monthlyRent: 4200,
+          startDate: '2025-07-01',
+          endDate: '2026-06-30',
+          paymentDay: 1,
+          deposit: 2,
+          increment: 'fixed',
+          ipcExtra: 0,
+          adminFee: 0,
+          notes: '',
+        },
+      ],
+      months: {
+        2026: {
+          0: { status: 'rented', incomeOverride: null, expenses: { electricity: 180, water: 90, gas: 110, insurance: 195, maintenance: 75 } },
+          1: { status: 'rented', incomeOverride: null, expenses: { electricity: 195, water: 90, gas: 115, insurance: 195, maintenance: 75 } },
+          2: { status: 'rented', incomeOverride: null, expenses: { electricity: 170, water: 95, gas: 105, insurance: 195, maintenance: 75 } },
+        },
+      },
+      capex: [],
+      taxes: { items: [{ id: now + 402, taxId: 'IL-COOK-2026', amount: 8900, dueDate: '2026-08-01', status: 'pending' }] },
+      services: {
+        2026: [
+          { id: now + 403, provider: 'ComEd', type: 'Electricity', accountNumber: 'CE-77102', monthlyCost: 180, notes: '' },
+          { id: now + 404, provider: 'City Water', type: 'Water', accountNumber: 'CW-22901', monthlyCost: 90, notes: '' },
+        ],
+      },
+      factSheet: {
+        propertyType: 'House',
+        estrato: null,
+        yearBuilt: 2002,
+        lastRenovation: 2019,
+        floor: null,
+        matriculaInmobiliaria: '',
+        cedulaCatastral: '',
+        chip: '',
+        customId: '',
+        purchasePrice: v4.purchasePrice,
+        purchaseDate: purchaseStart,
+        currentValue: null,
+        valuationDate: '',
+        photos: [],
+        contacts: [],
+        notes: '',
+        appreciationRate: 4,
+        projectionYears: 15,
+        valueEquityView: 'history',
+        priceHistory: v4.priceHistory,
         mortgage: { ...FS_MORTGAGE_OFF } as NonNullable<FactSheet['mortgage']>,
       },
     },

@@ -300,12 +300,18 @@ function loadColVisibility(): Record<ColKey, boolean> {
 }
 
 const STORAGE_KEY = 'kpi-visibility'
+function defaultKpiVisibility(): Record<KpiKey, boolean> {
+  const vis = Object.fromEntries(KPI_KEYS.map(k => [k, true])) as Record<KpiKey, boolean>
+  vis.assetValue = false
+  vis.assetYoY = false
+  return vis
+}
 function loadKpiVisibility(): Record<KpiKey, boolean> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) return JSON.parse(raw)
   } catch {}
-  return Object.fromEntries(KPI_KEYS.map(k => [k, true])) as Record<KpiKey, boolean>
+  return defaultKpiVisibility()
 }
 
 const KPI_ORDER_KEY = 'kpi-order'

@@ -1,25 +1,19 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
+const EMAIL_AUTH_DISABLED_MESSAGE =
+  'Free trials are only available with Google login.';
+
 export default function LoginPage() {
-  const { loginWithGoogle, loginWithEmail, signupWithEmail } = useAuth();
+  const { loginWithGoogle } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignup, setIsSignup] = useState(false);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault();
-    setError('');
-    setError('Free Trials are only available with Google Sign in');
-    return;
-    try {
-      await signupWithEmail(email, password);
-    } catch (err) {
-      setError(err.message.replace('Firebase: ', '').replace(/\(auth\/.*\)/, '').trim());
-    }
-    setLoading(false);
+    setError(EMAIL_AUTH_DISABLED_MESSAGE);
   }
 
   async function handleGoogle() {
@@ -65,8 +59,8 @@ export default function LoginPage() {
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters" required minLength={6} />
           </div>
           {error && <div className="login-error">{error}</div>}
-          <button className="login-submit" type="submit" disabled={loading}>
-            {loading ? 'Please wait...' : isSignup ? 'Create Account' : 'Sign In'}
+          <button className="login-submit" type="submit">
+            {isSignup ? 'Create Account' : 'Sign In'}
           </button>
         </form>
 

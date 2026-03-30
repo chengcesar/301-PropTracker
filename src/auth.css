@@ -142,7 +142,7 @@
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: linear-gradient(180deg, rgba(86, 86, 86, 1) 0%, rgba(217, 217, 217, 0) 50%, transparent 50%);
+  background: linear-gradient(180deg, rgba(255, 254, 254, 0.514) 0%, rgba(217, 217, 217, 0) 40%, transparent 50%);
 }
 .landing-content {
   position: relative;
@@ -195,12 +195,17 @@
   gap: 8px;
   font-size: 14px;
   font-weight: 500;
-  color: #D5D5D5;
+  color: #000000;
   background: none;
   padding: 0;
 }
 .landing-feature svg {
   flex-shrink: 0;
+  color: inherit;
+}
+.landing-feature svg circle,
+.landing-feature svg path {
+  stroke: currentColor;
 }
 .landing-title {
   font-family: 'Averia Serif Libre', serif;
@@ -208,7 +213,7 @@
   line-height: 1.05;
   font-weight: 400;
   letter-spacing: -0.5px;
-  color: #ffffff;
+  color: #5e2d2d;
   margin: 0 0 24px;
   text-align: center;
 }
@@ -222,7 +227,7 @@
 .landing-tagline {
   max-width: 700px;
   font-size: 20px;
-  color: #D5D5D5;
+  color: #000000;
   margin: 0 auto 36px;
   line-height: 1.5;
   opacity: 0.8;
@@ -232,6 +237,7 @@
   justify-content: center;
   margin-bottom: 28px;
 }
+.landing-logo img,
 .landing-logo svg {
   display: block;
   width: clamp(48px, 22vw, 90px);
@@ -397,6 +403,7 @@
     font-size: clamp(14px, 4vw, 18px);
     margin-bottom: 24px;
   }
+  .landing-logo img,
   .landing-logo svg {
     width: clamp(40px, 18vw, 70px);
   }

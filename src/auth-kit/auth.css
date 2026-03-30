@@ -259,6 +259,11 @@ input:focus { border-color: #3b82f6; background: #fff; }
 }
 .landing-feature svg {
   flex-shrink: 0;
+  color: inherit;
+}
+.landing-feature svg circle,
+.landing-feature svg path {
+  stroke: currentColor;
 }
 .landing-title {
   font-family: 'Averia Serif Libre', serif;
@@ -266,7 +271,7 @@ input:focus { border-color: #3b82f6; background: #fff; }
   line-height: 1.05;
   font-weight: 600;
   letter-spacing: -0.5px;
-  color: #1a1d23;
+  color: #5e2d2d;
   margin: 0 0 24px;
   text-align: center;
 }
@@ -280,7 +285,7 @@ input:focus { border-color: #3b82f6; background: #fff; }
 .landing-tagline {
   max-width: 700px;
   font-size: 20px;
-  color: #374151;
+  color: #5e2d2d;
   margin: 0 auto 36px;
   line-height: 1.5;
   opacity: 0.8;
@@ -290,6 +295,7 @@ input:focus { border-color: #3b82f6; background: #fff; }
   justify-content: center;
   margin-bottom: 28px;
 }
+.landing-logo img,
 .landing-logo svg {
   display: block;
   width: clamp(48px, 22vw, 90px);
@@ -359,6 +365,7 @@ input:focus { border-color: #3b82f6; background: #fff; }
     font-size: clamp(14px, 4vw, 18px);
     margin-bottom: 24px;
   }
+  .landing-logo img,
   .landing-logo svg {
     width: clamp(40px, 18vw, 70px);
   }
