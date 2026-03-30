@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import type { Contract, Property } from '../lib/types'
-import { activeContract, calcAnnual, calcPortfolioAssetKpis, calcPortfolioTotalsIn, convertAnnual, estimatedPropertyValueAtYear } from '../lib/finance'
+import { activeContract, calcAnnual, calcIrr, calcPortfolioAssetKpis, calcPortfolioTotalsIn, convertAnnual, estimatedPropertyValueAtYear } from '../lib/finance'
 import { fmtCurrencyM } from '../lib/format'
 import { type CurrencyCode, type FxRates, CURRENCIES, CURRENCY_LIST, convert, loadFxRates, saveFxRates, flagUrl } from '../lib/currency'
 import { useAppState } from '../context/useAppState'
@@ -222,18 +222,21 @@ function KpiAvgAssetYoYPill({ pct }: { pct: number | null }) {
   )
 }
 
-const KPI_KEYS = ['gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'net', 'assetValue', 'assetYoY'] as const
+const KPI_KEYS = ['gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'net', 'assetValue', 'assetYoY', 'irrAnnualized', 'capRate', 'equityMultiplier'] as const
 type KpiKey = typeof KPI_KEYS[number]
 const KPI_META: Record<KpiKey, { label: string; cls?: string; negPrefix?: boolean; tip: string }> = {
-  gpi: { label: 'Total GPI', tip: 'Gross Potential Income — total rent if fully occupied' },
-  egi: { label: 'Total EGI', cls: 'green', tip: 'Effective Gross Income — actual rent collected' },
-  opex: { label: 'Total OPEX', cls: 'red', negPrefix: true, tip: 'Operating expenses — admin, maintenance, insurance, etc.' },
-  noi: { label: 'Total NOI', cls: 'purple', tip: 'Net Operating Income — income minus operating expenses' },
-  capex: { label: 'Total CAPEX', cls: 'red', negPrefix: true, tip: 'Capital Expenditures — major repairs & improvements' },
-  taxes: { label: 'Total Taxes', cls: 'red', negPrefix: true, tip: 'Annual property and income taxes' },
-  net: { label: 'Net cashflow', cls: 'green', tip: 'Final cashflow after all income and expenses' },
-  assetValue: { label: 'Total asset value', cls: 'purple', tip: 'Sum of estimated values for the selected year (purchase + appreciation and price history, or manual appraisal), in display currency' },
-  assetYoY: { label: 'Avg value change (YoY)', tip: 'Average year-over-year % change across properties with a modeled value history; appraisal-only holdings are excluded' },
+  gpi: { label: 'GPI', tip: 'Gross Potential Income — total rent if fully occupied' },
+  egi: { label: 'EGI', cls: 'green', tip: 'Effective Gross Income — actual rent collected' },
+  opex: { label: 'OPEX', cls: 'red', negPrefix: true, tip: 'Operating expenses — admin, maintenance, insurance, etc.' },
+  noi: { label: 'NOI', cls: 'purple', tip: 'Net Operating Income — income minus operating expenses' },
+  capex: { label: 'CAPEX', cls: 'red', negPrefix: true, tip: 'Capital Expenditures — major repairs & improvements' },
+  taxes: { label: 'Taxes', cls: 'red', negPrefix: true, tip: 'Annual property and income taxes' },
+  net: { label: 'Net CF', cls: 'green', tip: 'Final cashflow after all income and expenses' },
+  assetValue: { label: 'Asset Value', cls: 'purple', tip: 'Sum of estimated values for the selected year (purchase + appreciation and price history, or manual appraisal), in display currency' },
+  assetYoY: { label: 'Value YoY', tip: 'Average year-over-year % change across properties with a modeled value history; appraisal-only holdings are excluded' },
+  irrAnnualized: { label: 'IRR (ann.)', tip: 'Internal Rate of Return annualized — equity-weighted average across properties with purchase data. Uses constant annual cashflow assumption based on selected year.' },
+  capRate: { label: 'Cap Rate', tip: 'Capitalization Rate — NOI divided by total estimated asset value. Measures yield on the asset base independent of financing.' },
+  equityMultiplier: { label: 'Equity Mult.', tip: 'Total asset value divided by total equity (value − debt). Higher values indicate more leverage.' },
 }
 
 const COL_KEYS = [
@@ -300,18 +303,17 @@ function loadColVisibility(): Record<ColKey, boolean> {
 }
 
 const STORAGE_KEY = 'kpi-visibility'
+const DEFAULT_KPI_ON = new Set<KpiKey>(['gpi', 'egi', 'opex', 'noi', 'capex', 'net'])
 function defaultKpiVisibility(): Record<KpiKey, boolean> {
-  const vis = Object.fromEntries(KPI_KEYS.map(k => [k, true])) as Record<KpiKey, boolean>
-  vis.assetValue = false
-  vis.assetYoY = false
-  return vis
+  return Object.fromEntries(KPI_KEYS.map(k => [k, DEFAULT_KPI_ON.has(k)])) as Record<KpiKey, boolean>
 }
 function loadKpiVisibility(): Record<KpiKey, boolean> {
+  const defaults = defaultKpiVisibility()
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) return { ...defaults, ...JSON.parse(raw) }
   } catch {}
-  return defaultKpiVisibility()
+  return defaults
 }
 
 const KPI_ORDER_KEY = 'kpi-order'
@@ -751,6 +753,67 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
     }
   }, [totals.egi, totals.opex, totals.noi, totals.taxes, totals.net])
 
+  const advancedKpis = useMemo(() => {
+    // Cap Rate = NOI / Total Asset Value
+    const capRate =
+      assetKpis.totalValue > 0 && Number.isFinite(totals.noi)
+        ? (totals.noi / assetKpis.totalValue) * 100
+        : null
+
+    // Equity Multiplier = Total Asset Value / Total Equity
+    const totalEquity = valueEquityTotals.estValue - valueEquityTotals.debt
+    const equityMultiplier =
+      totalEquity > 0 && valueEquityTotals.estValue > 0
+        ? valueEquityTotals.estValue / totalEquity
+        : null
+
+    // IRR Annualized — equity-weighted average across properties with purchase data
+    let irrWeightedSum = 0
+    let irrTotalWeight = 0
+    for (const p of filteredProperties) {
+      const fs = p.factSheet
+      if (!fs?.purchaseDate || !fs.purchasePrice || fs.purchasePrice <= 0) continue
+      const purchaseYear = new Date(fs.purchaseDate).getFullYear()
+      if (Number.isNaN(purchaseYear)) continue
+      const yearsHeld = selectedYear - purchaseYear
+      if (yearsHeld <= 0) continue
+
+      const mortgageOriginal = fs.mortgage?.hasMortgage ? (fs.mortgage.originalAmount ?? 0) : 0
+      const downPayment =
+        fs.mortgage?.downPayment != null && fs.mortgage.downPayment > 0
+          ? fs.mortgage.downPayment
+          : Math.max(0, fs.purchasePrice - mortgageOriginal)
+      const equityInvested = downPayment > 0 ? downPayment : fs.purchasePrice
+
+      const est = estimatedPropertyValueAtYear({ ...p, year: selectedYear }, selectedYear)
+      if (est.value == null || est.value <= 0) continue
+      const outstanding =
+        fs.mortgage?.hasMortgage && fs.mortgage.outstandingBalance != null
+          ? fs.mortgage.outstandingBalance
+          : 0
+
+      const annual = convertAnnual(calcAnnual({ ...p, year: selectedYear }), p.currency, displayCurrency, fxRates)
+      const annualNetCf = annual.netCf
+      const estValueDisp = convert(est.value, p.currency, displayCurrency, fxRates)
+      const outstandingDisp = convert(outstanding, p.currency, displayCurrency, fxRates)
+      const equityInvestedDisp = convert(equityInvested, p.currency, displayCurrency, fxRates)
+      if (equityInvestedDisp <= 0) continue
+
+      const cashFlows: number[] = [-equityInvestedDisp]
+      for (let y = 1; y < yearsHeld; y++) cashFlows.push(annualNetCf)
+      cashFlows.push(annualNetCf + (estValueDisp - outstandingDisp))
+
+      const irr = calcIrr(cashFlows)
+      if (irr != null && irr > -0.99 && irr < 5) {
+        irrWeightedSum += irr * equityInvestedDisp
+        irrTotalWeight += equityInvestedDisp
+      }
+    }
+    const irrAnnualized = irrTotalWeight > 0 ? irrWeightedSum / irrTotalWeight : null
+
+    return { capRate, equityMultiplier, irrAnnualized }
+  }, [filteredProperties, selectedYear, totals.noi, assetKpis.totalValue, valueEquityTotals, displayCurrency, fxRates])
+
   useEffect(() => {
     const el = tableScrollRef.current
     if (!el) return
@@ -1059,10 +1122,15 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
         {visibleKpis.length > 0 && (
           <div className="kpi-row mb24">
             {visibleKpis.map(key => {
-              const valueCls =
+              const isIrr = key === 'irrAnnualized'
+              const isCapRate = key === 'capRate'
+              const isEquityMul = key === 'equityMultiplier'
+              let valueCls =
                 key === 'assetYoY'
                   ? (assetKpis.avgYoYpct == null ? '' : assetKpis.avgYoYpct < -0.05 ? 'neg' : 'pos')
-                  : KPI_META[key].cls || ''
+                  : isIrr
+                    ? (advancedKpis.irrAnnualized == null ? '' : advancedKpis.irrAnnualized < 0 ? 'neg' : 'pos')
+                    : KPI_META[key].cls || ''
               const cashflowPct =
                 key === 'gpi' || key === 'egi' || key === 'opex' || key === 'noi' || key === 'capex' || key === 'taxes' || key === 'net'
               let mainValue: string = '—'
@@ -1074,6 +1142,19 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                   const nearZero = Math.abs(p) < 0.05
                   const abs = nearZero ? '0' : Math.abs(p).toFixed(1)
                   mainValue = p > 0 || nearZero ? `+${abs}%` : `−${abs}%`
+                }
+              } else if (isIrr) {
+                if (advancedKpis.irrAnnualized != null && Number.isFinite(advancedKpis.irrAnnualized)) {
+                  const pct = advancedKpis.irrAnnualized * 100
+                  mainValue = `${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(1)}%`
+                }
+              } else if (isCapRate) {
+                if (advancedKpis.capRate != null && Number.isFinite(advancedKpis.capRate)) {
+                  mainValue = `${advancedKpis.capRate.toFixed(2)}%`
+                }
+              } else if (isEquityMul) {
+                if (advancedKpis.equityMultiplier != null && Number.isFinite(advancedKpis.equityMultiplier)) {
+                  mainValue = `${advancedKpis.equityMultiplier.toFixed(2)}x`
                 }
               } else if (cashflowPct) {
                 const tk = key as keyof typeof totals
@@ -1631,6 +1712,8 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
           annuals={annualsMap}
           onSelectProperty={onSelectProperty}
           activeContractMap={activeContractMap}
+          displayCurrency={displayCurrency}
+          fxRates={fxRates}
         />
         <AssetValueAppreciationCard
           properties={filteredProperties}

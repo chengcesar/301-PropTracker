@@ -270,6 +270,37 @@ export function estimatedPropertyValueAtYear(property: Property, year: number): 
   return { value: null, source: null }
 }
 
+/**
+ * Compute IRR via Newton-Raphson.
+ * cashFlows[0] is the initial outflow (negative), subsequent entries are inflows.
+ * Returns null if the series has no sign change or doesn't converge.
+ */
+export function calcIrr(cashFlows: number[]): number | null {
+  if (cashFlows.length < 2) return null
+  // Need at least one sign change
+  const hasNeg = cashFlows.some(cf => cf < 0)
+  const hasPos = cashFlows.some(cf => cf > 0)
+  if (!hasNeg || !hasPos) return null
+
+  const npv = (r: number) =>
+    cashFlows.reduce((acc, cf, t) => acc + cf / Math.pow(1 + r, t), 0)
+  const dnpv = (r: number) =>
+    cashFlows.reduce((acc, cf, t) => acc - (t * cf) / Math.pow(1 + r, t + 1), 0)
+
+  let rate = 0.1
+  for (let i = 0; i < 150; i++) {
+    const n = npv(rate)
+    const d = dnpv(rate)
+    if (Math.abs(d) < 1e-12) break
+    const next = rate - n / d
+    if (!Number.isFinite(next) || next < -0.9999) break
+    if (Math.abs(next - rate) < 1e-9) return next
+    rate = next
+    if (rate > 10) break
+  }
+  return null
+}
+
 export interface PortfolioAssetKpis {
   totalValue: number
   valuedCount: number

@@ -4,7 +4,9 @@ import { DeckGLOverlay } from './DeckGLOverlay'
 import { ScatterplotLayer, IconLayer, TextLayer, WebMercatorViewport } from 'deck.gl'
 import Supercluster from 'supercluster'
 import type { Property } from '../lib/types'
-import { activeContract, estimatedPropertyValueAtYear, type AnnualResult } from '../lib/finance'
+import { activeContract, convertAnnual, estimatedPropertyValueAtYear, type AnnualResult } from '../lib/finance'
+import { convert, type CurrencyCode, type FxRates } from '../lib/currency'
+import { fmtCurrencyM } from '../lib/format'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 type MetricKey = 'area' | 'rent' | 'monthlyIncome' | 'noi' | 'netCf' | 'estValue'
@@ -137,11 +139,9 @@ function monthsUntil(dateStr: string): number {
   return (end.getFullYear() - now.getFullYear()) * 12 + (end.getMonth() - now.getMonth())
 }
 
-function formatMetricValue(key: MetricKey, value: number): string {
+function formatMetricValue(key: MetricKey, value: number, displayCurrency: CurrencyCode): string {
   if (key === 'area') return `${value.toLocaleString()} m²`
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`
-  if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}K`
-  return `$${value.toLocaleString()}`
+  return fmtCurrencyM(value, displayCurrency)
 }
 
 type MapClusterBBox = [number, number, number, number]
@@ -171,14 +171,35 @@ interface ClusterCircle {
   pointCount: number
 }
 
+/** Match `clusterLayer` pixel radius (single source for bubble + pulse sizing). */
+function clusterBubbleRadiusPx(pointCount: number): number {
+  return Math.min(46, 14 + Math.sqrt(pointCount) * 5)
+}
+
+interface AlertPulseDatum {
+  position: [number, number]
+  color: [number, number, number]
+  basePx: number
+}
+
+function getCriticalAlertPulseColor(p: PropertyWithMetrics): [number, number, number] {
+  const criticalRules = ALERT_RULES.filter(r => r.severity === 'critical')
+  for (const r of criticalRules) {
+    if (r.check(p)) return r.color
+  }
+  return [185, 28, 28]
+}
+
 interface Props {
   properties: Property[]
   annuals: Map<number, AnnualResult>
   onSelectProperty: (id: number) => void
   activeContractMap: Map<number, { monthlyRent: number } | null>
+  displayCurrency: CurrencyCode
+  fxRates: FxRates
 }
 
-export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, activeContractMap }: Props) {
+export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, activeContractMap, displayCurrency, fxRates }: Props) {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('area')
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -220,9 +241,12 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
     return properties
       .filter(p => p.latitude != null && p.longitude != null)
       .map(p => {
-        const annual = annuals.get(p.id)!
+        const annualRaw = annuals.get(p.id)!
+        const annual = convertAnnual(annualRaw, p.currency, displayCurrency, fxRates)
         const contract = activeContractMap.get(p.id)
         const ac = activeContract(p)
+        const rentNative = contract?.monthlyRent ?? 0
+        const estNative = estimatedPropertyValueAtYear(p, new Date().getFullYear()).value ?? 0
         return {
           id: p.id,
           name: p.name,
@@ -231,11 +255,11 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
           latitude: p.latitude!,
           longitude: p.longitude!,
           area: p.area || 0,
-          rent: contract?.monthlyRent ?? 0,
+          rent: convert(rentNative, p.currency, displayCurrency, fxRates),
           monthlyIncome: (annual?.egi ?? 0) / 12,
           noi: annual?.noi ?? 0,
           netCf: annual?.netCf ?? 0,
-          estValue: estimatedPropertyValueAtYear(p, new Date().getFullYear()).value ?? 0,
+          estValue: convert(estNative, p.currency, displayCurrency, fxRates),
           annual: annual ?? { gpi: 0, vacancy: 0, egi: 0, totalOpex: 0, noi: 0, totalCapex: 0, taxes: 0, netCf: 0 },
           monthsLeft: ac?.endDate ? monthsUntil(ac.endDate) : null,
           vacant: !ac,
@@ -259,7 +283,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
           estrato: p.factSheet?.estrato ?? null,
         }
       })
-  }, [properties, annuals, activeContractMap])
+  }, [properties, annuals, activeContractMap, displayCurrency, fxRates])
 
   // Max-based normalization (top value = 100%)
   const normalizedMap = useMemo(() => {
@@ -556,7 +580,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
     data: clusterCircles,
     radiusUnits: 'pixels',
     getPosition: (d: ClusterCircle) => d.position,
-    getRadius: (d: ClusterCircle) => Math.min(46, 14 + Math.sqrt(d.pointCount) * 5),
+    getRadius: (d: ClusterCircle) => clusterBubbleRadiusPx(d.pointCount),
     getFillColor: [PRIMARY_BLUE[0], PRIMARY_BLUE[1], PRIMARY_BLUE[2], 236],
     getLineColor: [255, 255, 255, 245],
     stroked: true,
@@ -599,10 +623,13 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
     },
   })
 
-  const pointRadius = (d: PropertyWithMetrics) => {
-    const pct = normalizedMap.get(d.id) ?? 50
-    return 20 + (pct / 100) * 16
-  }
+  const pointRadiusPx = useCallback(
+    (d: PropertyWithMetrics) => {
+      const pct = normalizedMap.get(d.id) ?? 50
+      return 20 + (pct / 100) * 16
+    },
+    [normalizedMap],
+  )
   const onPointClick = ({ object }: { object?: PropertyWithMetrics }) => {
     const p = object
     if (p) {
@@ -625,7 +652,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
         getIcon: () => 'marker',
         sizeUnits: 'pixels',
         getPosition: (d: PropertyWithMetrics) => [d.longitude, d.latitude],
-        getSize: pointRadius,
+        getSize: pointRadiusPx,
         getColor: (d: PropertyWithMetrics) =>
           d.id === selectedId ? [41, 204, 151, 255] : PRIMARY_BLUE,
         sizeMinPixels: 20,
@@ -642,7 +669,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
         pickable: true,
         radiusUnits: 'pixels',
         getPosition: (d: PropertyWithMetrics) => [d.longitude, d.latitude],
-        getRadius: pointRadius,
+        getRadius: pointRadiusPx,
         radiusMinPixels: 20,
         radiusMaxPixels: 40,
         getFillColor: (d: PropertyWithMetrics) =>
@@ -667,6 +694,58 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
   }, [data])
 
   const alertIds = useMemo(() => new Set(alertData.map(d => d.id)), [alertData])
+
+  /** One ring per map cluster that contains critical alerts (cluster-sized), or per unclustered alert (marker-sized, scales when selected). */
+  const alertPulseData = useMemo((): AlertPulseDatum[] => {
+    if (!alertOn || alertData.length === 0) return []
+    const alertIdSet = new Set(alertData.map(d => d.id))
+    const covered = new Set<number>()
+    const items: AlertPulseDatum[] = []
+
+    for (const c of clusterCircles) {
+      const propsInCluster: PropertyWithMetrics[] = []
+      try {
+        const leaves = clusterIndex.getLeaves(c.clusterId, 256, 0) as Array<{ properties?: { propId?: number } }>
+        for (const f of leaves) {
+          const id = f.properties?.propId
+          if (id != null && alertIdSet.has(id)) {
+            const row = propById.get(id)
+            if (row) propsInCluster.push(row)
+          }
+        }
+      } catch {
+        continue
+      }
+      if (propsInCluster.length === 0) continue
+      for (const p of propsInCluster) covered.add(p.id)
+      const bubbleR = clusterBubbleRadiusPx(c.pointCount)
+      const color = getCriticalAlertPulseColor(propsInCluster[0])
+      items.push({
+        position: c.position,
+        color,
+        basePx: bubbleR * 1.05,
+      })
+    }
+
+    for (const p of alertData) {
+      if (covered.has(p.id)) continue
+      const selectedBoost = selectedId === p.id ? 1.42 : 1
+      items.push({
+        position: [p.longitude, p.latitude],
+        color: getCriticalAlertPulseColor(p),
+        basePx: pointRadiusPx(p) * selectedBoost,
+      })
+    }
+    return items
+  }, [
+    alertOn,
+    alertData,
+    clusterCircles,
+    clusterIndex,
+    propById,
+    selectedId,
+    pointRadiusPx,
+  ])
 
   // Build structured alert notifications grouped by severity
   const alertNotifications = useMemo(() => {
@@ -702,22 +781,20 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
     return () => cancelAnimationFrame(rafRef.current)
   }, [alertOn, alertData.length])
 
-  // Pulsating ring layer
+  // Pulsating ring layer (pixel radii tied to cluster bubble or property marker; draw above clusters)
   const pulseLayer = useMemo(() => {
-    if (!alertOn || alertData.length === 0) return null
+    if (!alertOn || alertPulseData.length === 0) return null
     const cycle = (pulseTime % 2000) / 2000 // 0→1 over 2s
-    const ruleColor = ALERT_RULES[0].color
-    return new ScatterplotLayer({
+    return new ScatterplotLayer<AlertPulseDatum>({
       id: 'alert-pulse',
-      data: alertData,
-      getPosition: (d: PropertyWithMetrics) => [d.longitude, d.latitude],
-      getRadius: () => 200 + cycle * 800,
-      getFillColor: () => [...ruleColor, Math.round((1 - cycle) * 80)] as [number, number, number, number],
-      getLineColor: () => [...ruleColor, Math.round((1 - cycle) * 180)] as [number, number, number, number],
+      data: alertPulseData,
+      radiusUnits: 'pixels',
+      getPosition: d => d.position,
+      getRadius: d => d.basePx * (0.72 + cycle * 2.15),
+      getFillColor: d => [...d.color, Math.round((1 - cycle) * 78)] as [number, number, number, number],
+      getLineColor: d => [...d.color, Math.round((1 - cycle) * 175)] as [number, number, number, number],
       stroked: true,
       lineWidthMinPixels: 2,
-      radiusMinPixels: 8 + cycle * 20,
-      radiusMaxPixels: 40,
       pickable: false,
       updateTriggers: {
         getRadius: [pulseTime],
@@ -725,7 +802,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
         getLineColor: [pulseTime],
       },
     })
-  }, [alertOn, alertData, pulseTime])
+  }, [alertOn, alertPulseData, pulseTime])
 
   const handleMove = useCallback((evt: ViewStateChangeEvent) => {
     setViewState(evt.viewState as typeof viewState)
@@ -807,7 +884,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
                     </div>
                   </div>
                   <div className="lb-row-right">
-                    <span className="lb-row-value">{formatMetricValue(selectedMetric, prop[selectedMetric])}</span>
+                    <span className="lb-row-value">{formatMetricValue(selectedMetric, prop[selectedMetric], displayCurrency)}</span>
                     <div className="lb-bar-container">
                       <div className="lb-bar-track">
                         <div className="lb-bar" style={{ width: `${Math.max(pct, 2)}%` }} />
@@ -885,7 +962,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
           <DeckGLOverlay
             layers={
               pulseLayer
-                ? [pulseLayer, clusterLayer, clusterLabelLayer, clusterHitLayer, propertyIconLayer]
+                ? [clusterLayer, clusterLabelLayer, pulseLayer, clusterHitLayer, propertyIconLayer]
                 : [clusterLayer, clusterLabelLayer, clusterHitLayer, propertyIconLayer]
             }
           />
@@ -977,31 +1054,31 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
               <div className="lb-popup-metrics">
                 <div className="lb-popup-row">
                   <span className="lb-popup-label">Rent</span>
-                  <span className="lb-popup-val">{formatMetricValue('rent', selectedProp.rent)}</span>
+                  <span className="lb-popup-val">{formatMetricValue('rent', selectedProp.rent, displayCurrency)}</span>
                 </div>
                 <div className="lb-popup-row">
                   <span className="lb-popup-label">Monthly Income</span>
-                  <span className="lb-popup-val">{formatMetricValue('monthlyIncome', selectedProp.monthlyIncome)}</span>
+                  <span className="lb-popup-val">{formatMetricValue('monthlyIncome', selectedProp.monthlyIncome, displayCurrency)}</span>
                 </div>
                 <div className="lb-popup-row">
                   <span className="lb-popup-label">GPI</span>
-                  <span className="lb-popup-val">{formatMetricValue('rent', selectedProp.annual.gpi)}</span>
+                  <span className="lb-popup-val">{formatMetricValue('rent', selectedProp.annual.gpi, displayCurrency)}</span>
                 </div>
                 <div className="lb-popup-row">
                   <span className="lb-popup-label">EGI</span>
-                  <span className="lb-popup-val">{formatMetricValue('rent', selectedProp.annual.egi)}</span>
+                  <span className="lb-popup-val">{formatMetricValue('rent', selectedProp.annual.egi, displayCurrency)}</span>
                 </div>
                 <div className="lb-popup-row">
                   <span className="lb-popup-label">OPEX</span>
-                  <span className="lb-popup-val">{formatMetricValue('rent', selectedProp.annual.totalOpex)}</span>
+                  <span className="lb-popup-val">{formatMetricValue('rent', selectedProp.annual.totalOpex, displayCurrency)}</span>
                 </div>
                 <div className="lb-popup-row">
                   <span className="lb-popup-label">NOI</span>
-                  <span className="lb-popup-val">{formatMetricValue('noi', selectedProp.annual.noi)}</span>
+                  <span className="lb-popup-val">{formatMetricValue('noi', selectedProp.annual.noi, displayCurrency)}</span>
                 </div>
                 <div className="lb-popup-row">
                   <span className="lb-popup-label">Net CF</span>
-                  <span className="lb-popup-val">{formatMetricValue('netCf', selectedProp.annual.netCf)}</span>
+                  <span className="lb-popup-val">{formatMetricValue('netCf', selectedProp.annual.netCf, displayCurrency)}</span>
                 </div>
               </div>
             ) : (
