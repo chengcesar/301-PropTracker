@@ -4,10 +4,10 @@ import { DeckGLOverlay } from './DeckGLOverlay'
 import { ScatterplotLayer, IconLayer, TextLayer, WebMercatorViewport } from 'deck.gl'
 import Supercluster from 'supercluster'
 import type { Property } from '../lib/types'
-import { activeContract, type AnnualResult } from '../lib/finance'
+import { activeContract, estimatedPropertyValueAtYear, type AnnualResult } from '../lib/finance'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
-type MetricKey = 'area' | 'rent' | 'monthlyIncome' | 'noi' | 'netCf'
+type MetricKey = 'area' | 'rent' | 'monthlyIncome' | 'noi' | 'netCf' | 'estValue'
 
 interface MetricOption {
   key: MetricKey
@@ -16,6 +16,7 @@ interface MetricOption {
 
 const METRIC_OPTIONS: MetricOption[] = [
   { key: 'area', label: 'Area m²' },
+  { key: 'estValue', label: 'Est. Value' },
   { key: 'rent', label: 'Rent' },
   { key: 'monthlyIncome', label: 'Monthly Income' },
   { key: 'noi', label: 'NOI' },
@@ -39,6 +40,7 @@ interface PropertyWithMetrics {
   monthlyIncome: number
   noi: number
   netCf: number
+  estValue: number
   annual: AnnualResult
   monthsLeft: number | null
   vacant: boolean
@@ -233,6 +235,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
           monthlyIncome: (annual?.egi ?? 0) / 12,
           noi: annual?.noi ?? 0,
           netCf: annual?.netCf ?? 0,
+          estValue: estimatedPropertyValueAtYear(p, new Date().getFullYear()).value ?? 0,
           annual: annual ?? { gpi: 0, vacancy: 0, egi: 0, totalOpex: 0, noi: 0, totalCapex: 0, taxes: 0, netCf: 0 },
           monthsLeft: ac?.endDate ? monthsUntil(ac.endDate) : null,
           vacant: !ac,
@@ -258,16 +261,14 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
       })
   }, [properties, annuals, activeContractMap])
 
-  // Min-max normalization
+  // Max-based normalization (top value = 100%)
   const normalizedMap = useMemo(() => {
     const map = new window.Map<number, number>()
     if (data.length === 0) return map
     const values = data.map(d => d[selectedMetric])
-    const min = Math.min(...values)
     const max = Math.max(...values)
-    const range = max - min
     for (const d of data) {
-      const pct = range === 0 ? 50 : Math.round(((d[selectedMetric] - min) / range) * 100)
+      const pct = max === 0 ? 0 : Math.round((d[selectedMetric] / max) * 100)
       map.set(d.id, pct)
     }
     return map
