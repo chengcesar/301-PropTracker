@@ -543,7 +543,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
                     }}
                   >
                     <svg width="28" height="36" viewBox="0 0 28 36" fill="none" style={{ cursor: repositionPin ? 'grab' : undefined }}>
-                      <path d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.268 21.732 0 14 0z" fill="#3b82f6"/>
+                      <path d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.268 21.732 0 14 0z" fill="var(--accent-bg)"/>
                       <circle cx="14" cy="13" r="5" fill="#fff"/>
                     </svg>
                   </Marker>

@@ -15,7 +15,7 @@ const SERVICE_TYPES = ['Admin', 'Electricity', 'Water', 'Gas', 'Internet', 'TV',
 const SERVICE_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   Admin:       { bg: '#f3e8ff', color: '#7c3aed' },
   Electricity: { bg: '#fef9c3', color: '#a16207' },
-  Water:       { bg: '#dbeafe', color: '#2563eb' },
+  Water:       { bg: 'var(--accent-muted-bg)', color: 'var(--accent-hover)' },
   Gas:         { bg: '#ffedd5', color: '#c2410c' },
   Internet:    { bg: '#e0e7ff', color: '#4338ca' },
   TV:          { bg: '#fce7f3', color: '#be185d' },

@@ -11,6 +11,7 @@ import { KpiInfoIcon } from '../components/KpiInfoIcon'
 import { COUNTRIES, countryFlagUrl } from '../lib/countries'
 import { PropertyLeaderboardMap } from '../components/PropertyLeaderboardMap'
 import { AssetValueAppreciationCard } from '../components/AssetValueAppreciationCard'
+import { FundingRatioToolPlaceholder } from '../components/portfolio/FundingRatioToolPlaceholder'
 
 type Props = {
   properties: Property[]
@@ -41,9 +42,43 @@ const IconSearch = () => (
 const IconDownload = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#4B5563" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2.75v8"/><path d="M5.5 8.417L8 10.75l2.5-2.333"/><path d="M2.833 10.75v2.667a1.333 1.333 0 001.334 1.333h7.666a1.333 1.333 0 001.334-1.333V10.75"/></svg>
 )
+/** Download icon for modal/header actions — follows `currentColor` */
+const IconDownloadCurrent = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M8 2.75v8" /><path d="M5.5 8.417L8 10.75l2.5-2.333" /><path d="M2.833 10.75v2.667a1.333 1.333 0 001.334 1.333h7.666a1.333 1.333 0 001.334-1.333V10.75" />
+  </svg>
+)
+/** Outward diagonal arrows — expand / maximize */
+const IconWindowMaximize = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+    <path
+      d="M8.75 7.25L13.25 2.75M13.25 2.75H9.75M13.25 2.75V6.25"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M7.25 8.75L2.75 13.25M2.75 13.25H6.25M2.75 13.25V9.75"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+const IconWindowRestore = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M5.5 3.5h7v7h-7z" />
+    <path d="M3.5 5.5h7v7h-7z" />
+  </svg>
+)
 const IconSpreadsheet = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M.52 0A.525.525 0 000 .525v13.347c0 .29.235.525.52.525h14.96a.525.525 0 00.52-.525V.525A.525.525 0 0015.48 0H.52zm.53 1.05h4.55v2.287H1.05V1.05zm5.6 0h8.3v2.287h-8.3V1.05zM1.05 4.387h4.55V6.675H1.05V4.387zm5.6 0h8.3V6.675h-8.3V4.387zM1.05 7.724h4.55v2.286H1.05V7.724zm5.6 0h8.3v2.286h-8.3V7.724zM1.05 11.062h4.55v2.286H1.05v-2.286zm5.6 0h8.3v2.286h-8.3v-2.286z" fill="#4B5563"/></svg>
 )
+
+const PORTFOLIO_TOOL_ICONS = ['/tool-icons/tool01.svg', '/tool-icons/tool02.svg', '/tool-icons/tool03.svg'] as const
+const PORTFOLIO_TOOL_LABELS = ['Tool one', 'Tool 2', 'Tool 3'] as const
 
 function RowMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
   const [open, setOpen] = useState(false)
@@ -128,11 +163,11 @@ const KpiDeltaPlaceholder = () => (
   </div>
 )
 
-function KpiPctOfEgiDelta({ pct, kind }: { pct: number | null; kind: 'egi100' | 'opex' | 'noi' | 'taxes' | 'net' }) {
-  if (kind === 'egi100') {
+function KpiPctOfEgiDelta({ pct, kind, base = 'EGI' }: { pct: number | null; kind: 'base100' | 'pct-up' | 'opex' | 'noi' | 'taxes' | 'net'; base?: string }) {
+  if (kind === 'base100') {
     if (pct === null || !Number.isFinite(pct) || pct <= 0) return <KpiDeltaPlaceholder />
     return (
-      <div className="kpi-delta-pill kpi-delta-pill--up" title="Total EGI ÷ total EGI = 100% (baseline for % of EGI)">
+      <div className="kpi-delta-pill kpi-delta-pill--up" title={`Total ${base} ÷ total ${base} = 100% (baseline)`}>
         <IconDeltaUp />
         <span>100%</span>
       </div>
@@ -141,17 +176,27 @@ function KpiPctOfEgiDelta({ pct, kind }: { pct: number | null; kind: 'egi100' | 
 
   if (pct === null || !Number.isFinite(pct)) return <KpiDeltaPlaceholder />
 
+  if (kind === 'pct-up') {
+    const shown = Math.abs(pct) < 0.05 ? '0' : pct.toFixed(1)
+    return (
+      <div className="kpi-delta-pill kpi-delta-pill--up" title={`EGI as % of total ${base}`}>
+        <IconDeltaUp />
+        <span>{shown}%</span>
+      </div>
+    )
+  }
+
   if (kind === 'net') {
     const nearZero = Math.abs(pct) < 0.05
     const shown = nearZero ? '0' : Math.abs(pct).toFixed(1)
     const positive = pct > 0 || nearZero
     return positive ? (
-      <div className="kpi-delta-pill kpi-delta-pill--up" title="Net cashflow as % of total EGI">
+      <div className="kpi-delta-pill kpi-delta-pill--up" title={`Net cashflow as % of total ${base}`}>
         <IconDeltaUp />
         <span>{shown}%</span>
       </div>
     ) : (
-      <div className="kpi-delta-pill kpi-delta-pill--down" title="Net cashflow as % of total EGI">
+      <div className="kpi-delta-pill kpi-delta-pill--down" title={`Net cashflow as % of total ${base}`}>
         <IconDeltaDown />
         <span>−{shown}%</span>
       </div>
@@ -162,14 +207,14 @@ function KpiPctOfEgiDelta({ pct, kind }: { pct: number | null; kind: 'egi100' | 
 
   if (kind === 'noi') {
     return (
-      <div className="kpi-delta-pill kpi-delta-pill--up" title="NOI as % of total EGI">
+      <div className="kpi-delta-pill kpi-delta-pill--up" title={`NOI as % of total ${base}`}>
         <IconDeltaUp />
         <span>{shown}%</span>
       </div>
     )
   }
 
-  const expenseTitle = kind === 'opex' ? 'OPEX (−) as % of total EGI' : 'Taxes (−) as % of total EGI'
+  const expenseTitle = kind === 'opex' ? `OPEX (−) as % of total ${base}` : `Taxes (−) as % of total ${base}`
   return (
     <div className="kpi-delta-pill kpi-delta-pill--down" title={expenseTitle}>
       <IconDeltaDown />
@@ -259,7 +304,7 @@ const COL_KEYS = [
   'owner', 'country', 'status', 'nonLeaseOcc', 'endDate', 'taxStatus',
   'propertyType', 'bedrooms', 'area', 'bathrooms', 'parking', 'floor', 'estrato', 'yearBuilt', 'lastRenovation',
   'estValue', 'valueYoY', 'ownedSince', 'debt', 'mtgYearsLeft',
-  'gpi', 'egi', 'vacancyMoRate', 'opex', 'noi', 'capRate', 'capex', 'taxes', 'netCf', 'margin',
+  'gpi', 'egi', 'vacancyMoRate', 'opex', 'noi', 'capRate', 'capex', 'yieldOnCapex', 'payback', 'taxes', 'netCf', 'margin',
 ] as const
 type ColKey = typeof COL_KEYS[number]
 const COL_LABELS: Record<ColKey, string> = {
@@ -268,14 +313,14 @@ const COL_LABELS: Record<ColKey, string> = {
   floor: 'Floor', estrato: 'Estrato', yearBuilt: 'Year Built', lastRenovation: 'Renovation',
   estValue: 'Est. value', valueYoY: 'Value YoY', ownedSince: 'Owned since', debt: 'Debt', mtgYearsLeft: 'Mortgage (yrs)',
   gpi: 'GPI', egi: 'EGI', vacancyMoRate: 'Vac. mo rate', opex: 'OPEX', noi: 'NOI',
-  capRate: 'Cap rate', capex: 'CAPEX', taxes: 'Taxes', netCf: 'Net CF', margin: 'Margin',
+  capRate: 'Cap rate', capex: 'CAPEX', yieldOnCapex: 'Yield on CAPEX', payback: 'Payback (yrs)', taxes: 'Taxes', netCf: 'Net CF', margin: 'Margin',
 }
 const DETAIL_COLS: ColKey[] = ['propertyType', 'bedrooms', 'area', 'bathrooms', 'parking', 'floor', 'estrato', 'yearBuilt', 'lastRenovation']
 const BUILT_IN_PRESETS: { id: string; label: string; cols: ColKey[] }[] = [
   {
     id: 'financial',
     label: 'Financial',
-    cols: ['owner', 'country', 'gpi', 'egi', 'vacancyMoRate', 'opex', 'noi', 'capRate', 'capex', 'taxes', 'netCf', 'margin'],
+    cols: ['owner', 'country', 'gpi', 'egi', 'vacancyMoRate', 'opex', 'noi', 'capRate', 'capex', 'yieldOnCapex', 'payback', 'taxes', 'netCf', 'margin'],
   },
   { id: 'details', label: 'Details', cols: ['owner', 'country', 'status', 'nonLeaseOcc', 'endDate', 'taxStatus', ...DETAIL_COLS] },
   { id: 'all', label: 'All', cols: [...COL_KEYS] },
@@ -333,6 +378,11 @@ function loadKpiVisibility(): Record<KpiKey, boolean> {
 }
 
 const KPI_ORDER_KEY = 'kpi-order'
+const KPI_PCT_BASE_KEY = 'kpi-pct-base'
+function loadKpiPctBase(): 'egi' | 'gpi' {
+  const v = localStorage.getItem(KPI_PCT_BASE_KEY)
+  return v === 'gpi' ? 'gpi' : 'egi'
+}
 function loadKpiOrder(): KpiKey[] {
   try {
     const raw = localStorage.getItem(KPI_ORDER_KEY)
@@ -349,7 +399,7 @@ function loadKpiOrder(): KpiKey[] {
 
 const IconEye = ({ visible }: { visible: boolean }) => (
   visible ? (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M1.5 9C1.5 9 3.75 3.75 9 3.75C14.25 3.75 16.5 9 16.5 9C16.5 9 14.25 14.25 9 14.25C3.75 14.25 1.5 9 1.5 9Z" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 11.25C10.2426 11.25 11.25 10.2426 11.25 9C11.25 7.75736 10.2426 6.75 9 6.75C7.75736 6.75 6.75 7.75736 6.75 9C6.75 10.2426 7.75736 11.25 9 11.25Z" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M1.5 9C1.5 9 3.75 3.75 9 3.75C14.25 3.75 16.5 9 16.5 9C16.5 9 14.25 14.25 9 14.25C3.75 14.25 1.5 9 1.5 9Z" stroke="var(--accent-bg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 11.25C10.2426 11.25 11.25 10.2426 11.25 9C11.25 7.75736 10.2426 6.75 9 6.75C7.75736 6.75 6.75 7.75736 6.75 9C6.75 10.2426 7.75736 11.25 9 11.25Z" stroke="var(--accent-bg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
   ) : (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M7.58 7.58a2.003 2.003 0 002.84 2.84M13.36 13.36C12.12 14.27 10.62 14.78 9 14.75c-5.25 0-7.5-5.25-7.5-5.25a13.16 13.16 0 013.64-4.11m2.91-1.16A5.7 5.7 0 019 4c5.25 0 7.5 5.25 7.5 5.25a13.24 13.24 0 01-1.47 2.15M1.5 1.5l15 15" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
   )
@@ -569,6 +619,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const [copied, setCopied] = useState(false)
   const [kpiVis, setKpiVis] = useState(loadKpiVisibility)
   const [kpiOrder, setKpiOrder] = useState(loadKpiOrder)
+  const [kpiPctBase, setKpiPctBase] = useState<'egi' | 'gpi'>(loadKpiPctBase)
   const [dragKpi, setDragKpi] = useState<KpiKey | null>(null)
   const [dragOverKpi, setDragOverKpi] = useState<KpiKey | null>(null)
   const [kpiMenuOpen, setKpiMenuOpen] = useState(false)
@@ -582,6 +633,9 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const [filterDropdownOpen, setFilterDropdownOpen] = useState<string | null>(null)
   // null = closed, '__pick__' = picking column, column key = value picker open on that chip
   const filterBarRef = useRef<HTMLDivElement>(null)
+  /** Index into PORTFOLIO_TOOL_ICONS — toolbar tool popup */
+  const [openToolModal, setOpenToolModal] = useState<number | null>(null)
+  const [toolModalMaximized, setToolModalMaximized] = useState(false)
   const [colVis, setColVis] = useState(loadColVisibility)
   const [colOrder, setColOrder] = useState(loadColOrder)
   const [colMenuOpen, setColMenuOpen] = useState(false)
@@ -605,6 +659,20 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
       searchQuery, activeFilters, sortKey, sortDir, selectedYear, displayCurrency,
     }))
   }, [searchQuery, activeFilters, sortKey, sortDir, selectedYear, displayCurrency])
+
+  const closeToolModal = useCallback(() => {
+    setOpenToolModal(null)
+    setToolModalMaximized(false)
+  }, [])
+
+  useEffect(() => {
+    if (openToolModal == null) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeToolModal()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [openToolModal, closeToolModal])
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -822,10 +890,11 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
     return m
   }, [properties])
 
-  const egiRatioRow = useMemo(() => {
-    const e = totals.egi
-    if (!e || !Number.isFinite(e)) {
+  const ratioRow = useMemo(() => {
+    const base = kpiPctBase === 'gpi' ? portfolioProjectedGpi : totals.egi
+    if (!base || !Number.isFinite(base) || base <= 0) {
       return {
+        egiPct: null as number | null,
         opexPct: null as number | null,
         noiPct: null as number | null,
         taxesPct: null as number | null,
@@ -833,12 +902,13 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
       }
     }
     return {
-      opexPct: (totals.opex / e) * 100,
-      noiPct: (totals.noi / e) * 100,
-      taxesPct: (totals.taxes / e) * 100,
-      netPct: (totals.net / e) * 100,
+      egiPct: (totals.egi / base) * 100,
+      opexPct: (totals.opex / base) * 100,
+      noiPct: (totals.noi / base) * 100,
+      taxesPct: (totals.taxes / base) * 100,
+      netPct: (totals.net / base) * 100,
     }
-  }, [totals.egi, totals.opex, totals.noi, totals.taxes, totals.net])
+  }, [kpiPctBase, portfolioProjectedGpi, totals.egi, totals.opex, totals.noi, totals.taxes, totals.net])
 
   const advancedKpis = useMemo(() => {
     // Cap Rate = NOI / Total Asset Value
@@ -1061,6 +1131,20 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
         },
       },
       capex: { label: `CAPEX (${dc})`, value: (_p, a) => raw(a.totalCapex ? -a.totalCapex : 0) },
+      yieldOnCapex: {
+        label: 'Yield on CAPEX %',
+        value: (_p, a) => {
+          if (!a.totalCapex || !Number.isFinite(a.noi)) return ''
+          return String(Math.round((a.noi / a.totalCapex) * 10000) / 100)
+        },
+      },
+      payback: {
+        label: 'Payback (yrs)',
+        value: (_p, a) => {
+          if (!a.totalCapex || !Number.isFinite(a.noi) || a.noi <= 0) return ''
+          return String(Math.round((a.totalCapex / a.noi) * 10) / 10)
+        },
+      },
       taxes: { label: `Taxes (${dc})`, value: (_p, a) => raw(a.taxes ? -a.taxes : 0) },
       netCf: { label: `Net CF (${dc})`, value: (_p, a) => raw(a.netCf) },
       margin: {
@@ -1180,7 +1264,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                           style={{
                             display: 'flex', alignItems: 'center', padding: '8px 14px', cursor: 'grab',
                             opacity: dragKpi === key ? 0.35 : 1,
-                            borderTop: dragOverKpi === key && dragKpi !== key ? '2px solid #3b82f6' : '2px solid transparent',
+                            borderTop: dragOverKpi === key && dragKpi !== key ? '2px solid var(--accent-bg)' : '2px solid transparent',
                             transition: 'border-color 0.1s, opacity 0.1s',
                           }}
                         >
@@ -1221,7 +1305,40 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                       ))}
                     </>
                   )}
-                  <div style={{ height: 6 }} />
+                  <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+                  <div style={{ padding: '8px 14px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>% base</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>Metric for % pills</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: kpiPctBase === 'gpi' ? 'var(--accent-bg)' : 'var(--text3)', transition: 'color 0.2s' }}>GPI</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={kpiPctBase === 'egi'}
+                        onClick={() => {
+                          const next: 'egi' | 'gpi' = kpiPctBase === 'egi' ? 'gpi' : 'egi'
+                          setKpiPctBase(next)
+                          localStorage.setItem(KPI_PCT_BASE_KEY, next)
+                        }}
+                        style={{
+                          width: 32, height: 18, borderRadius: 9, border: 'none', cursor: 'pointer', padding: 0,
+                          background: kpiPctBase === 'egi' ? 'var(--accent-bg)' : '#d1d5db',
+                          position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                        }}
+                      >
+                        <span style={{
+                          display: 'block', width: 12, height: 12, borderRadius: '50%', background: '#fff',
+                          position: 'absolute', top: 3,
+                          left: kpiPctBase === 'egi' ? 17 : 3,
+                          transition: 'left 0.2s',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                        }} />
+                      </button>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: kpiPctBase === 'egi' ? 'var(--accent-bg)' : 'var(--text3)', transition: 'color 0.2s' }}>EGI</span>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -1276,17 +1393,50 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                 <div className="kpi-card" key={key}>
                   <div className="kpi-label">{KPI_META[key].label} <KpiInfoIcon tip={KPI_META[key].tip} /></div>
                   <div className={`kpi-value ${valueCls}`}>{mainValue}</div>
-                  {key === 'egi' && <KpiPctOfEgiDelta pct={totals.egi} kind="egi100" />}
-                  {key === 'opex' && <KpiPctOfEgiDelta pct={egiRatioRow.opexPct} kind="opex" />}
-                  {key === 'noi' && <KpiPctOfEgiDelta pct={egiRatioRow.noiPct} kind="noi" />}
-                  {key === 'taxes' && <KpiPctOfEgiDelta pct={egiRatioRow.taxesPct} kind="taxes" />}
-                  {key === 'net' && <KpiPctOfEgiDelta pct={egiRatioRow.netPct} kind="net" />}
+                  {key === 'gpi' && kpiPctBase === 'gpi' && <KpiPctOfEgiDelta pct={portfolioProjectedGpi} kind="base100" base="GPI" />}
+                  {key === 'egi' && kpiPctBase === 'egi' && <KpiPctOfEgiDelta pct={totals.egi} kind="base100" base="EGI" />}
+                  {key === 'egi' && kpiPctBase === 'gpi' && <KpiPctOfEgiDelta pct={ratioRow.egiPct} kind="pct-up" base="GPI" />}
+                  {key === 'opex' && <KpiPctOfEgiDelta pct={ratioRow.opexPct} kind="opex" base={kpiPctBase === 'gpi' ? 'GPI' : 'EGI'} />}
+                  {key === 'noi' && <KpiPctOfEgiDelta pct={ratioRow.noiPct} kind="noi" base={kpiPctBase === 'gpi' ? 'GPI' : 'EGI'} />}
+                  {key === 'taxes' && <KpiPctOfEgiDelta pct={ratioRow.taxesPct} kind="taxes" base={kpiPctBase === 'gpi' ? 'GPI' : 'EGI'} />}
+                  {key === 'net' && <KpiPctOfEgiDelta pct={ratioRow.netPct} kind="net" base={kpiPctBase === 'gpi' ? 'GPI' : 'EGI'} />}
                   {key === 'assetYoY' && <KpiAvgAssetYoYPill pct={assetKpis.avgYoYpct} />}
                 </div>
               )
             })}
           </div>
         )}
+        {/* Toolbar — placeholder row for tool actions */}
+        <div className="portfolio-toolbar mb12" aria-label="Toolbar">
+          <span className="portfolio-toolbar-label">Tool</span>
+          <div className="portfolio-toolbar-tools">
+            {PORTFOLIO_TOOL_ICONS.map((src, i) => (
+              <button
+                key={src}
+                type="button"
+                className={`filter-bar-icon-btn${openToolModal === i ? ' active' : ''}`}
+                title={PORTFOLIO_TOOL_LABELS[i]}
+                aria-label={PORTFOLIO_TOOL_LABELS[i]}
+                aria-haspopup="dialog"
+                aria-expanded={openToolModal === i}
+                onClick={() => {
+                  setOpenToolModal(i)
+                  setToolModalMaximized(false)
+                }}
+              >
+                <span
+                  className="portfolio-toolbar-tool-icon"
+                  style={{
+                    WebkitMaskImage: `url("${src}")`,
+                    maskImage: `url("${src}")`,
+                  }}
+                  aria-hidden
+                />
+                <span>{PORTFOLIO_TOOL_LABELS[i]}</span>
+              </button>
+            ))}
+          </div>
+        </div>
         {/* Filter bar */}
         <div className="filter-bar mb24" ref={filterBarRef}>
           <div className="filter-bar-top">
@@ -1342,8 +1492,8 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                           style={{
                             flex: 1, padding: '9px 6px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
                             letterSpacing: '0.5px', borderRadius: 0, textAlign: 'center',
-                            color: activePreset === bp.id ? '#3b82f6' : 'var(--text3)',
-                            boxShadow: activePreset === bp.id ? 'inset 0 -2px 0 #3b82f6' : 'none',
+                            color: activePreset === bp.id ? 'var(--accent-bg)' : 'var(--text3)',
+                            boxShadow: activePreset === bp.id ? 'inset 0 -2px 0 var(--accent-bg)' : 'none',
                           }}
                         >
                           {bp.label}
@@ -1367,8 +1517,8 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                               flex: 1, padding: '9px 6px', fontSize: 11, fontWeight: 600,
                               borderRadius: 0, textAlign: 'center', position: 'relative',
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              color: isActive ? '#3b82f6' : preset ? 'var(--text3)' : '#d1d5db',
-                              boxShadow: isActive ? 'inset 0 -2px 0 #3b82f6' : 'none',
+                              color: isActive ? 'var(--accent-bg)' : preset ? 'var(--text3)' : '#d1d5db',
+                              boxShadow: isActive ? 'inset 0 -2px 0 var(--accent-bg)' : 'none',
                             }}
                             title={preset ? preset.name : 'Save current columns as preset'}
                           >
@@ -1400,7 +1550,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                             background: '#f7f9fc', border: '1px solid var(--border)', borderRadius: 8,
                             outline: 'none',
                           }}
-                          onFocus={e => (e.target.style.borderColor = '#3b82f6')}
+                          onFocus={e => (e.target.style.borderColor = 'var(--accent-bg)')}
                           onBlur={e => (e.target.style.borderColor = 'var(--border)')}
                         />
                         <button
@@ -1408,7 +1558,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                           disabled={!renameValue.trim()}
                           style={{
                             fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 8,
-                            background: renameValue.trim() ? '#3b82f6' : '#e5e7eb', color: renameValue.trim() ? '#fff' : '#9ca3af',
+                            background: renameValue.trim() ? 'var(--accent-bg)' : '#e5e7eb', color: renameValue.trim() ? 'var(--accent-text)' : '#9ca3af',
                             border: 'none', cursor: renameValue.trim() ? 'pointer' : 'default',
                           }}
                         >Save</button>
@@ -1420,7 +1570,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                         <button
                           className="ghost"
                           onClick={() => { saveCustomPreset(activePreset, customSlotActive.name) }}
-                          style={{ fontSize: 11, fontWeight: 600, color: '#3b82f6', padding: '2px 6px', borderRadius: 6 }}
+                          style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent-bg)', padding: '2px 6px', borderRadius: 6 }}
                         >Update preset</button>
                         <button
                           className="ghost"
@@ -1463,7 +1613,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                             style={{
                               display: 'flex', alignItems: 'center', padding: '8px 14px', cursor: 'grab',
                               opacity: dragCol === key ? 0.35 : 1,
-                              borderTop: dragOverCol === key && dragCol !== key ? '2px solid #3b82f6' : '2px solid transparent',
+                              borderTop: dragOverCol === key && dragCol !== key ? '2px solid var(--accent-bg)' : '2px solid transparent',
                               transition: 'border-color 0.1s, opacity 0.1s',
                             }}
                           >
@@ -1526,7 +1676,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                       className={`filter-pill${hasValue ? ' active' : ''}`}
                       style={{
                         paddingRight: 6, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: 'none',
-                        ...(!hasValue ? { borderStyle: 'dashed', color: '#3b82f6' } : {}),
+                        ...(!hasValue ? { borderStyle: 'dashed', color: 'var(--accent-bg)' } : {}),
                       }}
                       onClick={() => setFilterDropdownOpen(prev => prev === key ? null : key)}
                     >
@@ -1539,7 +1689,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                       className={`filter-pill${hasValue ? ' active' : ''}`}
                       style={{
                         paddingLeft: 6, borderTopLeftRadius: 0, borderBottomLeftRadius: 0,
-                        ...(hasValue ? { borderLeft: '1px solid rgba(255,255,255,0.3)' } : { borderStyle: 'dashed', borderLeft: '1px dashed var(--border)', color: '#3b82f6' }),
+                        ...(hasValue ? { borderLeft: '1px solid rgba(255,255,255,0.3)' } : { borderStyle: 'dashed', borderLeft: '1px dashed var(--border)', color: 'var(--accent-bg)' }),
                       }}
                       onClick={() => { setActiveFilters(prev => { const next = { ...prev }; delete next[key]; return next }); if (isOpen) setFilterDropdownOpen(null) }}
                       title="Remove filter"
@@ -1584,7 +1734,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                             >
                               <span>{val}</span>
                               {checked && (
-                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3.5 3.5L13 4"/></svg>
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--accent-bg)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3.5 3.5L13 4"/></svg>
                               )}
                             </button>
                           )
@@ -1824,6 +1974,24 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                       )
                     })(),
                     capex: <td key="capex" className={a.totalCapex ? 'neg' : 'text3'}>{a.totalCapex ? `−${fm(a.totalCapex)}` : '—'}</td>,
+                    yieldOnCapex: (() => {
+                      if (!a.totalCapex || !Number.isFinite(a.noi)) return <td key="yieldOnCapex" className="text3">—</td>
+                      const pct = (a.noi / a.totalCapex) * 100
+                      return (
+                        <td key="yieldOnCapex" className={pct >= 0 ? 'purple' : 'neg'} title="NOI ÷ CAPEX — return on capital expenditure">
+                          {pct.toFixed(1)}%
+                        </td>
+                      )
+                    })(),
+                    payback: (() => {
+                      if (!a.totalCapex || !Number.isFinite(a.noi) || a.noi <= 0) return <td key="payback" className="text3">—</td>
+                      const yrs = a.totalCapex / a.noi
+                      return (
+                        <td key="payback" title="CAPEX ÷ NOI — years to recover capital expenditure from net income">
+                          {yrs.toFixed(1)}
+                        </td>
+                      )
+                    })(),
                     taxes: <td key="taxes" className={a.taxes ? 'neg' : 'text3'}>{a.taxes ? `−${fm(a.taxes)}` : '—'}</td>,
                     netCf: <td key="netCf" className={a.netCf >= 0 ? 'pos fw5' : 'neg fw5'}>{a.netCf >= 0 ? '+' : ''}{fm(a.netCf)}</td>,
                     margin: <td key="margin">{gpiRow ? `${Math.round((a.netCf / gpiRow) * 100)}%` : '—'}</td>,
@@ -1881,6 +2049,24 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                       )
                     })(),
                     capex: <td key="capex">{totals.capex ? `−${fm(totals.capex)}` : '—'}</td>,
+                    yieldOnCapex: (() => {
+                      if (!totals.capex || !Number.isFinite(totals.noi)) return <td key="yieldOnCapex" className="text3">—</td>
+                      const pct = (totals.noi / totals.capex) * 100
+                      return (
+                        <td key="yieldOnCapex" className={pct >= 0 ? 'purple' : 'neg'} title="Total NOI ÷ total CAPEX">
+                          {pct.toFixed(1)}%
+                        </td>
+                      )
+                    })(),
+                    payback: (() => {
+                      if (!totals.capex || !Number.isFinite(totals.noi) || totals.noi <= 0) return <td key="payback" className="text3">—</td>
+                      const yrs = totals.capex / totals.noi
+                      return (
+                        <td key="payback" title="Total CAPEX ÷ total NOI">
+                          {yrs.toFixed(1)}
+                        </td>
+                      )
+                    })(),
                     taxes: <td key="taxes">{totals.taxes ? `−${fm(totals.taxes)}` : '—'}</td>,
                     netCf: <td key="netCf">{totals.net >= 0 ? '+' : ''}{fm(totals.net)}</td>,
                     margin: <td key="margin">{portfolioProjectedGpi ? `${Math.round((totals.net / portfolioProjectedGpi) * 100)}%` : '—'}</td>,
@@ -1920,6 +2106,83 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
           onConfirm={() => { removeProperty(deleteTarget.id); setDeleteTarget(null) }}
           onCancel={() => setDeleteTarget(null)}
         />
+      )}
+      {openToolModal != null && createPortal(
+        <div className="modal-overlay" onClick={closeToolModal}>
+          <div
+            className={`modal${toolModalMaximized ? ' portfolio-tool-modal-max' : ' modal-sm'}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="portfolio-tool-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="portfolio-tool-modal-title-row">
+                  <div className="portfolio-tool-modal-title-icon-wrap">
+                    <span
+                      className="portfolio-tool-modal-title-icon"
+                      style={{
+                        WebkitMaskImage: `url(${PORTFOLIO_TOOL_ICONS[openToolModal]})`,
+                        maskImage: `url(${PORTFOLIO_TOOL_ICONS[openToolModal]})`,
+                      }}
+                      aria-hidden
+                    />
+                  </div>
+                  <div className="portfolio-tool-modal-title-text">
+                    <div className="modal-title" id="portfolio-tool-modal-title">
+                      {PORTFOLIO_TOOL_LABELS[openToolModal]}
+                    </div>
+                    <div className="modal-sub">Placeholder</div>
+                  </div>
+                </div>
+              </div>
+              <div className="portfolio-tool-modal-header-actions">
+                <button
+                  type="button"
+                  className="filter-bar-icon-btn"
+                  title="Download (placeholder)"
+                  aria-label="Download"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <IconDownloadCurrent />
+                  <span>Download</span>
+                </button>
+                <button
+                  type="button"
+                  className="filter-bar-icon-btn"
+                  title={toolModalMaximized ? 'Restore' : 'Maximize'}
+                  aria-label={toolModalMaximized ? 'Restore window' : 'Maximize window'}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setToolModalMaximized((v) => !v)
+                  }}
+                >
+                  {toolModalMaximized ? <IconWindowRestore /> : <IconWindowMaximize />}
+                </button>
+                <button
+                  type="button"
+                  className="ghost"
+                  style={{ padding: '4px 10px', fontSize: 22, lineHeight: 1, color: 'var(--text3)' }}
+                  onClick={closeToolModal}
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="modal-body" style={{ minHeight: 100 }}>
+              {openToolModal === 0 ? (
+                <FundingRatioToolPlaceholder />
+              ) : (
+                <p style={{ fontSize: 14, color: 'var(--text3)', margin: 0, lineHeight: 1.5 }}>
+                  Tool content placeholder — connect UI here (see Temp/FundingRatioCalculator.jsx for a full goals table + breakdown).
+                </p>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

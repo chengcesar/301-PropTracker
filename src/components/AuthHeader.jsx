@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthConfirmDialog } from './AuthConfirmDialog';
 
@@ -18,7 +19,7 @@ function getDisplayName(user) {
 }
 
 export default function AuthHeader() {
-  const { user, logout, deleteAccount } = useAuth();
+  const { user, isAdmin, logout, deleteAccount } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -72,6 +73,11 @@ export default function AuthHeader() {
       </div>
       {user && (
         <div className="header-right" ref={menuRef}>
+          {isAdmin && (
+            <Link to="/admin" className="admin-header-link" title="Admin console">
+              Admin
+            </Link>
+          )}
           <div className="header-account-wrap">
             <button
               type="button"

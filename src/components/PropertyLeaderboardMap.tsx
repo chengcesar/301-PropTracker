@@ -18,6 +18,8 @@ import {
   type EvaluatedAlertMatch,
 } from '../lib/alertRuleConfig'
 import { AlertRulesModal } from './modals/AlertRulesModal'
+import { ACCENT_THEME_CHANGE_EVENT } from '../lib/accentTheme'
+import { getThemeAccentHoverRgb, getThemeAccentRgb } from '../lib/cssAccent'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 type MetricKey = 'area' | 'rent' | 'monthlyIncome' | 'noi' | 'netCf' | 'estValue'
@@ -37,9 +39,6 @@ const METRIC_OPTIONS: MetricOption[] = [
 ]
 
 const CARTO_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
-
-/** Design token: primary blue (`#0539FF`) */
-const PRIMARY_BLUE: [number, number, number, number] = [5, 57, 255, 255]
 
 interface PropertyWithMetrics {
   id: number
@@ -165,6 +164,27 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
     zoom: 10,
   })
   const markerAtlas = useMemo(() => buildPropertyMarkerAtlasDataUrl(), [])
+  /** Bumps when accent preset changes so Deck.gl layers re-read --accent-bg / --accent-hover. */
+  const [accentRev, setAccentRev] = useState(0)
+  useEffect(() => {
+    const bump = () => setAccentRev((n) => n + 1)
+    window.addEventListener(ACCENT_THEME_CHANGE_EVENT, bump)
+    return () => window.removeEventListener(ACCENT_THEME_CHANGE_EVENT, bump)
+  }, [])
+
+  const deckAccent = useMemo(() => {
+    const a = getThemeAccentRgb()
+    const h = getThemeAccentHoverRgb()
+    return {
+      clusterFill: [a.r, a.g, a.b, 236] as [number, number, number, number],
+      icon: [a.r, a.g, a.b, 255] as [number, number, number, number],
+      iconSelected: [h.r, h.g, h.b, 255] as [number, number, number, number],
+      pointFill: [a.r, a.g, a.b, 210] as [number, number, number, number],
+      pointFillSelected: [h.r, h.g, h.b, 220] as [number, number, number, number],
+      pointLineSelected: [h.r, h.g, h.b, 255] as [number, number, number, number],
+    }
+  }, [accentRev])
+
   const dropdownRef = useRef<HTMLDivElement>(null)
   const leaderboardRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapRef>(null)
@@ -528,7 +548,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
     radiusUnits: 'pixels',
     getPosition: (d: ClusterCircle) => d.position,
     getRadius: (d: ClusterCircle) => clusterBubbleRadiusPx(d.pointCount),
-    getFillColor: [PRIMARY_BLUE[0], PRIMARY_BLUE[1], PRIMARY_BLUE[2], 236],
+    getFillColor: deckAccent.clusterFill,
     getLineColor: [255, 255, 255, 245],
     stroked: true,
     lineWidthMinPixels: 1.5,
@@ -601,12 +621,12 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
         getPosition: (d: PropertyWithMetrics) => [d.longitude, d.latitude],
         getSize: pointRadiusPx,
         getColor: (d: PropertyWithMetrics) =>
-          d.id === selectedId ? [41, 204, 151, 255] : PRIMARY_BLUE,
+          d.id === selectedId ? deckAccent.iconSelected : deckAccent.icon,
         sizeMinPixels: 20,
         sizeMaxPixels: 40,
         onClick: onPointClick,
         updateTriggers: {
-          getColor: [selectedId],
+          getColor: [selectedId, accentRev],
           getSize: [selectedMetric],
         },
       })
@@ -620,15 +640,15 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
         radiusMinPixels: 20,
         radiusMaxPixels: 40,
         getFillColor: (d: PropertyWithMetrics) =>
-          d.id === selectedId ? [41, 204, 151, 220] : [5, 57, 255, 210],
+          d.id === selectedId ? deckAccent.pointFillSelected : deckAccent.pointFill,
         getLineColor: (d: PropertyWithMetrics) =>
-          d.id === selectedId ? [41, 204, 151, 255] : [255, 255, 255, 200],
+          d.id === selectedId ? deckAccent.pointLineSelected : [255, 255, 255, 200],
         stroked: true,
         lineWidthMinPixels: 1.5,
         onClick: onPointClick,
         updateTriggers: {
-          getFillColor: [selectedId],
-          getLineColor: [selectedId],
+          getFillColor: [selectedId, accentRev],
+          getLineColor: [selectedId, accentRev],
           getRadius: [selectedMetric],
         },
       })

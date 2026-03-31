@@ -29,7 +29,7 @@ const VIEW_OPTIONS: { key: AppreciationViewMode; label: string; hint: string }[]
   },
 ]
 
-const SERIES_COLORS = ['#3b82f6', '#22c55e', '#f97316', '#ec4899', '#8b5cf6', '#06b6d4', '#14b8a6', '#ef4444']
+const SERIES_COLORS = ['var(--accent-bg)', '#22c55e', '#f97316', '#ec4899', '#8b5cf6', '#06b6d4', '#14b8a6', '#ef4444']
 
 const CHART_GRID = '#eceff1'
 const CHART_AXIS = '#78909c'
@@ -512,7 +512,7 @@ export function AssetValueAppreciationCard({ properties, displayCurrency, fxRate
                               type="monotone"
                               dataKey="combined"
                               name="Portfolio total"
-                              stroke="#2563eb"
+                              stroke="var(--accent-hover)"
                               strokeWidth={2.5}
                               dot={false}
                               connectNulls

@@ -105,11 +105,11 @@
 }
 .auth-btn-cancel:hover { background: #f7f9fc; }
 .auth-btn-save {
-  background: #3b82f6; color: #fff; border: none; border-radius: 8px;
+  background: var(--accent-bg); color: var(--accent-text); border: none; border-radius: 8px;
   padding: 10px 20px; font-family: 'Inter', sans-serif; font-size: 14px;
   font-weight: 600; cursor: pointer;
 }
-.auth-btn-save:hover { background: #2563eb; }
+.auth-btn-save:hover { background: var(--accent-hover); }
 .auth-btn-danger {
   background: #b91c1c; color: #fff; border: none; border-radius: 8px;
   padding: 10px 20px; font-family: 'Inter', sans-serif; font-size: 14px;
@@ -365,25 +365,25 @@
   color: #1a1d23; font-family: 'Inter', sans-serif; font-size: 14px;
   padding: 10px 14px; outline: none; transition: border-color 0.2s; width: 100%;
 }
-.login-field input:focus { border-color: #3b82f6; background: #fff; }
+.login-field input:focus { border-color: var(--accent-bg); background: #fff; }
 .login-error {
   background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
   padding: 10px 14px; color: #b91c1c; font-size: 12px; margin-bottom: 16px;
 }
 
 .login-submit {
-  width: 100%; background: #3b82f6; color: #fff; border: none; border-radius: 8px;
+  width: 100%; background: var(--accent-bg); color: var(--accent-text); border: none; border-radius: 8px;
   padding: 12px; font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 600;
   cursor: pointer; transition: background 0.2s;
 }
-.login-submit:hover { background: #2563eb; }
-.login-submit:disabled { background: #93c5fd; cursor: not-allowed; }
+.login-submit:hover { background: var(--accent-hover); }
+.login-submit:disabled { background: var(--accent-disabled-bg); cursor: not-allowed; }
 
 .login-toggle {
   text-align: center; margin-top: 20px; font-size: 13px; color: #6b7280;
 }
 .login-toggle button {
-  background: none; border: none; color: #3b82f6; font-weight: 600;
+  background: none; border: none; color: var(--accent-bg); font-weight: 600;
   cursor: pointer; font-family: 'Inter', sans-serif; font-size: 13px; margin-left: 4px;
 }
 .login-toggle button:hover { text-decoration: underline; }

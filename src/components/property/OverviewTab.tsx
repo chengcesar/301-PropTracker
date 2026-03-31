@@ -481,7 +481,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
               padding: '6px 14px',
               color: 'var(--accent-bg)',
               fontWeight: 500,
-              border: '1px dashed #3b82f6',
+              border: '1px dashed var(--accent-bg)',
               borderRadius: 8,
               cursor: 'pointer',
             }}
@@ -499,7 +499,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
               padding: '6px 14px',
               color: 'var(--accent-bg)',
               fontWeight: 500,
-              border: '1px dashed #3b82f6',
+              border: '1px dashed var(--accent-bg)',
               borderRadius: 8,
               cursor: 'pointer',
             }}
@@ -846,7 +846,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                               }}
                               style={{
                                 width: '100%', textAlign: 'right', fontSize: 13,
-                                padding: '8px 12px', border: '2px solid #3b82f6',
+                                padding: '8px 12px', border: '2px solid var(--accent-bg)',
                                 borderRadius: 6, outline: 'none', background: '#fff',
                                 boxSizing: 'border-box',
                               }}

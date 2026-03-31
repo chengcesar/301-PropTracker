@@ -111,7 +111,7 @@ function CountrySelect({ value, onChange }: { value: string; onChange: (v: strin
 /* ── Pin icon SVG ── */
 const PinIcon = () => (
   <svg width="28" height="40" viewBox="0 0 28 40" fill="none">
-    <path d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.268 21.732 0 14 0z" fill="#3b82f6"/>
+    <path d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.268 21.732 0 14 0z" fill="var(--accent-bg)"/>
     <circle cx="14" cy="14" r="6" fill="#fff"/>
   </svg>
 )
@@ -276,8 +276,8 @@ export function AddPropertyModal({ onSave, onClose }: Props) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {/* Step indicators */}
             <div style={{ display: 'flex', gap: 4, marginRight: 8 }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6' }} />
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: step === 2 ? '#3b82f6' : '#e8ecf2' }} />
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-bg)' }} />
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: step === 2 ? 'var(--accent-bg)' : '#e8ecf2' }} />
             </div>
             <button type="button" className="ghost" onClick={onClose} style={{ fontSize: '18px', padding: '4px 8px' }}>
               ×

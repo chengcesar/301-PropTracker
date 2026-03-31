@@ -13,6 +13,24 @@ import { doc, getDoc, setDoc, updateDoc, increment, serverTimestamp } from 'fire
 
 const AuthContext = createContext(null);
 
+/** Admins from Firestore users/{uid}.role (preferred). These emails are also admin if role is missing. */
+function adminEmailAllowlist() {
+  const fromEnv = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  return new Set([
+    ...fromEnv,
+    // Legacy allowlist from pre–Firestore-role AdminPage; add VITE_ADMIN_EMAILS or role: "admin" instead
+    'cheng.cesar@gmail.com',
+  ]);
+}
+
+function firestoreRoleIsAdmin(data) {
+  if (!data || typeof data.role !== 'string') return false;
+  return data.role.toLowerCase() === 'admin';
+}
+
 export function useAuth() {
   return useContext(AuthContext);
 }
@@ -31,7 +49,12 @@ export function AuthProvider({ children }) {
       if (u) {
         try {
           const snap = await getDoc(doc(firestore, 'users', u.uid));
-          setIsAdmin(snap.exists() && snap.data().role === 'admin');
+          const data = snap.exists() ? snap.data() : null;
+          const email = u.email ? u.email.toLowerCase() : '';
+          const allow = adminEmailAllowlist();
+          setIsAdmin(
+            (data && firestoreRoleIsAdmin(data)) || (Boolean(email) && allow.has(email)),
+          );
           const baseFields = { email: u.email, displayName: u.displayName || null, lastLoginAt: serverTimestamp() };
           if (!snap.exists()) baseFields.createdAt = serverTimestamp();
           await setDoc(doc(firestore, 'users', u.uid), baseFields, { merge: true });

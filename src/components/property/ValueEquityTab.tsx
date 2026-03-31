@@ -26,7 +26,7 @@ const EQ_DEBT_CHART = {
   property: '#BDBDBD',
   grid: '#eceff1',
   axisTick: '#78909c',
-  refLine: '#3b82f6',
+  refLine: 'var(--accent-bg)',
 } as const
 
 type Props = {
@@ -855,7 +855,7 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
                               fontWeight: 600,
                               cursor: 'pointer',
                               whiteSpace: 'nowrap',
-                              background: priceHistoryDisplayMode === 'trend' ? '#2563eb' : 'transparent',
+                              background: priceHistoryDisplayMode === 'trend' ? 'var(--accent-hover)' : 'transparent',
                               color: priceHistoryDisplayMode === 'trend' ? '#fff' : 'var(--text2)',
                             }}
                           >
@@ -874,7 +874,7 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
                               fontWeight: 600,
                               cursor: 'pointer',
                               whiteSpace: 'nowrap',
-                              background: priceHistoryDisplayMode === 'table' ? '#2563eb' : 'transparent',
+                              background: priceHistoryDisplayMode === 'table' ? 'var(--accent-hover)' : 'transparent',
                               color: priceHistoryDisplayMode === 'table' ? '#fff' : 'var(--text2)',
                             }}
                           >
@@ -1004,7 +1004,7 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
                                 <tr key={row.year}>
                                   <td style={{ ...tableTdFirst, fontWeight: 700 }}>{row.year}</td>
                                   <td
-                                    style={{ ...tableTd, cursor: 'pointer', color: hasOv ? '#2563eb' : 'var(--text)' }}
+                                    style={{ ...tableTd, cursor: 'pointer', color: hasOv ? 'var(--accent-hover)' : 'var(--text)' }}
                                     title="Click to edit"
                                     onClick={() => {
                                       if (!editing) {
@@ -1254,12 +1254,12 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
                     <div className="kpi-row" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(124px, 1fr))', gap: 12, marginBottom: 24 }}>
                       <div className="kpi-card">
                         <div className="kpi-label">Loan amount</div>
-                        <div className="kpi-value" style={{ color: '#2563eb' }}>{fmtCompactCurrency(mortgageMetrics.loan, dc, cx)}</div>
+                        <div className="kpi-value" style={{ color: 'var(--accent-hover)' }}>{fmtCompactCurrency(mortgageMetrics.loan, dc, cx)}</div>
                         <div className="kpi-sub">{Number.isInteger(mortgageMetrics.rate) ? mortgageMetrics.rate : mortgageMetrics.rate.toFixed(2)}% fixed · {mortgageMetrics.termYears}yr</div>
                       </div>
                       <div className="kpi-card">
                         <div className="kpi-label">Monthly payment (P&I)</div>
-                        <div className="kpi-value" style={{ color: '#2563eb' }}>{fmtCurrency(cx(mortgageMetrics.monthlyPayment), dc)}</div>
+                        <div className="kpi-value" style={{ color: 'var(--accent-hover)' }}>{fmtCurrency(cx(mortgageMetrics.monthlyPayment), dc)}</div>
                         <div className="kpi-sub">LTV {mortgageMetrics.ltvPct.toFixed(1)}%</div>
                       </div>
                       <div className="kpi-card">
@@ -1274,7 +1274,7 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
                       </div>
                       <div className="kpi-card">
                         <div className="kpi-label">Total cost of loan</div>
-                        <div className="kpi-value" style={{ color: '#2563eb' }}>{fmtCompactCurrency(mortgageMetrics.totalCost, dc, cx)}</div>
+                        <div className="kpi-value" style={{ color: 'var(--accent-hover)' }}>{fmtCompactCurrency(mortgageMetrics.totalCost, dc, cx)}</div>
                         <div className="kpi-sub">Principal + interest</div>
                       </div>
                     </div>
@@ -1304,7 +1304,7 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
                             fontSize: 13,
                             fontWeight: 600,
                             cursor: 'pointer',
-                            background: mortgageViewMode === 'visual' ? '#2563eb' : 'transparent',
+                            background: mortgageViewMode === 'visual' ? 'var(--accent-hover)' : 'transparent',
                             color: mortgageViewMode === 'visual' ? '#fff' : 'var(--text2)',
                           }}
                         >
@@ -1322,7 +1322,7 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
                             fontSize: 13,
                             fontWeight: 600,
                             cursor: 'pointer',
-                            background: mortgageViewMode === 'schedule' ? '#2563eb' : 'transparent',
+                            background: mortgageViewMode === 'schedule' ? 'var(--accent-hover)' : 'transparent',
                             color: mortgageViewMode === 'schedule' ? '#fff' : 'var(--text2)',
                           }}
                         >
@@ -1524,7 +1524,7 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
                                           style={{
                                             ...tableTd,
                                             cursor: 'pointer',
-                                            color: hasOv ? '#2563eb' : 'var(--text2)',
+                                            color: hasOv ? 'var(--accent-hover)' : 'var(--text2)',
                                           }}
                                           title="Click to edit"
                                           onClick={() => {

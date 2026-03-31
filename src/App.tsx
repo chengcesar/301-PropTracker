@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AppStateProvider } from './context/AppStateProvider'
@@ -5,6 +6,8 @@ import { useAppState } from './context/useAppState'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import AdminPage from './pages/AdminPage'
+import AdminDesignSystemPage from './pages/AdminDesignSystemPage'
+import AdminLayout from './components/admin/AdminLayout'
 import AuthHeader from './components/AuthHeader'
 import { PortfolioPage } from './pages/PortfolioPage'
 import { PropertyPage } from './pages/PropertyPage'
@@ -13,16 +16,23 @@ import { AddPropertyModal } from './components/modals/AddPropertyModal'
 function AppContent() {
   const { properties, selectedId, setSelectedId, updateProperty, addProperty, addPropertyOpen, setAddPropertyOpen } = useAppState()
   const activeProp = properties.find((p) => p.id === selectedId)
+  const showPortfolio = selectedId === 'portfolio' || !activeProp
+
+  useEffect(() => {
+    if (selectedId !== 'portfolio' && !activeProp) {
+      setSelectedId('portfolio')
+    }
+  }, [selectedId, activeProp, setSelectedId])
 
   return (
     <>
       <AuthHeader />
       <div className="app-body">
-        {selectedId === 'portfolio' ? (
+        {showPortfolio ? (
           <PortfolioPage properties={properties} onSelectProperty={setSelectedId} />
-        ) : activeProp ? (
-          <PropertyPage key={activeProp.id} prop={activeProp} onUpdateProp={(fn) => updateProperty(activeProp.id, fn)} />
-        ) : null}
+        ) : (
+          <PropertyPage key={activeProp!.id} prop={activeProp!} onUpdateProp={(fn) => updateProperty(activeProp!.id, fn)} />
+        )}
         {addPropertyOpen && (
           <AddPropertyModal onSave={addProperty} onClose={() => setAddPropertyOpen(false)} />
         )}
@@ -48,7 +58,10 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
-      <Route path="/admin" element={<AdminPage />} />
+      <Route path="/admin" element={<AdminLayout />}>
+        <Route index element={<AdminPage />} />
+        <Route path="design-system" element={<AdminDesignSystemPage />} />
+      </Route>
       <Route
         path="/"
         element={
