@@ -28,6 +28,8 @@ export interface Contract {
 export interface MonthData {
   status: 'rented' | 'vacant'
   incomeOverride: number | null
+  /** User-confirmed rent payment received (does not change projected income). */
+  rentReceived?: boolean
   expenses: Record<string, number | { label: string; amount: number }>
 }
 

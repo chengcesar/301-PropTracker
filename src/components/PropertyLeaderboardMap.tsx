@@ -7,6 +7,17 @@ import type { Property } from '../lib/types'
 import { activeContract, convertAnnual, estimatedPropertyValueAtYear, type AnnualResult } from '../lib/finance'
 import { convert, type CurrencyCode, type FxRates } from '../lib/currency'
 import { fmtCurrencyM } from '../lib/format'
+import {
+  evaluatePropertyAlerts,
+  firstCriticalPulseColor,
+  hasCriticalAlert,
+  loadAlertRuleConfig,
+  saveAlertRuleConfig,
+  type AlertRuleConfigV1,
+  type AlertSeverity,
+  type EvaluatedAlertMatch,
+} from '../lib/alertRuleConfig'
+import { AlertRulesModal } from './modals/AlertRulesModal'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 type MetricKey = 'area' | 'rent' | 'monthlyIncome' | 'noi' | 'netCf' | 'estValue'
@@ -62,76 +73,14 @@ interface PropertyWithMetrics {
   estrato: number | null
 }
 
-/* ── Alert rules ── */
-type AlertSeverity = 'critical' | 'warning' | 'info'
-
-interface AlertRule {
-  key: string
-  label: string
-  severity: AlertSeverity
-  check: (p: PropertyWithMetrics) => boolean
-  describe: (p: PropertyWithMetrics) => string
-  color: [number, number, number] // RGB for pulse ring
+function alertMetrics(p: PropertyWithMetrics) {
+  return {
+    monthsLeft: p.monthsLeft,
+    vacant: p.vacant,
+    taxPending: p.taxPending,
+    taxDaysLeft: p.taxDaysLeft,
+  }
 }
-
-const ALERT_RULES: AlertRule[] = [
-  {
-    key: 'vacant',
-    label: 'Vacant',
-    severity: 'critical',
-    check: (p) => p.vacant,
-    describe: () => 'No active contract — property is vacant',
-    color: [185, 28, 28],
-  },
-  {
-    key: 'contractExpiring1',
-    label: 'Expiring < 1 mo',
-    severity: 'critical',
-    check: (p) => p.monthsLeft != null && p.monthsLeft <= 1,
-    describe: (p) => `Contract expires in ${Math.max(0, p.monthsLeft!)} month${p.monthsLeft === 1 ? '' : 's'}`,
-    color: [185, 28, 28],
-  },
-  {
-    key: 'contractExpiring3',
-    label: 'Expiring < 3 mo',
-    severity: 'warning',
-    check: (p) => p.monthsLeft != null && p.monthsLeft > 1 && p.monthsLeft <= 3,
-    describe: (p) => `Contract expires in ${p.monthsLeft} months`,
-    color: [217, 119, 6],
-  },
-  {
-    key: 'contractExpiring6',
-    label: 'Expiring < 6 mo',
-    severity: 'info',
-    check: (p) => p.monthsLeft != null && p.monthsLeft > 3 && p.monthsLeft <= 6,
-    describe: (p) => `Contract expires in ${p.monthsLeft} months`,
-    color: [59, 130, 246],
-  },
-  {
-    key: 'taxOverdue',
-    label: 'Tax overdue',
-    severity: 'critical',
-    check: (p) => p.taxPending && p.taxDaysLeft != null && p.taxDaysLeft <= 10,
-    describe: (p) => p.taxDaysLeft! <= 0 ? 'Tax payment is overdue' : `Tax due in ${p.taxDaysLeft} days`,
-    color: [185, 28, 28],
-  },
-  {
-    key: 'taxDue30',
-    label: 'Tax due < 30d',
-    severity: 'warning',
-    check: (p) => p.taxPending && p.taxDaysLeft != null && p.taxDaysLeft > 10 && p.taxDaysLeft <= 30,
-    describe: (p) => `Tax due in ${p.taxDaysLeft} days`,
-    color: [217, 119, 6],
-  },
-  {
-    key: 'taxDue90',
-    label: 'Tax due < 90d',
-    severity: 'info',
-    check: (p) => p.taxPending && p.taxDaysLeft != null && p.taxDaysLeft > 30 && p.taxDaysLeft <= 90,
-    describe: (p) => `Tax due in ${p.taxDaysLeft} days`,
-    color: [59, 130, 246],
-  },
-]
 
 function monthsUntil(dateStr: string): number {
   const end = new Date(dateStr)
@@ -182,14 +131,6 @@ interface AlertPulseDatum {
   basePx: number
 }
 
-function getCriticalAlertPulseColor(p: PropertyWithMetrics): [number, number, number] {
-  const criticalRules = ALERT_RULES.filter(r => r.severity === 'critical')
-  for (const r of criticalRules) {
-    if (r.check(p)) return r.color
-  }
-  return [185, 28, 28]
-}
-
 interface Props {
   properties: Property[]
   annuals: Map<number, AnnualResult>
@@ -208,6 +149,8 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
   const [alertOn, setAlertOn] = useState(false)
   const [panelTab, setPanelTab] = useState<'list' | 'alerts'>('list')
   const [severityFilter, setSeverityFilter] = useState<AlertSeverity | 'all'>('all')
+  const [alertRuleConfig, setAlertRuleConfig] = useState<AlertRuleConfigV1>(() => loadAlertRuleConfig())
+  const [rulesModalOpen, setRulesModalOpen] = useState(false)
   const [popupTab, setPopupTab] = useState<'financial' | 'details'>('financial')
   const [viewState, setViewState] = useState({
     longitude: -74.08,
@@ -687,11 +630,10 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
       })
   /* eslint-enable react-hooks/refs */
 
-  // Alert: filter properties that trigger any rule
+  // Alert: filter properties that trigger any critical rule
   const alertData = useMemo(() => {
-    const criticalRules = ALERT_RULES.filter(r => r.severity === 'critical')
-    return data.filter(p => criticalRules.some(r => r.check(p)))
-  }, [data])
+    return data.filter(p => hasCriticalAlert(alertRuleConfig, alertMetrics(p)))
+  }, [data, alertRuleConfig])
 
   const alertIds = useMemo(() => new Set(alertData.map(d => d.id)), [alertData])
 
@@ -719,7 +661,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
       if (propsInCluster.length === 0) continue
       for (const p of propsInCluster) covered.add(p.id)
       const bubbleR = clusterBubbleRadiusPx(c.pointCount)
-      const color = getCriticalAlertPulseColor(propsInCluster[0])
+      const color = firstCriticalPulseColor(alertRuleConfig, alertMetrics(propsInCluster[0]))
       items.push({
         position: c.position,
         color,
@@ -732,7 +674,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
       const selectedBoost = selectedId === p.id ? 1.42 : 1
       items.push({
         position: [p.longitude, p.latitude],
-        color: getCriticalAlertPulseColor(p),
+        color: firstCriticalPulseColor(alertRuleConfig, alertMetrics(p)),
         basePx: pointRadiusPx(p) * selectedBoost,
       })
     }
@@ -740,6 +682,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
   }, [
     alertOn,
     alertData,
+    alertRuleConfig,
     clusterCircles,
     clusterIndex,
     propById,
@@ -747,20 +690,17 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
     pointRadiusPx,
   ])
 
-  // Build structured alert notifications grouped by severity
+  // Build alert notifications: one row per (property, matching rule)
   const alertNotifications = useMemo(() => {
-    const items: { prop: PropertyWithMetrics; rule: AlertRule }[] = []
-    const contractRules = ALERT_RULES.filter(r => r.key.startsWith('contract') || r.key === 'vacant')
-    const taxRules = ALERT_RULES.filter(r => r.key.startsWith('tax'))
-    for (const p of data) {
-      // first matching contract/vacancy rule
-      for (const r of contractRules) { if (r.check(p)) { items.push({ prop: p, rule: r }); break } }
-      // first matching tax rule
-      for (const r of taxRules) { if (r.check(p)) { items.push({ prop: p, rule: r }); break } }
-    }
+    const items: { prop: PropertyWithMetrics; match: EvaluatedAlertMatch }[] = []
     const order: Record<AlertSeverity, number> = { critical: 0, warning: 1, info: 2 }
-    return items.sort((a, b) => order[a.rule.severity] - order[b.rule.severity])
-  }, [data])
+    for (const p of data) {
+      for (const m of evaluatePropertyAlerts(alertRuleConfig, alertMetrics(p))) {
+        items.push({ prop: p, match: m })
+      }
+    }
+    return items.sort((a, b) => order[a.match.severity] - order[b.match.severity])
+  }, [data, alertRuleConfig])
 
   // Animation tick for pulse ring
   const [pulseTime, setPulseTime] = useState(0)
@@ -912,37 +852,64 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
                   </button>
                 ))}
               </div>
-              <button
-                className={`lb-map-control-btn${alertOn ? ' active' : ''}`}
-                onClick={() => setAlertOn(prev => !prev)}
-                title={alertOn ? 'Disable alerts' : 'Enable alerts'}
-              >
-                <img src={alertOn ? '/Alert - On.svg' : '/Alert - Off.svg'} alt="Alert toggle" width="16" height="16" />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button
+                  type="button"
+                  className="lb-map-control-btn"
+                  onClick={() => setRulesModalOpen(true)}
+                  title="Alert rules"
+                >
+                  <svg width="16" height="19" viewBox="0 0 24 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                    <path
+                      fillRule="evenodd"
+                      clipRule="evenodd"
+                      d="M16.013 20H15.987C14.13 20.006 12.57 21.28 12.126 23H1C0.448 23 0 23.448 0 24C0 24.552 0.448 25 1 25H12.126C12.571 26.724 14.138 28 16 28H16.013C17.87 27.994 19.43 26.72 19.874 25H23H23.006C23.555 24.997 24 24.55 24 24C24 23.448 23.552 23 23 23H19.874C19.43 21.28 17.87 20.006 16.013 20ZM16 22H16.013C17.111 22.007 18 22.9 18 24C18 25.1 17.111 25.993 16.013 26H16C14.896 26 14 25.104 14 24C14 22.896 14.896 22 16 22ZM4.126 13H1C0.448 13 0 13.448 0 14C0 14.552 0.448 15 1 15H4.126C4.571 16.724 6.138 18 8 18C9.862 18 11.429 16.724 11.874 15H23C23.552 15 24 14.552 24 14C24 13.448 23.552 13 23 13H11.874C11.429 11.276 9.862 10 8 10C6.138 10 4.571 11.276 4.126 13ZM8 12C9.104 12 10 12.896 10 14C10 15.104 9.104 16 8 16C6.896 16 6 15.104 6 14C6 12.896 6.896 12 8 12ZM16.013 0H15.987C14.13 0.006 12.57 1.28 12.126 3H1C0.448 3 0 3.448 0 4C0 4.552 0.448 5 1 5H12.126C12.571 6.724 14.138 8 16 8H16.013C17.87 7.994 19.43 6.72 19.874 5H23H23.006C23.555 4.997 24 4.55 24 4C24 3.448 23.552 3 23 3H19.874C19.43 1.28 17.87 0.006 16.013 0ZM16 2H16.013C17.111 2.007 18 2.9 18 4C18 5.1 17.111 5.993 16.013 6H16C14.896 6 14 5.104 14 4C14 2.896 14.896 2 16 2Z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                </button>
+                <button
+                  className={`lb-map-control-btn${alertOn ? ' active' : ''}`}
+                  onClick={() => setAlertOn(prev => !prev)}
+                  title={alertOn ? 'Disable alerts' : 'Enable alerts'}
+                >
+                  <img src={alertOn ? '/Alert - On.svg' : '/Alert - Off.svg'} alt="Alert toggle" width="16" height="16" />
+                </button>
+              </div>
             </div>
             <div className="lb-list">
-              {alertNotifications.filter(a => (severityFilter === 'all' || a.rule.severity === severityFilter) && (selectedId == null || a.prop.id === selectedId)).length === 0 ? (
+              {alertNotifications.filter(a => (severityFilter === 'all' || a.match.severity === severityFilter) && (selectedId == null || a.prop.id === selectedId)).length === 0 ? (
                 <div className="lb-alerts-empty">No active alerts</div>
               ) : (
                 alertNotifications
-                  .filter(a => (severityFilter === 'all' || a.rule.severity === severityFilter) && (selectedId == null || a.prop.id === selectedId))
-                  .map(({ prop, rule }) => (
+                  .filter(a => (severityFilter === 'all' || a.match.severity === severityFilter) && (selectedId == null || a.prop.id === selectedId))
+                  .map(({ prop, match }) => (
                     <div
-                      key={`${prop.id}-${rule.key}`}
-                      className={`lb-alert-item lb-alert-${rule.severity}`}
+                      key={`${prop.id}-${match.userRuleId}`}
+                      className={`lb-alert-item lb-alert-${match.severity}`}
                       onClick={() => handleRowClick(prop)}
                     >
                       <div className="lb-alert-severity-bar" />
                       <div className="lb-alert-content">
                         <div className="lb-alert-name">{prop.name}</div>
-                        <div className="lb-alert-desc">{rule.describe(prop)}</div>
+                        <div className="lb-alert-desc">{match.describe}</div>
                       </div>
-                      <span className={`lb-alert-badge lb-alert-badge-${rule.severity}`}>{rule.label}</span>
+                      <span className={`lb-alert-badge lb-alert-badge-${match.severity}`}>{match.label}</span>
                     </div>
                   ))
               )}
             </div>
           </>
+        )}
+        {rulesModalOpen && (
+          <AlertRulesModal
+            config={alertRuleConfig}
+            onSave={(c) => {
+              setAlertRuleConfig(c)
+              saveAlertRuleConfig(c)
+            }}
+            onClose={() => setRulesModalOpen(false)}
+          />
         )}
       </div>
 

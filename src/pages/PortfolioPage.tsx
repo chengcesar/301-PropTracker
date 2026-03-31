@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import type { Contract, Property } from '../lib/types'
-import { activeContract, calcAnnual, calcIrr, calcPortfolioAssetKpis, calcPortfolioTotalsIn, convertAnnual, estimatedPropertyValueAtYear } from '../lib/finance'
+import { activeContract, calcAnnual, calcIrr, calcPortfolioAssetKpis, calcPortfolioTotalsIn, convertAnnual, estimatedPropertyValueAtYear, hasNonLeaseOccupant, nonLeaseOccupancyExportValue, nonLeaseOccupancyLabel, occupancyFilterBucket } from '../lib/finance'
 import { fmtCurrencyM } from '../lib/format'
 import { type CurrencyCode, type FxRates, CURRENCIES, CURRENCY_LIST, convert, loadFxRates, saveFxRates, flagUrl } from '../lib/currency'
 import { useAppState } from '../context/useAppState'
@@ -240,14 +240,14 @@ const KPI_META: Record<KpiKey, { label: string; cls?: string; negPrefix?: boolea
 }
 
 const COL_KEYS = [
-  'owner', 'country', 'status', 'endDate', 'taxStatus',
+  'owner', 'country', 'status', 'nonLeaseOcc', 'endDate', 'taxStatus',
   'propertyType', 'bedrooms', 'area', 'bathrooms', 'parking', 'floor', 'estrato', 'yearBuilt', 'lastRenovation',
   'estValue', 'valueYoY', 'ownedSince', 'debt', 'mtgYearsLeft',
   'gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin',
 ] as const
 type ColKey = typeof COL_KEYS[number]
 const COL_LABELS: Record<ColKey, string> = {
-  owner: 'Owner', country: 'Country', status: 'Status', endDate: 'Months Left', taxStatus: 'Tax Status',
+  owner: 'Owner', country: 'Country', status: 'Status', nonLeaseOcc: 'Occupancy', endDate: 'Months Left', taxStatus: 'Tax Status',
   propertyType: 'Type', bedrooms: 'Beds', area: 'Area', bathrooms: 'Baths', parking: 'Parking',
   floor: 'Floor', estrato: 'Estrato', yearBuilt: 'Year Built', lastRenovation: 'Renovation',
   estValue: 'Est. value', valueYoY: 'Value YoY', ownedSince: 'Owned since', debt: 'Debt', mtgYearsLeft: 'Mortgage (yrs)',
@@ -261,7 +261,7 @@ const BUILT_IN_PRESETS: { id: string; label: string; cols: ColKey[] }[] = [
     label: 'Financial',
     cols: ['owner', 'country', 'gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin'],
   },
-  { id: 'details', label: 'Details', cols: ['owner', 'country', 'status', 'endDate', 'taxStatus', ...DETAIL_COLS] },
+  { id: 'details', label: 'Details', cols: ['owner', 'country', 'status', 'nonLeaseOcc', 'endDate', 'taxStatus', ...DETAIL_COLS] },
   { id: 'all', label: 'All', cols: [...COL_KEYS] },
 ]
 const CUSTOM_SLOT_COUNT = 3
@@ -592,8 +592,10 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
     const countries = Array.from(new Set(properties.map(p => p.country).filter(Boolean))).sort()
     const cities = Array.from(new Set(properties.map(p => p.city).filter(Boolean))).sort()
     const neighbourhoods = Array.from(new Set(properties.map(p => p.neighbourhood).filter(Boolean))).sort()
+    const nonLeaseValues = ['Vacant', 'Leased', 'Occupied']
     const cols: { key: string; label: string; values: string[] }[] = [
       { key: 'status', label: 'Status', values: statusValues },
+      { key: 'nonLeaseOcc', label: 'Occupancy', values: nonLeaseValues },
     ]
     if (owners.length > 1) cols.push({ key: 'owner', label: 'Owner', values: owners })
     if (countries.length > 1) cols.push({ key: 'country', label: 'Country', values: countries })
@@ -609,6 +611,11 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
       if (key === 'status') {
         if (value === 'Rented') result = result.filter(p => activeContract(p) !== null)
         else if (value === 'Vacant') result = result.filter(p => activeContract(p) === null)
+      } else if (key === 'nonLeaseOcc') {
+        const v = value as string
+        if (v === 'Vacant' || v === 'Leased' || v === 'Occupied') {
+          result = result.filter(p => occupancyFilterBucket(p) === v)
+        }
       } else {
         result = result.filter(p => (p as any)[key] === value)
       }
@@ -634,6 +641,15 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
       else if (sortKey === 'owner') { va = (a.owner ?? '').toLowerCase(); vb = (b.owner ?? '').toLowerCase() }
       else if (sortKey === 'country') { va = (a.country ?? '').toLowerCase(); vb = (b.country ?? '').toLowerCase() }
       else if (sortKey === 'status') { va = activeContract(a) ? 1 : 0; vb = activeContract(b) ? 1 : 0 }
+      else if (sortKey === 'nonLeaseOcc') {
+        const occOrder = (p: Property) => {
+          const b = occupancyFilterBucket(p)
+          return b === 'Vacant' ? 0 : b === 'Leased' ? 1 : 2
+        }
+        va = occOrder(a)
+        vb = occOrder(b)
+        if (va === vb) { va = nonLeaseOccupancyLabel(a).toLowerCase(); vb = nonLeaseOccupancyLabel(b).toLowerCase() }
+      }
       else if (sortKey === 'endDate') {
         const acA = activeContract(a), acB = activeContract(b)
         va = acA ? new Date(acA.endDate).getTime() : Infinity
@@ -908,6 +924,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
       owner: { label: 'Owner', value: (p) => p.owner || '' },
       country: { label: 'Country', value: (p) => p.country || '' },
       status: { label: 'Status', value: (_p, _a, ac) => ac ? 'Rented' : 'Vacant' },
+      nonLeaseOcc: { label: 'Occupancy', value: (p) => nonLeaseOccupancyExportValue(p) },
       endDate: { label: 'Months Left', value: (_p, _a, ac) => {
         if (!ac) return ''
         const end = new Date(ac.endDate), now = new Date()
@@ -1585,6 +1602,23 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                       </td>
                     ),
                     status: <td key="status" className="wf-col-status"><span className={`badge ${ac ? 'active-c' : 'vacant'}`}>{ac ? 'Rented' : 'Vacant'}</span></td>,
+                    nonLeaseOcc: (() => {
+                      const ac = activeContract(p)
+                      const occ = p.occupant
+                      const hasOcc = hasNonLeaseOccupant(p)
+                      const label = nonLeaseOccupancyLabel(p)
+                      const tip = ac
+                        ? [ac.tenant, ac.endDate ? `ends ${ac.endDate}` : ''].filter(Boolean).join(' · ')
+                        : hasOcc
+                          ? [occ?.name, occ?.relation, occ?.notes].filter(Boolean).join(' · ')
+                          : undefined
+                      const badgeCls = ac ? 'active-c' : hasOcc ? 'override' : 'vacant'
+                      return (
+                        <td key="nonLeaseOcc" className="wf-col-status">
+                          <span className={`badge ${badgeCls}`} title={tip}>{label}</span>
+                        </td>
+                      )
+                    })(),
                     endDate: (() => {
                       if (!ac) return <td key="endDate" className="text3">—</td>
                       const end = new Date(ac.endDate), now = new Date()

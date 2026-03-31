@@ -181,6 +181,17 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
     })
   }
 
+  const setRentReceived = (mIdx: number, received: boolean) => {
+    onUpdateProp((p) => {
+      const ym = p.months[p.year] ?? {}
+      const existing = ym[mIdx] ?? { status: 'rented' as const, incomeOverride: null, expenses: {} }
+      return {
+        ...p,
+        months: { ...p.months, [p.year]: { ...ym, [mIdx]: { ...existing, rentReceived: received } } },
+      }
+    })
+  }
+
   const fillFromServices = () => {
     onUpdateProp((p) => {
       const services = resolveServices(p)
@@ -217,6 +228,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
       hasExpenses:
         m &&
         Object.values(m.expenses ?? {}).some((v) => typeof v === 'number' && v > 0),
+      rentReceived: m?.rentReceived === true,
     }
   })
 
@@ -502,9 +514,11 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                 m.status === 'vacant' ? 'vacant' : '',
                 m.hasOverride ? 'has-override' : '',
                 m.hasExpenses || m.status === 'vacant' ? 'complete' : 'pending',
+                m.rentReceived && m.status !== 'vacant' ? 'rent-received' : '',
               ]
                 .filter(Boolean)
                 .join(' ')
+              const showPaidToggle = m.status !== 'vacant'
               return (
                 <div key={m.i} className={cls} onClick={() => setMonthModal(m.i)}>
                   <div className="mt-header">
@@ -517,12 +531,42 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                   </div>
                   <div className="mt-income">{m.status === 'vacant' ? '—' : `+${fmt(cx(m.income))}`}</div>
                   <div className="mt-expense" style={{ color: '#b91c1c' }}>OPEX −{fmt(cx(m.totalOpex))}</div>
-                  <div className="mt-footer">
-                    <span className={`mt-net ${m.noi >= 0 ? 'pos' : 'neg'}`}>
-                      {m.noi >= 0 ? '+' : ''}
-                      {fmt(cx(m.noi))}
-                    </span>
-                    <span className="fs11 text3">{m.hasExpenses ? 'Logged' : 'Pending'}</span>
+                  <div className="mt-footer mt-footer--stack">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <span className={`mt-net ${m.noi >= 0 ? 'pos' : 'neg'}`}>
+                        {m.noi >= 0 ? '+' : ''}
+                        {fmt(cx(m.noi))}
+                      </span>
+                      <span className="fs11 text3">{m.hasExpenses ? 'OPEX logged' : 'OPEX pending'}</span>
+                    </div>
+                    {showPaidToggle && (
+                      <div
+                        role="presentation"
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'default' }}
+                        title="Mark when rent has been received. Click the rest of the card to edit the month."
+                      >
+                        <input
+                          id={`rent-received-${m.i}`}
+                          type="checkbox"
+                          checked={m.rentReceived}
+                          onChange={(e) => {
+                            e.stopPropagation()
+                            setRentReceived(m.i, e.target.checked)
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ width: 16, height: 16, flexShrink: 0, cursor: 'pointer' }}
+                        />
+                        <label
+                          htmlFor={`rent-received-${m.i}`}
+                          className="fs11 text2"
+                          style={{ cursor: 'pointer', userSelect: 'none', flex: 1, lineHeight: 1.3 }}
+                        >
+                          Rent received
+                        </label>
+                      </div>
+                    )}
                   </div>
                 </div>
               )

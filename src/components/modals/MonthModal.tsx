@@ -19,6 +19,7 @@ export function MonthModal({ prop, mIdx, onSave, onClose }: Props) {
   const orig = ym[mIdx] ?? { status: 'rented' as const, incomeOverride: null, expenses: {} }
 
   const [status, setStatus] = useState<'rented' | 'vacant'>(orig.status ?? 'rented')
+  const [rentReceived, setRentReceived] = useState(orig.rentReceived === true)
   const [incOverride, setIncOverride] = useState(
     orig.incomeOverride !== null && orig.incomeOverride !== undefined ? String(orig.incomeOverride) : '',
   )
@@ -50,6 +51,7 @@ export function MonthModal({ prop, mIdx, onSave, onClose }: Props) {
     onSave(mIdx, {
       status,
       incomeOverride: incOverride !== '' ? parseNum(incOverride) : null,
+      rentReceived: contract && status !== 'vacant' ? rentReceived : undefined,
       expenses: parsed,
     })
     onClose()
@@ -96,23 +98,34 @@ export function MonthModal({ prop, mIdx, onSave, onClose }: Props) {
             ))}
           </div>
           {contract && status !== 'vacant' && (
-            <div className="field mb16">
-              <label>Income override (leave blank for contract amount)</label>
-              <div className="flex gap8 align-center">
+            <>
+              <label className="flex gap8 align-center mb16" style={{ cursor: 'pointer' }}>
                 <input
-                  type="text"
-                  value={incOverride}
-                  onChange={(e) => setIncOverride(e.target.value)}
-                  placeholder={fmt(contract.monthlyRent)}
-                  className="input-sm"
+                  type="checkbox"
+                  checked={rentReceived}
+                  onChange={(e) => setRentReceived(e.target.checked)}
+                  style={{ width: 16, height: 16, flexShrink: 0 }}
                 />
-                {incOverride && (
-                  <button type="button" className="ghost fs11" onClick={() => setIncOverride('')}>
-                    Reset
-                  </button>
-                )}
+                <span className="fs13 text2">Rent received</span>
+              </label>
+              <div className="field mb16">
+                <label>Income override (leave blank for contract amount)</label>
+                <div className="flex gap8 align-center">
+                  <input
+                    type="text"
+                    value={incOverride}
+                    onChange={(e) => setIncOverride(e.target.value)}
+                    placeholder={fmt(contract.monthlyRent)}
+                    className="input-sm"
+                  />
+                  {incOverride && (
+                    <button type="button" className="ghost fs11" onClick={() => setIncOverride('')}>
+                      Reset
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
+            </>
           )}
           <div className="sec-title mb8">Expenses</div>
           <table className="exp-table">

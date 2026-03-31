@@ -97,6 +97,37 @@ export function activeContract(prop: Property): Contract | null {
   return prop.contracts.find((c) => c.status === 'active') ?? null
 }
 
+/** Someone living there without an active lease (Overview → occupant). */
+export function hasNonLeaseOccupant(prop: Property): boolean {
+  return Boolean(prop.occupant?.name?.trim())
+}
+
+/**
+ * Portfolio Occupancy column: fixed “Leased” when there is an active contract (compact + filterable);
+ * otherwise non-lease relation / Vacant. Tenant name stays in tooltip on the row.
+ */
+export function nonLeaseOccupancyLabel(prop: Property): string {
+  if (activeContract(prop)) return 'Leased'
+  if (!hasNonLeaseOccupant(prop)) return 'Vacant'
+  const r = prop.occupant!.relation
+  return r === 'Owner' ? 'Owner' : r
+}
+
+/** Vacant | Leased | Occupied — “Occupied” is non-lease only (no active contract). */
+export function occupancyFilterBucket(prop: Property): 'Vacant' | 'Leased' | 'Occupied' {
+  if (activeContract(prop)) return 'Leased'
+  if (hasNonLeaseOccupant(prop)) return 'Occupied'
+  return 'Vacant'
+}
+
+/** CSV / copy — leased rows export as “Leased”; non-lease still includes name for detail. */
+export function nonLeaseOccupancyExportValue(prop: Property): string {
+  if (activeContract(prop)) return 'Leased'
+  if (!hasNonLeaseOccupant(prop)) return 'Vacant'
+  const name = prop.occupant!.name.trim()
+  return `${nonLeaseOccupancyLabel(prop)} · ${name}`
+}
+
 export function contractForMonth(
   contracts: Contract[],
   year: number,

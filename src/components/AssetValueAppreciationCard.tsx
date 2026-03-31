@@ -125,10 +125,10 @@ function seriesChipStyle(on: boolean, lineColor: string): CSSProperties {
   return {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: 8,
-    padding: '6px 12px',
+    gap: 5,
+    padding: '3px 8px',
     borderRadius: 999,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 600,
     cursor: 'pointer',
     border: `1px solid ${on ? lineColor : '#e5e7eb'}`,
@@ -396,7 +396,7 @@ export function AssetValueAppreciationCard({ properties, displayCurrency, fxRate
               >
                 Show on chart
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }} role="group" aria-label="Toggle property series">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }} role="group" aria-label="Toggle property series">
                 {chipList.map((c) => {
                   const on = !excludedIds.has(c.id)
                   return (
@@ -410,14 +410,14 @@ export function AssetValueAppreciationCard({ properties, displayCurrency, fxRate
                       <span
                         aria-hidden
                         style={{
-                          width: 8,
-                          height: 8,
+                          width: 6,
+                          height: 6,
                           borderRadius: 999,
                           background: on ? c.color : '#d1d5db',
                           flexShrink: 0,
                         }}
                       />
-                      <span style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.name}>
+                      <span style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.name}>
                         {c.name}
                       </span>
                     </button>
