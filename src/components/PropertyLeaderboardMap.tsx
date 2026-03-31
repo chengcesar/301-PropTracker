@@ -4,7 +4,7 @@ import { DeckGLOverlay } from './DeckGLOverlay'
 import { ScatterplotLayer, IconLayer, TextLayer, WebMercatorViewport } from 'deck.gl'
 import Supercluster from 'supercluster'
 import type { Property } from '../lib/types'
-import { activeContract, convertAnnual, estimatedPropertyValueAtYear, type AnnualResult } from '../lib/finance'
+import { activeContract, convertAnnual, estimatedPropertyValueAtYear, projectedGpiAnnual, type AnnualResult } from '../lib/finance'
 import { convert, type CurrencyCode, type FxRates } from '../lib/currency'
 import { fmtCurrencyM } from '../lib/format'
 import {
@@ -185,7 +185,11 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
       .filter(p => p.latitude != null && p.longitude != null)
       .map(p => {
         const annualRaw = annuals.get(p.id)!
-        const annual = convertAnnual(annualRaw, p.currency, displayCurrency, fxRates)
+        const annualConv = convertAnnual(annualRaw, p.currency, displayCurrency, fxRates)
+        const annual: AnnualResult = {
+          ...annualConv,
+          gpi: convert(projectedGpiAnnual(p), p.currency, displayCurrency, fxRates),
+        }
         const contract = activeContractMap.get(p.id)
         const ac = activeContract(p)
         const rentNative = contract?.monthlyRent ?? 0

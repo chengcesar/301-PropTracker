@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { MONTHS, MONTHS_FULL } from '../../lib/constants'
 import type { MonthData, Occupant, Property } from '../../lib/types'
-import { activeContract, calcAnnual, contractForMonth, expenseRowsForYear, getMonthData, resolveServices, yearMonths } from '../../lib/finance'
+import { activeContract, calcAnnual, contractForMonth, estimatedPropertyValueAtYear, expenseRowsForYear, getMonthData, projectedGpiAnnual, resolveServices, vacancyLossMonthCount, yearMonths } from '../../lib/finance'
 import { type CurrencyCode } from '../../lib/currency'
 import { fmt, fmtCurrency, fmtCurrencyM } from '../../lib/format'
 import { MonthModal } from '../modals/MonthModal'
@@ -31,6 +31,17 @@ function formatIncrement(c: { increment: string; ipcExtra: number }): string {
 export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency }: Props) {
   const dc = displayCurrency ?? prop.currency
   const ann = calcAnnual(prop)
+  const gpiDisplay = projectedGpiAnnual(prop)
+  const vacancyMonths = vacancyLossMonthCount(prop)
+  const valueEst = estimatedPropertyValueAtYear(prop, prop.year)
+  const capRatePct =
+    valueEst.value != null &&
+    valueEst.value > 0 &&
+    Number.isFinite(ann.noi) &&
+    Number.isFinite(cx(ann.noi)) &&
+    Number.isFinite(cx(valueEst.value))
+      ? (cx(ann.noi) / cx(valueEst.value)) * 100
+      : null
   const [monthModal, setMonthModal] = useState<number | null>(null)
   const [view, setView] = useState<'cards' | 'table'>('cards')
   const [editCell, setEditCell] = useState<{ row: string; col: number } | null>(null)
@@ -253,21 +264,33 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
     <div>
       <div className="kpi-row mb24">
         <div className="kpi-card">
-          <div className="kpi-label">GPI <KpiInfoIcon tip="Gross Potential Income — total rent if fully occupied" /></div>
-          <div className="kpi-value">{fmtCurrencyM(cx(ann.gpi), dc)}</div>
+          <div className="kpi-label">GPI <KpiInfoIcon tip="Gross Potential Income — contract rent when leased; for unleased months, Fact Sheet potential or the highest overlapping lease rent in this year." /></div>
+          <div className="kpi-value">{fmtCurrencyM(cx(gpiDisplay), dc)}</div>
           <div className="kpi-sub">Gross potential</div>
         </div>
         <div className="kpi-card">
-          <div className="kpi-label">Vacancy <KpiInfoIcon tip="Income lost from unoccupied periods" /></div>
+          <div className="kpi-label">Vacancy <KpiInfoIcon tip="Potential rent not collected: unleased months (gaps between leases), months marked vacant under a lease, or partial rent. Gap months use Fact Sheet potential rent if set, otherwise the highest monthly rent among leases that overlap this year." /></div>
           <div className="kpi-value red">
             {ann.vacancy > 0 ? '−' : ''}
             {fmtCurrencyM(cx(ann.vacancy), dc)}
+          </div>
+          <div className="kpi-sub">
+            {vacancyMonths} {vacancyMonths === 1 ? 'month' : 'months'}
           </div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">NOI <KpiInfoIcon tip="Net Operating Income — income minus operating expenses" /></div>
           <div className="kpi-value purple">{fmtCurrencyM(cx(ann.noi), dc)}</div>
           <div className="kpi-sub">After OPEX</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Cap rate <KpiInfoIcon tip="Capitalization rate — NOI for this year divided by estimated property value for the same year (Value and Equity: purchase model or manual appraisal). Pre-financing yield on the asset." /></div>
+          <div
+            className={`kpi-value${capRatePct == null || !Number.isFinite(capRatePct) ? '' : capRatePct < 0 ? ' red' : ' purple'}`}
+          >
+            {capRatePct != null && Number.isFinite(capRatePct) ? `${capRatePct.toFixed(2)}%` : '—'}
+          </div>
+          <div className="kpi-sub">NOI ÷ est. value</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">CAPEX <KpiInfoIcon tip="Capital Expenditures — major repairs & improvements" /></div>

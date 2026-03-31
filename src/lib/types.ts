@@ -117,6 +117,11 @@ export interface FactSheet {
   notes: string
   /** Year → local-currency value overrides entered by the user */
   priceHistory?: Record<number, number>
+  /**
+   * Imputed monthly rent for months with no lease in the selected year — used only for
+   * projected GPI display. Contract months still use contract rent; unset = no imputation.
+   */
+  potentialMonthlyRent?: number | null
   /** Default annual appreciation % used for projections (e.g. 5 = 5%) */
   appreciationRate?: number
   /** How many years beyond the current year to project */

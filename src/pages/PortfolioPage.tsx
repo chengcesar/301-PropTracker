@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import type { Contract, Property } from '../lib/types'
-import { activeContract, calcAnnual, calcIrr, calcPortfolioAssetKpis, calcPortfolioTotalsIn, convertAnnual, estimatedPropertyValueAtYear, hasNonLeaseOccupant, nonLeaseOccupancyExportValue, nonLeaseOccupancyLabel, occupancyFilterBucket } from '../lib/finance'
+import { activeContract, calcAnnual, calcIrr, calcPortfolioAssetKpis, calcPortfolioProjectedGpiIn, calcPortfolioTotalsIn, convertAnnual, estimatedPropertyValueAtYear, hasNonLeaseOccupant, nonLeaseOccupancyExportValue, nonLeaseOccupancyLabel, occupancyFilterBucket, projectedGpiAnnual, vacancyLossMonthCount } from '../lib/finance'
 import { fmtCurrencyM } from '../lib/format'
 import { type CurrencyCode, type FxRates, CURRENCIES, CURRENCY_LIST, convert, loadFxRates, saveFxRates, flagUrl } from '../lib/currency'
 import { useAppState } from '../context/useAppState'
@@ -193,6 +193,22 @@ function propertyValueYoYPct(p: Property, year: number): number | null {
   return ((now.value - prev.value) / prev.value) * 100
 }
 
+/** NOI ÷ estimated value for the year, in display currency; matches property overview cap rate. */
+function propertyCapRatePct(
+  p: Property,
+  year: number,
+  dc: CurrencyCode,
+  fx: FxRates,
+  annualInDc: ReturnType<typeof convertAnnual>,
+): number | null {
+  const e = estimatedPropertyValueAtYear({ ...p, year }, year)
+  if (e.value == null || e.value <= 0) return null
+  if (!Number.isFinite(annualInDc.noi)) return null
+  const valueDc = convert(e.value, p.currency, dc, fx)
+  if (!(valueDc > 0)) return null
+  return (annualInDc.noi / valueDc) * 100
+}
+
 /** Full calendar years (and fraction) from now until mortgage end; 0 if matured. */
 function mortgageYearsRemaining(endDateStr: string | undefined | null): number | null {
   if (!endDateStr?.trim()) return null
@@ -225,7 +241,7 @@ function KpiAvgAssetYoYPill({ pct }: { pct: number | null }) {
 const KPI_KEYS = ['gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'net', 'assetValue', 'assetYoY', 'irrAnnualized', 'capRate', 'equityMultiplier'] as const
 type KpiKey = typeof KPI_KEYS[number]
 const KPI_META: Record<KpiKey, { label: string; cls?: string; negPrefix?: boolean; tip: string }> = {
-  gpi: { label: 'GPI', tip: 'Gross Potential Income — total rent if fully occupied' },
+  gpi: { label: 'GPI', tip: 'Gross Potential Income — full-year basis: contract rent when leased; otherwise Fact Sheet potential or, if unset, the highest monthly rent among leases overlapping the year (gaps between leases). Vacancy is potential minus actual collected rent.' },
   egi: { label: 'EGI', cls: 'green', tip: 'Effective Gross Income — actual rent collected' },
   opex: { label: 'OPEX', cls: 'red', negPrefix: true, tip: 'Operating expenses — admin, maintenance, insurance, etc.' },
   noi: { label: 'NOI', cls: 'purple', tip: 'Net Operating Income — income minus operating expenses' },
@@ -243,7 +259,7 @@ const COL_KEYS = [
   'owner', 'country', 'status', 'nonLeaseOcc', 'endDate', 'taxStatus',
   'propertyType', 'bedrooms', 'area', 'bathrooms', 'parking', 'floor', 'estrato', 'yearBuilt', 'lastRenovation',
   'estValue', 'valueYoY', 'ownedSince', 'debt', 'mtgYearsLeft',
-  'gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin',
+  'gpi', 'egi', 'vacancyMoRate', 'opex', 'noi', 'capRate', 'capex', 'taxes', 'netCf', 'margin',
 ] as const
 type ColKey = typeof COL_KEYS[number]
 const COL_LABELS: Record<ColKey, string> = {
@@ -251,15 +267,15 @@ const COL_LABELS: Record<ColKey, string> = {
   propertyType: 'Type', bedrooms: 'Beds', area: 'Area', bathrooms: 'Baths', parking: 'Parking',
   floor: 'Floor', estrato: 'Estrato', yearBuilt: 'Year Built', lastRenovation: 'Renovation',
   estValue: 'Est. value', valueYoY: 'Value YoY', ownedSince: 'Owned since', debt: 'Debt', mtgYearsLeft: 'Mortgage (yrs)',
-  gpi: 'GPI', egi: 'EGI', opex: 'OPEX', noi: 'NOI',
-  capex: 'CAPEX', taxes: 'Taxes', netCf: 'Net CF', margin: 'Margin',
+  gpi: 'GPI', egi: 'EGI', vacancyMoRate: 'Vac. mo rate', opex: 'OPEX', noi: 'NOI',
+  capRate: 'Cap rate', capex: 'CAPEX', taxes: 'Taxes', netCf: 'Net CF', margin: 'Margin',
 }
 const DETAIL_COLS: ColKey[] = ['propertyType', 'bedrooms', 'area', 'bathrooms', 'parking', 'floor', 'estrato', 'yearBuilt', 'lastRenovation']
 const BUILT_IN_PRESETS: { id: string; label: string; cols: ColKey[] }[] = [
   {
     id: 'financial',
     label: 'Financial',
-    cols: ['owner', 'country', 'gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'netCf', 'margin'],
+    cols: ['owner', 'country', 'gpi', 'egi', 'vacancyMoRate', 'opex', 'noi', 'capRate', 'capex', 'taxes', 'netCf', 'margin'],
   },
   { id: 'details', label: 'Details', cols: ['owner', 'country', 'status', 'nonLeaseOcc', 'endDate', 'taxStatus', ...DETAIL_COLS] },
   { id: 'all', label: 'All', cols: [...COL_KEYS] },
@@ -340,12 +356,35 @@ const IconEye = ({ visible }: { visible: boolean }) => (
 )
 
 const FILTER_STORAGE_KEY = 'portfolio-filters'
+type PortfolioFilterSelection = string[] | null
+
 function loadSavedFilters() {
   try {
     const raw = localStorage.getItem(FILTER_STORAGE_KEY)
     if (raw) return JSON.parse(raw) as Record<string, unknown>
   } catch {}
   return {} as Record<string, unknown>
+}
+
+function migrateActiveFilters(raw: unknown): Record<string, PortfolioFilterSelection> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const out: Record<string, PortfolioFilterSelection> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (v == null) out[k] = null
+    else if (Array.isArray(v)) {
+      const strings = v.filter((x): x is string => typeof x === 'string')
+      out[k] = strings.length ? strings : []
+    } else if (typeof v === 'string') {
+      out[k] = [v]
+    }
+  }
+  return out
+}
+
+function formatFilterPillSummary(values: string[]): string {
+  if (values.length === 0) return ''
+  if (values.length <= 2) return values.join(', ')
+  return `${values[0]} +${values.length - 1} more`
 }
 
 function CurrencyPicker({ value, onChange }: { value: CurrencyCode; onChange: (c: CurrencyCode) => void }) {
@@ -537,7 +576,9 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const tableScrollRef = useRef<HTMLDivElement>(null)
   const [showScrollBtns, setShowScrollBtns] = useState(false)
   const [searchQuery, setSearchQuery] = useState((typeof _saved.searchQuery === 'string' ? _saved.searchQuery : ''))
-  const [activeFilters, setActiveFilters] = useState<Record<string, string | null>>((_saved.activeFilters && typeof _saved.activeFilters === 'object') ? _saved.activeFilters as Record<string, string | null> : {})
+  const [activeFilters, setActiveFilters] = useState<Record<string, PortfolioFilterSelection>>(() =>
+    migrateActiveFilters(_saved.activeFilters),
+  )
   const [filterDropdownOpen, setFilterDropdownOpen] = useState<string | null>(null)
   // null = closed, '__pick__' = picking column, column key = value picker open on that chip
   const filterBarRef = useRef<HTMLDivElement>(null)
@@ -606,18 +647,24 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
 
   const filteredProperties = useMemo(() => {
     let result = properties
-    for (const [key, value] of Object.entries(activeFilters)) {
-      if (!value) continue
+    for (const [key, selection] of Object.entries(activeFilters)) {
+      if (!selection || selection.length === 0) continue
       if (key === 'status') {
-        if (value === 'Rented') result = result.filter(p => activeContract(p) !== null)
-        else if (value === 'Vacant') result = result.filter(p => activeContract(p) === null)
+        result = result.filter(p =>
+          selection.some(v => {
+            if (v === 'Rented') return activeContract(p) !== null
+            if (v === 'Vacant') return activeContract(p) === null
+            return false
+          }),
+        )
       } else if (key === 'nonLeaseOcc') {
-        const v = value as string
-        if (v === 'Vacant' || v === 'Leased' || v === 'Occupied') {
-          result = result.filter(p => occupancyFilterBucket(p) === v)
-        }
+        result = result.filter(p =>
+          selection.some(
+            v => (v === 'Vacant' || v === 'Leased' || v === 'Occupied') && occupancyFilterBucket(p) === v,
+          ),
+        )
       } else {
-        result = result.filter(p => (p as any)[key] === value)
+        result = result.filter(p => selection.some(v => (p as any)[key] === v))
       }
     }
     if (searchQuery.trim()) {
@@ -697,14 +744,24 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
       else {
         const aa = convertAnnual(calcAnnual(withYear(a)), a.currency, displayCurrency, fxRates)
         const ab = convertAnnual(calcAnnual(withYear(b)), b.currency, displayCurrency, fxRates)
-        if (sortKey === 'gpi') { va = aa.gpi; vb = ab.gpi }
+        const gpiA = convert(projectedGpiAnnual(withYear(a)), a.currency, displayCurrency, fxRates)
+        const gpiB = convert(projectedGpiAnnual(withYear(b)), b.currency, displayCurrency, fxRates)
+        if (sortKey === 'gpi') { va = gpiA; vb = gpiB }
         else if (sortKey === 'egi') { va = aa.egi; vb = ab.egi }
         else if (sortKey === 'opex') { va = aa.totalOpex; vb = ab.totalOpex }
         else if (sortKey === 'noi') { va = aa.noi; vb = ab.noi }
+        else if (sortKey === 'capRate') {
+          va = propertyCapRatePct(withYear(a), selectedYear, displayCurrency, fxRates, aa) ?? -Infinity
+          vb = propertyCapRatePct(withYear(b), selectedYear, displayCurrency, fxRates, ab) ?? -Infinity
+        }
         else if (sortKey === 'capex') { va = aa.totalCapex ?? 0; vb = ab.totalCapex ?? 0 }
         else if (sortKey === 'taxes') { va = aa.taxes ?? 0; vb = ab.taxes ?? 0 }
         else if (sortKey === 'netCf') { va = aa.netCf; vb = ab.netCf }
-        else if (sortKey === 'margin') { va = aa.gpi ? (aa.netCf / aa.gpi) : 0; vb = ab.gpi ? (ab.netCf / ab.gpi) : 0 }
+        else if (sortKey === 'vacancyMoRate') {
+          va = vacancyLossMonthCount(withYear(a)) / 12
+          vb = vacancyLossMonthCount(withYear(b)) / 12
+        }
+        else if (sortKey === 'margin') { va = gpiA ? (aa.netCf / gpiA) : 0; vb = gpiB ? (ab.netCf / gpiB) : 0 }
       }
       if (va < vb) return sortDir === 'asc' ? -1 : 1
       if (va > vb) return sortDir === 'asc' ? 1 : -1
@@ -715,6 +772,20 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   }, [filteredProperties, sortKey, sortDir, displayCurrency, fxRates, selectedYear])
 
   const totals = calcPortfolioTotalsIn(filteredProperties.map(withYear), displayCurrency, fxRates)
+  const portfolioProjectedGpi = useMemo(
+    () => calcPortfolioProjectedGpiIn(filteredProperties.map(withYear), displayCurrency, fxRates),
+    [filteredProperties, displayCurrency, fxRates, selectedYear],
+  )
+
+  const portfolioAvgVacancyMoRatePct = useMemo(() => {
+    const n = filteredProperties.length
+    if (n === 0) return null
+    const sumFracs = filteredProperties.reduce(
+      (acc, p) => acc + vacancyLossMonthCount(withYear(p)) / 12,
+      0,
+    )
+    return (sumFracs / n) * 100
+  }, [filteredProperties, selectedYear])
 
   const valueEquityTotals = useMemo(() => {
     let estValue = 0
@@ -971,14 +1042,34 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
           return y != null ? String(y) : ''
         },
       },
-      gpi: { label: `GPI (${dc})`, value: (_p, a) => raw(a.gpi) },
+      gpi: { label: `GPI (${dc})`, value: (p) => raw(convert(projectedGpiAnnual(withYear(p)), p.currency, dc, fxRates)) },
       egi: { label: `EGI (${dc})`, value: (_p, a) => raw(a.egi) },
+      vacancyMoRate: {
+        label: 'Vacancy mo rate %',
+        value: (p) => {
+          const m = vacancyLossMonthCount(withYear(p))
+          return m === 0 ? '0' : String(Math.round((m / 12) * 1000) / 10)
+        },
+      },
       opex: { label: `OPEX (${dc})`, value: (_p, a) => raw(-a.totalOpex) },
       noi: { label: `NOI (${dc})`, value: (_p, a) => raw(a.noi) },
+      capRate: {
+        label: 'Cap rate %',
+        value: (p, a) => {
+          const cap = propertyCapRatePct(withYear(p), selectedYear, dc, fxRates, a)
+          return cap != null && Number.isFinite(cap) ? String(Math.round(cap * 100) / 100) : ''
+        },
+      },
       capex: { label: `CAPEX (${dc})`, value: (_p, a) => raw(a.totalCapex ? -a.totalCapex : 0) },
       taxes: { label: `Taxes (${dc})`, value: (_p, a) => raw(a.taxes ? -a.taxes : 0) },
       netCf: { label: `Net CF (${dc})`, value: (_p, a) => raw(a.netCf) },
-      margin: { label: 'Margin', value: (_p, a) => a.gpi ? String(Math.round((a.netCf / a.gpi) * 100)) : '' },
+      margin: {
+        label: 'Margin',
+        value: (p, a) => {
+          const g = convert(projectedGpiAnnual(withYear(p)), p.currency, dc, fxRates)
+          return g ? String(Math.round((a.netCf / g) * 100)) : ''
+        },
+      },
     }
     return map
   }
@@ -1174,8 +1265,12 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                   mainValue = `${advancedKpis.equityMultiplier.toFixed(2)}x`
                 }
               } else if (cashflowPct) {
-                const tk = key as keyof typeof totals
-                mainValue = `${KPI_META[key].negPrefix && totals[tk] ? '−' : ''}${fm(totals[tk])}`
+                if (key === 'gpi') {
+                  mainValue = fm(portfolioProjectedGpi)
+                } else {
+                  const tk = key as keyof typeof totals
+                  mainValue = `${KPI_META[key].negPrefix && totals[tk] ? '−' : ''}${fm(totals[tk])}`
+                }
               }
               return (
                 <div className="kpi-card" key={key}>
@@ -1196,7 +1291,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
         <div className="filter-bar mb24" ref={filterBarRef}>
           <div className="filter-bar-top">
             <button
-              className={`filter-bar-icon-btn${Object.keys(activeFilters).length > 0 ? ' active' : ''}`}
+              className={`filter-bar-icon-btn${Object.values(activeFilters).some(v => v != null && v.length > 0) ? ' active' : ''}`}
               title="Filter"
               onClick={() => setFilterDropdownOpen(prev => prev ? null : '__pick__')}
             >
@@ -1423,7 +1518,8 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                 const col = FILTER_COLUMNS.find(c => c.key === key)
                 if (!col) return null
                 const isOpen = filterDropdownOpen === key
-                const hasValue = value !== null
+                const selected = value ?? []
+                const hasValue = selected.length > 0
                 return (
                   <div key={key} style={{ position: 'relative', display: 'inline-flex' }}>
                     <button
@@ -1434,7 +1530,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                       }}
                       onClick={() => setFilterDropdownOpen(prev => prev === key ? null : key)}
                     >
-                      {hasValue ? `${col.label}: ${value}` : col.label}
+                      {hasValue ? `${col.label}: ${formatFilterPillSummary(selected)}` : col.label}
                       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ marginLeft: 5, transition: 'transform 0.15s', transform: isOpen ? 'rotate(180deg)' : 'none' }}>
                         <path d="M2.5 3.75L5 6.25L7.5 3.75" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
@@ -1462,24 +1558,37 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                         <div style={{ padding: '10px 14px 6px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
                           {col.label}
                         </div>
-                        {col.values.map(val => (
-                          <button
-                            key={val}
-                            className="ghost"
-                            style={{
-                              width: '100%', textAlign: 'left', padding: '9px 14px', fontSize: 13, borderRadius: 0,
-                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                              background: value === val ? '#f0f5ff' : undefined,
-                              fontWeight: value === val ? 600 : 400,
-                            }}
-                            onClick={() => { setActiveFilters(prev => ({ ...prev, [key]: val })); setFilterDropdownOpen(null) }}
-                          >
-                            <span>{val}</span>
-                            {value === val && (
-                              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3.5 3.5L13 4"/></svg>
-                            )}
-                          </button>
-                        ))}
+                        {col.values.map(val => {
+                          const checked = selected.includes(val)
+                          return (
+                            <button
+                              key={val}
+                              type="button"
+                              className="ghost"
+                              style={{
+                                width: '100%', textAlign: 'left', padding: '9px 14px', fontSize: 13, borderRadius: 0,
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                background: checked ? '#f0f5ff' : undefined,
+                                fontWeight: checked ? 600 : 400,
+                              }}
+                              onClick={() => {
+                                setActiveFilters(prev => {
+                                  const cur = prev[key]
+                                  const arr = cur == null ? [] : [...cur]
+                                  const i = arr.indexOf(val)
+                                  if (i >= 0) arr.splice(i, 1)
+                                  else arr.push(val)
+                                  return { ...prev, [key]: arr }
+                                })
+                              }}
+                            >
+                              <span>{val}</span>
+                              {checked && (
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3.5 3.5L13 4"/></svg>
+                              )}
+                            </button>
+                          )
+                        })}
                         <div style={{ height: 4 }} />
                       </div>
                     )}
@@ -1514,7 +1623,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                           key={col.key}
                           className="ghost"
                           style={{ width: '100%', textAlign: 'left', padding: '9px 14px', fontSize: 13, borderRadius: 0 }}
-                          onClick={() => { setActiveFilters(prev => ({ ...prev, [col.key]: col.values[0] })); setFilterDropdownOpen(null) }}
+                          onClick={() => { setActiveFilters(prev => ({ ...prev, [col.key]: col.values.length ? [col.values[0]] : [] })); setFilterDropdownOpen(null) }}
                         >
                           {col.label}
                         </button>
@@ -1587,6 +1696,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
               <tbody>
                 {sortedProperties.map((p) => {
                   const a = convertAnnual(calcAnnual(withYear(p)), p.currency, displayCurrency, fxRates)
+                  const gpiRow = convert(projectedGpiAnnual(withYear(p)), p.currency, displayCurrency, fxRates)
                   const ac = activeContract(p)
                   const countryCode = COUNTRIES.find(c => c.name === p.country)?.code
                   const cellMap: Record<ColKey, React.ReactNode> = {
@@ -1681,14 +1791,42 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                       if (y == null) return <td key="mtgYearsLeft" className="text3">—</td>
                       return <td key="mtgYearsLeft">{y === 0 ? '0' : y}</td>
                     })(),
-                    gpi: <td key="gpi">{fm(a.gpi)}</td>,
+                    gpi: <td key="gpi">{fm(gpiRow)}</td>,
                     egi: <td key="egi" className="pos">{fm(a.egi)}</td>,
+                    vacancyMoRate: (() => {
+                      const m = vacancyLossMonthCount(withYear(p))
+                      const pct = (m / 12) * 100
+                      return (
+                        <td
+                          key="vacancyMoRate"
+                          className={pct > 0 ? 'text3' : undefined}
+                          title={`${m} of 12 months with rent shortfall (gaps, vacant, or partial)`}
+                        >
+                          {`${pct.toFixed(1)}%`}
+                        </td>
+                      )
+                    })(),
                     opex: <td key="opex" className="neg">−{fm(a.totalOpex)}</td>,
                     noi: <td key="noi" className={a.noi >= 0 ? 'pos' : 'neg'}>{fm(a.noi)}</td>,
+                    capRate: (() => {
+                      const cap = propertyCapRatePct(withYear(p), selectedYear, displayCurrency, fxRates, a)
+                      if (cap == null || !Number.isFinite(cap)) {
+                        return <td key="capRate" className="text3">—</td>
+                      }
+                      return (
+                        <td
+                          key="capRate"
+                          className={cap < 0 ? 'neg' : 'purple'}
+                          title="NOI ÷ estimated value for the selected year (display currency)"
+                        >
+                          {cap.toFixed(2)}%
+                        </td>
+                      )
+                    })(),
                     capex: <td key="capex" className={a.totalCapex ? 'neg' : 'text3'}>{a.totalCapex ? `−${fm(a.totalCapex)}` : '—'}</td>,
                     taxes: <td key="taxes" className={a.taxes ? 'neg' : 'text3'}>{a.taxes ? `−${fm(a.taxes)}` : '—'}</td>,
                     netCf: <td key="netCf" className={a.netCf >= 0 ? 'pos fw5' : 'neg fw5'}>{a.netCf >= 0 ? '+' : ''}{fm(a.netCf)}</td>,
-                    margin: <td key="margin">{a.gpi ? `${Math.round((a.netCf / a.gpi) * 100)}%` : '—'}</td>,
+                    margin: <td key="margin">{gpiRow ? `${Math.round((a.netCf / gpiRow) * 100)}%` : '—'}</td>,
                   }
                   return (
                     <tr key={p.id} onClick={() => onSelectProperty(p.id)} style={{ cursor: 'pointer' }}>
@@ -1719,14 +1857,33 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                       </td>
                     ),
                     mtgYearsLeft: <td key="mtgYearsLeft" />,
-                    gpi: <td key="gpi">{fm(totals.gpi)}</td>,
+                    gpi: <td key="gpi">{fm(portfolioProjectedGpi)}</td>,
                     egi: <td key="egi">{fm(totals.egi)}</td>,
+                    vacancyMoRate: (
+                      <td
+                        key="vacancyMoRate"
+                        title="Simple average of each property’s vacancy-month share for the selected year"
+                      >
+                        {portfolioAvgVacancyMoRatePct != null ? `${portfolioAvgVacancyMoRatePct.toFixed(1)}%` : '—'}
+                      </td>
+                    ),
                     opex: <td key="opex" className="neg">−{fm(totals.opex)}</td>,
                     noi: <td key="noi">{fm(totals.noi)}</td>,
+                    capRate: (() => {
+                      if (advancedKpis.capRate == null || !Number.isFinite(advancedKpis.capRate)) {
+                        return <td key="capRate" className="text3">—</td>
+                      }
+                      const c = advancedKpis.capRate
+                      return (
+                        <td key="capRate" className={c < 0 ? 'neg' : 'purple'} title="Total NOI ÷ total estimated value">
+                          {c.toFixed(2)}%
+                        </td>
+                      )
+                    })(),
                     capex: <td key="capex">{totals.capex ? `−${fm(totals.capex)}` : '—'}</td>,
                     taxes: <td key="taxes">{totals.taxes ? `−${fm(totals.taxes)}` : '—'}</td>,
                     netCf: <td key="netCf">{totals.net >= 0 ? '+' : ''}{fm(totals.net)}</td>,
-                    margin: <td key="margin">{totals.gpi ? `${Math.round((totals.net / totals.gpi) * 100)}%` : '—'}</td>,
+                    margin: <td key="margin">{portfolioProjectedGpi ? `${Math.round((totals.net / portfolioProjectedGpi) * 100)}%` : '—'}</td>,
                   }
                   return (
                     <tr className="total-row">

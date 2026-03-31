@@ -141,6 +141,70 @@ export function contractForMonth(
   return found ?? null
 }
 
+/** Fact Sheet value for GPI gap months; 0 if unset or invalid. */
+export function potentialMonthlyRentFromProp(prop: Property): number {
+  const r = prop.factSheet?.potentialMonthlyRent
+  if (r == null || !Number.isFinite(r) || r < 0) return 0
+  return r
+}
+
+/** Non-draft lease intersects any day of the calendar year. */
+function contractOverlapsCalendarYear(c: Contract, year: number): boolean {
+  if (c.status === 'draft') return false
+  const start = new Date(c.startDate)
+  const end = new Date(c.endDate)
+  const yearStart = new Date(year, 0, 1)
+  const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999)
+  return start <= yearEnd && end >= yearStart
+}
+
+/**
+ * Max monthly rent among non-draft contracts that overlap the year (any month).
+ * Used to impute GPI/vacancy for unleased months when Fact Sheet potential is unset.
+ */
+export function maxMonthlyRentAmongContractsOverlappingYear(
+  contracts: Contract[],
+  year: number,
+): number {
+  let max = 0
+  for (const c of contracts) {
+    if (!contractOverlapsCalendarYear(c, year)) continue
+    max = Math.max(max, c.monthlyRent)
+  }
+  return max
+}
+
+/**
+ * Monthly “full potential” rent for GPI / vacancy: lease rent when covered; otherwise
+ * Fact Sheet potential, else the highest overlapping lease rent in the year (fills gaps between leases).
+ */
+export function monthlyPotentialRentForGpi(prop: Property, monthIdx: number): number {
+  const c = contractForMonth(prop.contracts, prop.year, monthIdx)
+  if (c) return c.monthlyRent
+  const fromSheet = potentialMonthlyRentFromProp(prop)
+  if (fromSheet > 0) return fromSheet
+  return maxMonthlyRentAmongContractsOverlappingYear(prop.contracts, prop.year)
+}
+
+/** Annual GPI if each month uses `monthlyPotentialRentForGpi` (full-year potential). */
+export function projectedGpiAnnual(prop: Property): number {
+  let sum = 0
+  for (let i = 0; i < 12; i++) sum += monthlyPotentialRentForGpi(prop, i)
+  return sum
+}
+
+/** Sum of projected annual GPI across properties, converted to display currency. */
+export function calcPortfolioProjectedGpiIn(
+  properties: Property[],
+  to: CurrencyCode,
+  rates: FxRates,
+): number {
+  return properties.reduce(
+    (acc, p) => acc + convert(projectedGpiAnnual(p), p.currency, to, rates),
+    0,
+  )
+}
+
 export function getMonthData(prop: Property, mIdx: number): MonthDataResult {
   const contract = contractForMonth(prop.contracts, prop.year, mIdx)
   const ym = yearMonths(prop)
@@ -175,25 +239,18 @@ export function getMonthData(prop: Property, mIdx: number): MonthDataResult {
 
 export function calcAnnual(prop: Property): AnnualResult {
   let gpi = 0
-  let vacancy = 0
+  let egi = 0
   let totalOpex = 0
   for (let i = 0; i < 12; i++) {
-    const c = contractForMonth(prop.contracts, prop.year, i)
+    const pot = monthlyPotentialRentForGpi(prop, i)
     const m = getMonthData(prop, i)
-    if (c) gpi += c.monthlyRent
-    if (c && m.status === 'vacant') vacancy += c.monthlyRent
-    else if (
-      c &&
-      m.incomeOverride !== null &&
-      m.incomeOverride !== undefined &&
-      m.incomeOverride < c.monthlyRent
-    )
-      vacancy += c.monthlyRent - m.incomeOverride
+    gpi += pot
+    egi += m.income
     totalOpex += m.totalOpex
   }
+  const vacancy = Math.max(0, gpi - egi)
   const totalCapex = prop.capex.reduce((a, b) => a + b.amount, 0)
   const taxes = (prop.taxes.items ?? []).reduce((a, t) => a + (t.amount ?? 0), 0)
-  const egi = gpi - vacancy
   const noi = egi - totalOpex
   return {
     gpi,
@@ -205,6 +262,16 @@ export function calcAnnual(prop: Property): AnnualResult {
     taxes,
     netCf: noi - totalCapex - taxes,
   }
+}
+
+/** Months in the selected year where GPI for that month exceeds actual rent collected. */
+export function vacancyLossMonthCount(prop: Property): number {
+  let n = 0
+  for (let i = 0; i < 12; i++) {
+    const pot = monthlyPotentialRentForGpi(prop, i)
+    if (pot > getMonthData(prop, i).income) n++
+  }
+  return n
 }
 
 export interface PortfolioTotals {

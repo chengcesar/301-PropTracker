@@ -1,6 +1,6 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app'
 import { getAuth as _getAuth, type Auth } from 'firebase/auth'
-import { getFirestore, type Firestore } from 'firebase/firestore'
+import { initializeFirestore, type Firestore } from 'firebase/firestore'
 import { getStorage, type FirebaseStorage } from 'firebase/storage'
 
 const firebaseConfig = {
@@ -35,7 +35,8 @@ function getApp(): FirebaseApp | null {
 if (isConfigured) {
   const a = getApp()!
   _auth = _getAuth(a)
-  db = getFirestore(a)
+  /** Allow optional fields (e.g. occupant.notes) to be undefined without failing writes. */
+  db = initializeFirestore(a, { ignoreUndefinedProperties: true })
 }
 
 /** Firebase Auth instance, or null if config is incomplete. */

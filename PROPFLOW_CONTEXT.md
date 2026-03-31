@@ -28,13 +28,18 @@ The working prototype was built as a single self-contained HTML file using React
 This is the most important section. **Never mix these layers.**
 
 ```
-Gross Potential Income (GPI)
-  = contract.monthlyRent × 12 months covered by a contract
+Gross Potential Income (GPI) — calcAnnual().gpi (full-year basis)
 
-− Vacancy & credit loss
-  = months where status === 'vacant' OR incomeOverride < monthlyRent
+  Per month: contract.monthlyRent if a lease covers that month; else Fact Sheet
+  potentialMonthlyRent if set; else the maximum monthlyRent among non-draft
+  contracts that overlap the calendar year (imputes gaps between leases).
+
+− Vacancy & credit loss — calcAnnual().vacancy
+  = max(0, GPI − EGI) where EGI is the sum of actual monthly rent collected
+  (from getMonthData: unleased months = 0, vacant under lease = 0, partial = override).
+
 ─────────────────────────────────────
-= Effective Gross Income (EGI)
+= Effective Gross Income (EGI) — sum of actual monthly income
 
 − OPEX (operating expenses, recurring)
   Auto (from contract):  admin/mgmt fee, internet

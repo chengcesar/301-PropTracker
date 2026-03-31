@@ -57,6 +57,7 @@ const EMPTY: FactSheet = {
   mortgage: { ...EMPTY_MORTGAGE },
   contacts: [],
   notes: '',
+  potentialMonthlyRent: null,
 }
 
 function ReadOnlyField({ label, value }: { label: string; value: string | number | null | undefined }) {
@@ -467,6 +468,40 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
                   />
                 )
               })}
+            </div>
+          )}
+
+          <div className="ct-field-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', margin: '20px 0 8px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Income modeling</div>
+          {editingChars ? (
+            <div className="contract-grid" style={{ marginBottom: 0 }}>
+              <div className="field" style={{ gridColumn: '1 / -1' }}>
+                <label>Potential monthly rent (full occupancy)</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder={`e.g. market rent (${prop.currency})`}
+                  value={fs.potentialMonthlyRent != null && fs.potentialMonthlyRent > 0 ? String(fs.potentialMonthlyRent) : ''}
+                  onChange={(e) => {
+                    const t = e.target.value.trim()
+                    if (!t) {
+                      set('potentialMonthlyRent', null)
+                      return
+                    }
+                    const n = parseFloat(t.replace(/[,.\s]/g, ''))
+                    set('potentialMonthlyRent', Number.isFinite(n) && n >= 0 ? n : null)
+                  }}
+                />
+                <div className="fs12 text3" style={{ marginTop: 6 }}>
+                  Used for GPI and vacancy when no lease covers a month. If left blank, the app uses the highest monthly rent among leases that overlap this year (so gaps between contracts still count as vacancy).
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="ct-fields" style={{ marginBottom: 0 }}>
+              <ReadOnlyField
+                label="Potential monthly rent (GPI gaps)"
+                value={fs.potentialMonthlyRent != null && fs.potentialMonthlyRent > 0 ? fs.potentialMonthlyRent : null}
+              />
             </div>
           )}
         </div>

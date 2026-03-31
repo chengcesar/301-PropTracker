@@ -79,7 +79,11 @@ export function subscribeProperties(
 
 /** Write or overwrite a property document. */
 export async function saveProperty(uid: string, property: Property): Promise<void> {
-  await setDoc(propertyDoc(uid, property.id), property)
+  try {
+    await setDoc(propertyDoc(uid, property.id), property)
+  } catch (e) {
+    console.error('Firestore saveProperty failed', property.id, e)
+  }
 }
 
 /** Delete a property document. */

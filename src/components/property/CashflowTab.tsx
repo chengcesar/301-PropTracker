@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { MONTHS_FULL } from '../../lib/constants'
 import type { Property } from '../../lib/types'
 import type { CurrencyCode } from '../../lib/currency'
-import { calcAnnual, expenseRowsForYear, getMonthData, yearMonths } from '../../lib/finance'
+import { calcAnnual, expenseRowsForYear, getMonthData, projectedGpiAnnual, yearMonths } from '../../lib/finance'
 import { fmt, fmtCurrencyM } from '../../lib/format'
 import { KpiInfoIcon } from '../KpiInfoIcon'
 
@@ -15,6 +15,7 @@ type Props = {
 export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
   const dc = displayCurrency ?? prop.currency
   const ann = calcAnnual(prop)
+  const gpiDen = projectedGpiAnnual(prop)
 
   const scheduleRows = useMemo(() => {
     let cumulative = 0
@@ -97,8 +98,8 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
                   <div className="wf-bar-fill" style={{ width: '100%', background: '#1A6B47' }} />
                 </div>
               </td>
-              <td className="pos">{fmt(cx(ann.gpi))}</td>
-              <td>{fmt(cx(ann.gpi / 12))}</td>
+              <td className="pos">{fmt(cx(gpiDen))}</td>
+              <td>{fmt(cx(gpiDen / 12))}</td>
               <td>100%</td>
             </tr>
             <tr className="indent">
@@ -108,7 +109,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
                   <div
                     className="wf-bar-fill"
                     style={{
-                      width: ann.gpi ? `${Math.round((ann.vacancy / ann.gpi) * 100)}%` : '0%',
+                      width: gpiDen ? `${Math.round((ann.vacancy / gpiDen) * 100)}%` : '0%',
                       background: '#9B2020',
                     }}
                   />
@@ -116,7 +117,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
               </td>
               <td className={ann.vacancy ? 'neg' : 'text3'}>{ann.vacancy ? `−${fmt(cx(ann.vacancy))}` : '—'}</td>
               <td className="text3">—</td>
-              <td>{ann.gpi ? `${Math.round((ann.vacancy / ann.gpi) * 100)}%` : '0%'}</td>
+              <td>{gpiDen ? `${Math.round((ann.vacancy / gpiDen) * 100)}%` : '0%'}</td>
             </tr>
             <tr className="subtotal">
               <td>Effective gross income (EGI)</td>
@@ -125,7 +126,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
                   <div
                     className="wf-bar-fill"
                     style={{
-                      width: ann.gpi ? `${Math.round((ann.egi / ann.gpi) * 100)}%` : '0%',
+                      width: gpiDen ? `${Math.round((ann.egi / gpiDen) * 100)}%` : '0%',
                       background: '#1A6B47',
                     }}
                   />
@@ -133,7 +134,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
               </td>
               <td className="pos">{fmt(cx(ann.egi))}</td>
               <td>{fmt(cx(ann.egi / 12))}</td>
-              <td>{ann.gpi ? `${Math.round((ann.egi / ann.gpi) * 100)}%` : '—'}</td>
+              <td>{gpiDen ? `${Math.round((ann.egi / gpiDen) * 100)}%` : '—'}</td>
             </tr>
             <tr className="section-hdr">
               <td colSpan={5}>Operating expenses</td>
@@ -153,7 +154,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
                       <div
                         className="wf-bar-fill"
                         style={{
-                          width: ann.gpi ? `${Math.max(1, Math.round((total / ann.gpi) * 100))}%` : '0%',
+                          width: gpiDen ? `${Math.max(1, Math.round((total / gpiDen) * 100))}%` : '0%',
                           background: '#4A3FA0',
                         }}
                       />
@@ -161,7 +162,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
                   </td>
                   <td className="neg">−{fmt(cx(total))}</td>
                   <td>{fmt(cx(total / 12))}</td>
-                  <td>{ann.gpi ? `${Math.round((total / ann.gpi) * 100)}%` : '—'}</td>
+                  <td>{gpiDen ? `${Math.round((total / gpiDen) * 100)}%` : '—'}</td>
                 </tr>
               )
             })}
@@ -172,7 +173,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
                   <div
                     className="wf-bar-fill"
                     style={{
-                      width: ann.gpi ? `${Math.max(0, Math.round((ann.noi / ann.gpi) * 100))}%` : '0%',
+                      width: gpiDen ? `${Math.max(0, Math.round((ann.noi / gpiDen) * 100))}%` : '0%',
                       background: ann.noi >= 0 ? '#1A6B47' : '#9B2020',
                     }}
                   />
@@ -180,7 +181,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
               </td>
               <td className={ann.noi >= 0 ? 'pos' : 'neg'}>{fmt(cx(ann.noi))}</td>
               <td>{fmt(cx(ann.noi / 12))}</td>
-              <td>{ann.gpi ? `${Math.round((ann.noi / ann.gpi) * 100)}%` : '—'}</td>
+              <td>{gpiDen ? `${Math.round((ann.noi / gpiDen) * 100)}%` : '—'}</td>
             </tr>
             <tr className="section-hdr">
               <td colSpan={5}>Below the line</td>
@@ -192,7 +193,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
                   <div
                     className="wf-bar-fill"
                     style={{
-                      width: ann.gpi && ann.totalCapex ? `${Math.max(1, Math.round((ann.totalCapex / ann.gpi) * 100))}%` : '0%',
+                      width: gpiDen && ann.totalCapex ? `${Math.max(1, Math.round((ann.totalCapex / gpiDen) * 100))}%` : '0%',
                       background: '#8A5A00',
                     }}
                   />
@@ -200,7 +201,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
               </td>
               <td className={ann.totalCapex ? 'neg' : 'text3'}>{ann.totalCapex ? `−${fmt(cx(ann.totalCapex))}` : '—'}</td>
               <td className="text3">—</td>
-              <td>{ann.gpi && ann.totalCapex ? `${Math.round((ann.totalCapex / ann.gpi) * 100)}%` : '0%'}</td>
+              <td>{gpiDen && ann.totalCapex ? `${Math.round((ann.totalCapex / gpiDen) * 100)}%` : '0%'}</td>
             </tr>
             <tr className="indent">
               <td>− Taxes</td>
@@ -209,7 +210,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
                   <div
                     className="wf-bar-fill"
                     style={{
-                      width: ann.gpi && ann.taxes ? `${Math.max(1, Math.round((ann.taxes / ann.gpi) * 100))}%` : '0%',
+                      width: gpiDen && ann.taxes ? `${Math.max(1, Math.round((ann.taxes / gpiDen) * 100))}%` : '0%',
                       background: '#9B2020',
                     }}
                   />
@@ -217,7 +218,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
               </td>
               <td className={ann.taxes ? 'neg' : 'text3'}>{ann.taxes ? `−${fmt(cx(ann.taxes))}` : '—'}</td>
               <td className="text3">—</td>
-              <td>{ann.gpi && ann.taxes ? `${Math.round((ann.taxes / ann.gpi) * 100)}%` : '—'}</td>
+              <td>{gpiDen && ann.taxes ? `${Math.round((ann.taxes / gpiDen) * 100)}%` : '—'}</td>
             </tr>
             <tr className="total-row">
               <td>Net cashflow</td>
@@ -227,7 +228,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
                 {fmt(cx(ann.netCf))}
               </td>
               <td>{fmt(cx(ann.netCf / 12))}</td>
-              <td>{ann.gpi ? `${Math.round((ann.netCf / ann.gpi) * 100)}%` : '—'}</td>
+              <td>{gpiDen ? `${Math.round((ann.netCf / gpiDen) * 100)}%` : '—'}</td>
             </tr>
           </tbody>
         </table>
