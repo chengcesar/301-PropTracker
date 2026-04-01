@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import type { Contract, Property } from '../lib/types'
-import { activeContract, calcAnnual, calcIrr, calcPortfolioAssetKpis, calcPortfolioProjectedGpiIn, calcPortfolioTotalsIn, convertAnnual, estimatedPropertyValueAtYear, hasNonLeaseOccupant, nonLeaseOccupancyExportValue, nonLeaseOccupancyLabel, occupancyFilterBucket, projectedGpiAnnual, vacancyLossMonthCount } from '../lib/finance'
+import { activeContract, calcAnnual, calcIrr, calcPortfolioAssetKpis, calcPortfolioProjectedGpiIn, calcPortfolioTotalsIn, contractForMonth, convertAnnual, estimatedPropertyValueAtYear, hasNonLeaseOccupant, nonLeaseOccupancyExportValue, nonLeaseOccupancyLabel, occupancyFilterBucket, projectedGpiAnnual, vacancyLossMonthCount } from '../lib/finance'
 import { fmtCurrencyM } from '../lib/format'
 import { type CurrencyCode, type FxRates, CURRENCIES, CURRENCY_LIST, convert, loadFxRates, saveFxRates, flagUrl } from '../lib/currency'
 import { useAppState } from '../context/useAppState'
@@ -211,6 +211,7 @@ const PORTFOLIO_TOOL_LABELS = ['AI Analysis', 'Vacancy Calculator', 'Field Notes
 /** Properties table layout toggle — masked SVGs from `public/` */
 const FILTER_BAR_LIST_VIEW_ICON = '/List-view.svg' as const
 const FILTER_BAR_GRID_VIEW_ICON = '/Grid-view.svg' as const
+const FILTER_BAR_TODO_VIEW_ICON = '/Todo-view.svg' as const
 
 function RowMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
   const [open, setOpen] = useState(false)
@@ -741,6 +742,81 @@ function formatCardMetricValue(
   }
 }
 
+function PaymentTodoCard({
+  propertyName,
+  rent,
+  currency,
+  rentInDisplay,
+  displayCurrency,
+  received,
+  onToggle,
+  onOpen,
+}: {
+  propertyName: string
+  rent: number
+  currency: CurrencyCode
+  rentInDisplay: string | null
+  displayCurrency: CurrencyCode
+  received: boolean
+  onToggle: () => void
+  onOpen: () => void
+}) {
+  return (
+    <div
+      className="todo-feed-card"
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={e => e.key === 'Enter' && onOpen()}
+    >
+      <div className="todo-feed-card-left">
+        <div className="todo-feed-card-initial" aria-hidden>
+          {propertyName.charAt(0).toUpperCase()}
+        </div>
+      </div>
+      <div className="todo-feed-card-body">
+        <div className="todo-feed-card-top">
+          <span className="todo-feed-card-name">{propertyName}</span>
+        </div>
+        <div className="todo-feed-card-amounts">
+          <span className="todo-feed-card-amount-primary">
+            <span className="todo-amount-code">{currency}</span>
+            {fmtCurrencyM(rent, currency)}
+          </span>
+          {rentInDisplay !== null && (
+            <span className="todo-feed-card-amount-secondary">
+              <span className="todo-amount-code">{displayCurrency}</span>
+              {rentInDisplay}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          className="ghost"
+          aria-label={received ? 'Mark as not received' : 'Mark rent as received'}
+          title={received ? 'Received' : 'Mark received'}
+          onClick={e => { e.stopPropagation(); onToggle() }}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            marginTop: 7, padding: 0, lineHeight: 0,
+            color: received ? 'var(--accent-bg)' : 'var(--text3)',
+            fontSize: 12, fontWeight: 500,
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="1" y="1" width="13" height="13" rx="2.5"
+              fill={received ? 'var(--accent-bg)' : 'none'}
+              stroke={received ? 'var(--accent-bg)' : 'currentColor'}
+            />
+            {received && <path d="M3.5 7.5l2.5 2.5L11 5" stroke="#fff" strokeWidth="1.8" />}
+          </svg>
+          Receive payment
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function PortfolioPropertyGridCard({
   property: p,
   year,
@@ -900,6 +976,22 @@ const IconEye = ({ visible }: { visible: boolean }) => (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M7.58 7.58a2.003 2.003 0 002.84 2.84M13.36 13.36C12.12 14.27 10.62 14.78 9 14.75c-5.25 0-7.5-5.25-7.5-5.25a13.16 13.16 0 013.64-4.11m2.91-1.16A5.7 5.7 0 019 4c5.25 0 7.5 5.25 7.5 5.25a13.24 13.24 0 01-1.47 2.15M1.5 1.5l15 15" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
   )
 )
+
+const TODO_PANEL_VIS_KEY = 'portfolio-todo-panel-vis'
+const TODO_PANELS = [
+  { key: 'feed',        label: 'Feed',                 mandatory: true  },
+  { key: 'payments',    label: 'Payments',              mandatory: false },
+  { key: 'maintenance', label: 'Maintenance \u0026 Works', mandatory: false },
+] as const
+type TodoPanelKey = typeof TODO_PANELS[number]['key']
+function loadTodoPanelVis(): Record<TodoPanelKey, boolean> {
+  const defaults: Record<TodoPanelKey, boolean> = { feed: true, payments: true, maintenance: true }
+  try {
+    const raw = localStorage.getItem(TODO_PANEL_VIS_KEY)
+    if (raw) return { ...defaults, ...JSON.parse(raw), feed: true }
+  } catch {}
+  return defaults
+}
 
 const FILTER_STORAGE_KEY = 'portfolio-filters'
 type PortfolioFilterSelection = string[] | null
@@ -1105,7 +1197,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const [selectedYear, setSelectedYear] = useState(() => (typeof _saved.selectedYear === 'number' ? _saved.selectedYear : new Date().getFullYear()))
   const yearWindow = getYearWindow(selectedYear)
   const withYear = (p: Property): Property => ({ ...p, year: selectedYear })
-  const { setAddPropertyOpen, removeProperty } = useAppState()
+  const { setAddPropertyOpen, removeProperty, updateProperty } = useAppState()
   const [fxRates, setFxRates] = useState<FxRates>(loadFxRates)
   const [fxOpen, setFxOpen] = useState(false)
   const fxRef = useRef<HTMLDivElement>(null)
@@ -1137,9 +1229,10 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const [colOrder, setColOrder] = useState(loadColOrder)
   const [colMenuOpen, setColMenuOpen] = useState(false)
   /** List vs grid for properties section (icon reflects current mode) */
-  const [propertiesLayoutView, setPropertiesLayoutView] = useState<'list' | 'grid'>(() =>
-    _saved.propertiesLayoutView === 'grid' ? 'grid' : 'list',
-  )
+  const [propertiesLayoutView, setPropertiesLayoutView] = useState<'list' | 'grid' | 'todo'>(() => {
+    const v = _saved.propertiesLayoutView
+    return v === 'grid' || v === 'todo' ? v : 'list'
+  })
   const [customPresets, setCustomPresets] = useState(loadCustomPresets)
   // activePreset: built-in id string ('financial'|'details'|'all') — UI labels View 1–3 — or custom slot index (0|1|2) or null
   const [activePreset, setActivePreset] = useState<string | number | null>(() => loadColActivePreset(loadCustomPresets()))
@@ -1153,6 +1246,26 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const [dragOverCardMetric, setDragOverCardMetric] = useState<ColKey | null>(null)
   const [cardMetricMax5Hint, setCardMetricMax5Hint] = useState(false)
   const colMenuRef = useRef<HTMLDivElement>(null)
+  const [todoPanelVis, setTodoPanelVis] = useState(loadTodoPanelVis)
+
+  function handleToggleRentReceived(propertyId: number, calYear: number, calMonth: number, current: boolean) {
+    updateProperty(propertyId, (p) => {
+      const ym = p.months[calYear] ?? {}
+      const existing = ym[calMonth] ?? { status: 'rented' as const, incomeOverride: null, expenses: {} }
+      return {
+        ...p,
+        months: { ...p.months, [calYear]: { ...ym, [calMonth]: { ...existing, rentReceived: !current } } },
+      }
+    })
+  }
+
+  function toggleTodoPanel(key: TodoPanelKey) {
+    setTodoPanelVis(prev => {
+      const next = { ...prev, [key]: !prev[key], feed: true }
+      localStorage.setItem(TODO_PANEL_VIS_KEY, JSON.stringify(next))
+      return next
+    })
+  }
 
   const activeCardMetricKeys = useMemo(
     () => cardMetricOrder.filter(k => cardMetricVis[k]).slice(0, CARD_METRIC_MAX_ON),
@@ -1370,6 +1483,22 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
     return sorted
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredProperties, sortKey, sortDir, displayCurrency, fxRates, selectedYear])
+
+  // Payments panel — always uses real calendar month, not selectedYear
+  const thisMonthPayments = useMemo(() => {
+    const now = new Date()
+    const calYear = now.getFullYear()
+    const calMonth = now.getMonth() // 0-based
+    return sortedProperties
+      .filter(p => contractForMonth(p.contracts, calYear, calMonth) != null)
+      .map(p => {
+        const contract = contractForMonth(p.contracts, calYear, calMonth)!
+        const monthData = (p.months[calYear] ?? {})[calMonth]
+        const rent = monthData?.incomeOverride ?? contract.monthlyRent
+        const received = monthData?.rentReceived === true
+        return { property: p, rent, received, calYear, calMonth }
+      })
+  }, [sortedProperties])
 
   const totals = calcPortfolioTotalsIn(filteredProperties.map(withYear), displayCurrency, fxRates)
   const portfolioProjectedGpi = useMemo(
@@ -2062,34 +2191,108 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                 <IconDownload />
                 <span>CSV</span>
               </button>
-              <button
-                type="button"
-                className={`filter-bar-icon-btn${propertiesLayoutView === 'grid' ? ' active' : ''}`}
-                title={propertiesLayoutView === 'list' ? 'Switch to grid view' : 'Switch to list view'}
-                aria-label={propertiesLayoutView === 'list' ? 'Switch to grid view' : 'Switch to list view'}
-                aria-pressed={propertiesLayoutView === 'grid'}
-                onClick={() => setPropertiesLayoutView((v) => (v === 'list' ? 'grid' : 'list'))}
-              >
-                <span
-                  className="filter-bar-tool-mask-icon"
-                  style={{
-                    WebkitMaskImage: `url("${propertiesLayoutView === 'list' ? FILTER_BAR_LIST_VIEW_ICON : FILTER_BAR_GRID_VIEW_ICON}")`,
-                    maskImage: `url("${propertiesLayoutView === 'list' ? FILTER_BAR_LIST_VIEW_ICON : FILTER_BAR_GRID_VIEW_ICON}")`,
-                  }}
-                  aria-hidden
-                />
-              </button>
+              <div className="view-toggle-group" role="group" aria-label="View layout">
+                <button
+                  type="button"
+                  className={`view-toggle-btn${propertiesLayoutView === 'list' ? ' active' : ''}`}
+                  title="List view"
+                  aria-label="List view"
+                  aria-pressed={propertiesLayoutView === 'list'}
+                  onClick={() => setPropertiesLayoutView('list')}
+                >
+                  <span
+                    className="filter-bar-tool-mask-icon"
+                    style={{
+                      WebkitMaskImage: `url("${FILTER_BAR_LIST_VIEW_ICON}")`,
+                      maskImage: `url("${FILTER_BAR_LIST_VIEW_ICON}")`,
+                    }}
+                    aria-hidden
+                  />
+                </button>
+                <button
+                  type="button"
+                  className={`view-toggle-btn${propertiesLayoutView === 'grid' ? ' active' : ''}`}
+                  title="Grid view"
+                  aria-label="Grid view"
+                  aria-pressed={propertiesLayoutView === 'grid'}
+                  onClick={() => setPropertiesLayoutView('grid')}
+                >
+                  <span
+                    className="filter-bar-tool-mask-icon"
+                    style={{
+                      WebkitMaskImage: `url("${FILTER_BAR_GRID_VIEW_ICON}")`,
+                      maskImage: `url("${FILTER_BAR_GRID_VIEW_ICON}")`,
+                    }}
+                    aria-hidden
+                  />
+                </button>
+                <button
+                  type="button"
+                  className={`view-toggle-btn${propertiesLayoutView === 'todo' ? ' active' : ''}`}
+                  title="Todo view"
+                  aria-label="Todo view"
+                  aria-pressed={propertiesLayoutView === 'todo'}
+                  onClick={() => setPropertiesLayoutView('todo')}
+                >
+                  <span
+                    className="filter-bar-tool-mask-icon"
+                    style={{
+                      WebkitMaskImage: `url("${FILTER_BAR_TODO_VIEW_ICON}")`,
+                      maskImage: `url("${FILTER_BAR_TODO_VIEW_ICON}")`,
+                    }}
+                    aria-hidden
+                  />
+                </button>
+              </div>
               <div ref={colMenuRef} style={{ position: 'relative' }}>
                 <button
                   type="button"
                   className={`filter-bar-icon-btn${colMenuOpen ? ' active' : ''}`}
-                  title={propertiesLayoutView === 'grid' ? 'Card display' : 'Column visibility'}
-                  aria-label={propertiesLayoutView === 'grid' ? 'Card display' : 'Column visibility'}
+                  title={propertiesLayoutView === 'grid' ? 'Card display' : propertiesLayoutView === 'todo' ? 'Panel visibility' : 'Column visibility'}
+                  aria-label={propertiesLayoutView === 'grid' ? 'Card display' : propertiesLayoutView === 'todo' ? 'Panel visibility' : 'Column visibility'}
                   onClick={() => setColMenuOpen(v => !v)}
                 >
                   <IconSpreadsheet />
                 </button>
                 {colMenuOpen && (() => {
+                  if (propertiesLayoutView === 'todo') {
+                    return (
+                    <div style={{
+                      position: 'absolute', right: 0, top: '100%', marginTop: 6,
+                      background: '#fff', border: '1px solid var(--border)', borderRadius: 12,
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 220,
+                      animation: 'selectSlideIn 0.15s ease-out',
+                    }}>
+                      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>
+                        Panel visibility
+                      </div>
+                      {TODO_PANELS.map(panel => (
+                        <div key={panel.key} style={{ display: 'flex', alignItems: 'center', padding: '9px 14px', gap: 10 }}>
+                          <span style={{ flex: 1, fontSize: 13, color: 'var(--text)', fontWeight: panel.mandatory ? 600 : 400 }}>
+                            {panel.label}
+                          </span>
+                          {panel.mandatory ? (
+                            <span style={{ fontSize: 11, color: 'var(--text3)', paddingRight: 2 }}>Always on</span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="ghost"
+                              style={{ padding: 4, color: todoPanelVis[panel.key] ? 'var(--accent-bg)' : '#d1d5db', lineHeight: 0 }}
+                              title={todoPanelVis[panel.key] ? 'Hide panel' : 'Show panel'}
+                              onClick={() => toggleTodoPanel(panel.key)}
+                            >
+                              {todoPanelVis[panel.key] ? (
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="8" cy="8" rx="6.5" ry="4.5"/><circle cx="8" cy="8" r="1.5" fill="currentColor" stroke="none"/></svg>
+                              ) : (
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1.5 1.5l13 13"/><path d="M6.56 6.6A2 2 0 009.4 9.44M4.1 4.16A6.6 6.6 0 001.5 8s1.5 4.5 6.5 4.5a6.4 6.4 0 003.38-.96M7 3.55A6.6 6.6 0 0114.5 8s-.56 1.67-1.68 2.84"/></svg>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    )
+                  }
                   if (propertiesLayoutView === 'grid') {
                     return (
                   <div
@@ -2856,7 +3059,164 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
               </tbody>
             </table>
           </div>
-          ) : (
+          ) : propertiesLayoutView === 'todo' ? (() => {
+            const visiblePanelCount = TODO_PANELS.filter(p => todoPanelVis[p.key]).length
+            return (
+          <div className="todo-view-layout" style={{ gridTemplateColumns: `repeat(${visiblePanelCount}, 1fr)` }}>
+            <div className="todo-feed-col">
+              <div className="todo-feed-header">
+                <span className="todo-feed-title">Feed</span>
+                <span className="todo-feed-count">{sortedProperties.length} {sortedProperties.length === 1 ? 'property' : 'properties'}</span>
+              </div>
+              <div className="todo-payments-scorecards">
+                <div className="todo-scorecard">
+                  <span className="todo-scorecard-label">—</span>
+                  <span className="todo-scorecard-value">—</span>
+                </div>
+                <div className="todo-scorecard">
+                  <span className="todo-scorecard-label">—</span>
+                  <span className="todo-scorecard-value">—</span>
+                </div>
+              </div>
+              <div className="todo-feed-list">
+                {sortedProperties.length === 0 ? (
+                  <div className="todo-feed-empty">No properties match your filters.</div>
+                ) : sortedProperties.map((p) => {
+                  const ac = activeContract(p)
+                  return (
+                    <div
+                      key={p.id}
+                      className="todo-feed-card"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onSelectProperty(p.id)}
+                      onKeyDown={e => e.key === 'Enter' && onSelectProperty(p.id)}
+                    >
+                      <div className="todo-feed-card-left">
+                        <div className="todo-feed-card-initial" aria-hidden>
+                          {p.name.charAt(0).toUpperCase()}
+                        </div>
+                      </div>
+                      <div className="todo-feed-card-body">
+                        <div className="todo-feed-card-top">
+                          <span className="todo-feed-card-name">{p.name}</span>
+                          <span className={`badge ${ac ? 'active-c' : 'vacant'}`}>{ac ? 'Rented' : 'Vacant'}</span>
+                        </div>
+                        <div className="todo-feed-card-sub">
+                          {[p.city, p.country].filter(Boolean).join(' · ')}
+                        </div>
+                        <div className="todo-feed-card-placeholder">
+                          <div className="todo-feed-placeholder-line" style={{ width: '72%' }} />
+                          <div className="todo-feed-placeholder-line" style={{ width: '48%' }} />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+            {todoPanelVis.payments && (() => {
+              const pendingPayments  = thisMonthPayments.filter(x => !x.received)
+              const receivedPayments = thisMonthPayments.filter(x => x.received)
+              const totalReceived = receivedPayments.reduce((sum, x) => sum + convert(x.rent, x.property.currency, displayCurrency, fxRates), 0)
+              const totalPending  = pendingPayments.reduce((sum, x) => sum + convert(x.rent, x.property.currency, displayCurrency, fxRates), 0)
+              return (
+              <div className="todo-panel-col">
+                <div className="todo-feed-header">
+                  <span className="todo-feed-title">Payments</span>
+                  <span className="todo-feed-count">{thisMonthPayments.length} {thisMonthPayments.length === 1 ? 'payment' : 'payments'} · {new Date().toLocaleString('default', { month: 'long' })}</span>
+                </div>
+                <div className="todo-payments-scorecards">
+                  <div className="todo-scorecard todo-scorecard--received">
+                    <span className="todo-scorecard-label">Received</span>
+                    <span className="todo-scorecard-value">
+                      <span className="todo-amount-code">{displayCurrency}</span>
+                      {fm(totalReceived)}
+                    </span>
+                  </div>
+                  <div className="todo-scorecard todo-scorecard--pending">
+                    <span className="todo-scorecard-label">Pending</span>
+                    <span className="todo-scorecard-value">
+                      <span className="todo-amount-code">{displayCurrency}</span>
+                      {fm(totalPending)}
+                    </span>
+                  </div>
+                </div>
+                <div className="todo-feed-list">
+                  {thisMonthPayments.length === 0 ? (
+                    <div className="todo-feed-empty">No rent payments due this month.</div>
+                  ) : (
+                    <>
+                      <div className="todo-section-label">
+                        Pending · {pendingPayments.length}
+                      </div>
+                      {pendingPayments.length === 0 ? (
+                        <div className="todo-feed-empty">All payments received.</div>
+                      ) : pendingPayments.map(({ property: p, rent, received, calYear, calMonth }) => (
+                        <PaymentTodoCard
+                          key={p.id}
+                          propertyName={p.name}
+                          rent={rent}
+                          currency={p.currency}
+                          rentInDisplay={p.currency !== displayCurrency ? fm(convert(rent, p.currency, displayCurrency, fxRates)) : null}
+                          displayCurrency={displayCurrency}
+                          received={received}
+                          onToggle={() => handleToggleRentReceived(p.id, calYear, calMonth, received)}
+                          onOpen={() => onSelectProperty(p.id)}
+                        />
+                      ))}
+                      <div className="todo-section-divider" />
+                      <div className="todo-section-label">
+                        Received · {receivedPayments.length}
+                      </div>
+                      {receivedPayments.length === 0 ? (
+                        <div className="todo-feed-empty">None yet.</div>
+                      ) : receivedPayments.map(({ property: p, rent, received, calYear, calMonth }) => (
+                        <PaymentTodoCard
+                          key={p.id}
+                          propertyName={p.name}
+                          rent={rent}
+                          currency={p.currency}
+                          rentInDisplay={p.currency !== displayCurrency ? fm(convert(rent, p.currency, displayCurrency, fxRates)) : null}
+                          displayCurrency={displayCurrency}
+                          received={received}
+                          onToggle={() => handleToggleRentReceived(p.id, calYear, calMonth, received)}
+                          onOpen={() => onSelectProperty(p.id)}
+                        />
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
+              )
+            })()}
+            {todoPanelVis.maintenance && (
+            <div className="todo-panel-col">
+              <div className="todo-feed-header">
+                <span className="todo-feed-title">Maintenance &amp; Works</span>
+                <span className="todo-feed-count">Upcoming</span>
+              </div>
+              <div className="todo-payments-scorecards">
+                <div className="todo-scorecard">
+                  <span className="todo-scorecard-label">—</span>
+                  <span className="todo-scorecard-value">—</span>
+                </div>
+                <div className="todo-scorecard">
+                  <span className="todo-scorecard-label">—</span>
+                  <span className="todo-scorecard-value">—</span>
+                </div>
+              </div>
+              <div className="todo-feed-list">
+                <div className="todo-section-label">Ongoing works · 0</div>
+                <div className="todo-feed-empty">No ongoing works.</div>
+                <div className="todo-section-divider" />
+                <div className="todo-section-label">Completed · 0</div>
+                <div className="todo-feed-empty">None yet.</div>
+              </div>
+            </div>
+            )}
+          </div>
+          )})() : (
           <div className="portfolio-props-grid" role="list" aria-label="Properties">
             {sortedProperties.length === 0 ? (
               <div className="portfolio-props-grid-empty">

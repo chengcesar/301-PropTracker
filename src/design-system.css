@@ -259,6 +259,38 @@
     background: color-mix(in srgb, var(--accent-bg) 8%, transparent);
     border-color: var(--accent-bg);
   }
+  /* View toggle: two-button segmented control */
+  .view-toggle-group {
+    display: inline-flex;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .view-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 9px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    color: var(--text2);
+  }
+  .view-toggle-btn:not(:last-child) {
+    border-right: 1px solid #e5e7eb;
+  }
+  .view-toggle-btn:hover {
+    background: var(--surface2);
+  }
+  .view-toggle-btn.active {
+    background: color-mix(in srgb, var(--accent-bg) 8%, transparent);
+  }
+  .view-toggle-btn.active .filter-bar-tool-mask-icon {
+    background-color: var(--accent-bg);
+  }
+
   .filter-bar-filter-btn {
     color: var(--accent-bg);
   }
@@ -1299,8 +1331,26 @@
     .fs-duo { grid-template-columns: 1fr; }
     .filter-bar-search { max-width: none; }
     .filter-bar-top { flex-wrap: wrap; }
+    .filter-bar-actions { order: -1; width: 100%; margin-left: 0; }
+    .year-btn:not(.active) { display: none; }
     .hide-mobile { display: none; }
     .show-mobile { display: inline; }
+
+    /* Tools toolbar: carousel with snap scroll on mobile */
+    .portfolio-toolbar { padding: 10px 16px; gap: 12px; min-height: unset; }
+    .portfolio-toolbar-tools {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding-bottom: 2px;
+    }
+    .portfolio-toolbar-tools::-webkit-scrollbar { display: none; }
+    .portfolio-toolbar-tools > .filter-bar-icon-btn {
+      flex-shrink: 0;
+      scroll-snap-align: start;
+    }
   }
 
   /* ── Leaderboard + Map ── */
@@ -1861,6 +1911,189 @@
     }
     .lb-panel { height: 400px; }
     .lb-map-panel { height: 400px; }
+  }
+
+  /* ── Todo view ─────────────────────────────────────────────────── */
+  .todo-view-layout {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding: 16px;
+    background: var(--surface2);
+  }
+  .todo-feed-col,
+  .todo-panel-col {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .todo-feed-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .todo-feed-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .todo-feed-count {
+    font-size: 12px;
+    color: var(--text3);
+  }
+  .todo-feed-list {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .todo-feed-empty {
+    padding: 32px 20px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text3);
+  }
+  .todo-feed-card {
+    display: flex;
+    gap: 12px;
+    padding: 12px 20px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.12s ease;
+  }
+  .todo-feed-card:hover { background: var(--surface2); }
+  .todo-feed-card:last-child { border-bottom: none; }
+  .todo-feed-card-left {
+    flex-shrink: 0;
+    padding-top: 1px;
+  }
+  .todo-feed-card-initial {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--accent-bg) 10%, transparent);
+    color: var(--accent-bg);
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .todo-feed-card-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .todo-feed-card-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .todo-feed-card-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+  }
+  .todo-feed-card-sub {
+    font-size: 12px;
+    color: var(--text3);
+  }
+  .todo-feed-card-amounts {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .todo-amount-code {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    margin-right: 3px;
+    opacity: 0.6;
+  }
+  .todo-feed-card-amount-primary {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .todo-feed-card-amount-secondary {
+    font-size: 12px;
+    color: var(--text3);
+  }
+  .todo-feed-card-placeholder {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 6px;
+  }
+  .todo-feed-placeholder-line {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--border);
+  }
+  .todo-payments-scorecards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .todo-scorecard {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+  .todo-scorecard--received {
+    background: color-mix(in srgb, #1BC5BD 6%, transparent);
+    border-color: color-mix(in srgb, #1BC5BD 20%, transparent);
+  }
+  .todo-scorecard--pending {
+    background: color-mix(in srgb, #f59e0b 6%, transparent);
+    border-color: color-mix(in srgb, #f59e0b 20%, transparent);
+  }
+  .todo-scorecard-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text3);
+  }
+  .todo-scorecard-value {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .todo-section-label {
+    padding: 7px 20px 5px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text3);
+  }
+  .todo-section-divider {
+    margin: 4px 20px;
+    border: none;
+    border-top: 1px solid var(--border);
+  }
+  .todo-detail-col {
+    background: var(--surface2);
   }
 
   @keyframes toastSlideUp {
