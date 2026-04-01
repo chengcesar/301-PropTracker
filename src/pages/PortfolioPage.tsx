@@ -48,12 +48,6 @@ const IconSearch = () => (
 const IconDownload = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#4B5563" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2.75v8"/><path d="M5.5 8.417L8 10.75l2.5-2.333"/><path d="M2.833 10.75v2.667a1.333 1.333 0 001.334 1.333h7.666a1.333 1.333 0 001.334-1.333V10.75"/></svg>
 )
-/** Download icon for modal/header actions — follows `currentColor` */
-const IconDownloadCurrent = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <path d="M8 2.75v8" /><path d="M5.5 8.417L8 10.75l2.5-2.333" /><path d="M2.833 10.75v2.667a1.333 1.333 0 001.334 1.333h7.666a1.333 1.333 0 001.334-1.333V10.75" />
-  </svg>
-)
 /** Outward diagonal arrows — expand / maximize */
 const IconWindowMaximize = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
