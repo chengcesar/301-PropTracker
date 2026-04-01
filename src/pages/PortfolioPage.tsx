@@ -640,21 +640,21 @@ function formatCardMetricValue(
     case 'propertyType':
       return { text: p.factSheet?.propertyType || '—' }
     case 'bedrooms':
-      return { text: p.bedrooms || '—' }
+      return { text: p.bedrooms != null ? String(p.bedrooms) : '—' }
     case 'area':
       return { text: p.area ? `${p.area} m²` : '—' }
     case 'bathrooms':
-      return { text: p.bathrooms || '—' }
+      return { text: p.bathrooms != null ? String(p.bathrooms) : '—' }
     case 'parking':
-      return { text: p.parking || '—' }
+      return { text: p.parking != null ? String(p.parking) : '—' }
     case 'floor':
-      return { text: p.factSheet?.floor ?? '—' }
+      return { text: p.factSheet?.floor != null ? String(p.factSheet.floor) : '—' }
     case 'estrato':
-      return { text: p.factSheet?.estrato ?? '—' }
+      return { text: p.factSheet?.estrato != null ? String(p.factSheet.estrato) : '—' }
     case 'yearBuilt':
-      return { text: p.factSheet?.yearBuilt ?? '—' }
+      return { text: p.factSheet?.yearBuilt != null ? String(p.factSheet.yearBuilt) : '—' }
     case 'lastRenovation':
-      return { text: p.factSheet?.lastRenovation ?? '—' }
+      return { text: p.factSheet?.lastRenovation != null ? String(p.factSheet.lastRenovation) : '—' }
     case 'estValue': {
       const e = estimatedPropertyValueAtYear(py, year)
       const conv = e.value != null ? convert(e.value, p.currency, dc, fx) : null
