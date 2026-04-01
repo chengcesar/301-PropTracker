@@ -1,0 +1,503 @@
+/**
+ * PortfolioReport.jsx
+ *
+ * Drop inside your reserved modal. Pass your existing properties array directly.
+ *
+ *   <PortfolioReport properties={properties} year={selectedYear} />
+ *
+ * The normalise() function maps your dashboard object fields automatically.
+ * Edit the aliases there if your keys differ slightly.
+ */
+
+import { useState, useRef } from "react";
+import Anthropic from "@anthropic-ai/sdk";
+
+// ─── normalise one property object ───────────────────────────────────────────
+function norm(p) {
+  const f = (...keys) => { for (const k of keys) if (p[k] != null && p[k] !== "") return p[k]; return null; };
+  const n = (...keys) => { const v = f(...keys); return v == null ? null : parseFloat(v) || 0; };
+
+  const area  = n("area","Area (m²)","areaSqm") || 1;
+  const gpi   = n("gpi","GPI (USD)") || 0;
+  const egi   = n("egi","EGI (USD)") || 0;
+  const opex  = Math.abs(n("opex","OPEX (USD)") || 0);
+  const noi   = n("noi","NOI (USD)") || 0;
+  const capex = Math.abs(n("capex","CAPEX (USD)") || 0);
+  const taxes = Math.abs(n("taxes","Taxes (USD)") || 0);
+  const netCF = n("netCF","netcf","Net CF (USD)") || 0;
+  const value = n("estimatedValue","value","Est. value (USD)","estValue") || 0;
+  const debt  = Math.abs(n("debt","Debt (USD)") || 0);
+
+  return {
+    name:      f("name","property","Property") || "Unknown",
+    owner:     f("owner","Owner") || "",
+    country:   f("country","Country") || "",
+    status:    f("status","Status") || "",
+    monthsLeft: n("monthsLeft","Months Left"),
+    taxStatus: f("taxStatus","Tax Status") || "",
+    type:      f("type","Type") || "",
+    beds:      n("beds","Beds"),
+    area, gpi, egi, opex, noi, capex, taxes, netCF, value, debt,
+    margin:    n("margin","Margin"),
+    capRate:   n("capRate","Cap rate %","capRatePct"),
+    yoy:       n("yoy","Value YoY %","valueYoY"),
+    vacRate:   n("vacRate","Vacancy mo rate %"),
+    equity:    value - debt,
+    rentM2:    gpi  / area,
+    noiM2:     noi  / area,
+    valueM2:   value / area,
+    capexM2:   capex > 0 ? capex / area : null,
+    capexEff:  capex > 0 ? (noi / area) / (capex / area) : null,
+  };
+}
+
+// ─── formatters ──────────────────────────────────────────────────────────────
+const $   = (v, d=0) => v == null || isNaN(v) ? "—" : `$${Math.abs(v).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d})}`;
+const pct = (v, d=1) => v == null || isNaN(v) ? "—" : `${Number(v).toFixed(d)}%`;
+const n2  = (v, d=1) => v == null || isNaN(v) ? "—" : Number(v).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
+const clr = (v) => (v == null || isNaN(v)) ? "#6b7280" : v >= 0 ? "#0d9488" : "#b91c1c";
+
+const COLORS = ["#3b82f6","#1BC5BD","#f59e0b","#8b5cf6","#ec4899","#10b981","#f97316","#6366f1"];
+
+// ─── Horizontal bar ───────────────────────────────────────────────────────────
+function HBar({ value, max, color="#3b82f6" }) {
+  const w = max ? Math.max(0, Math.min(100, (Math.abs(value) / Math.abs(max)) * 100)) : 0;
+  return (
+    <div style={{ height:6, background:"#e8ecf2", borderRadius:4, overflow:"hidden", marginTop:3 }}>
+      <div style={{ height:"100%", width:`${w}%`, background:color, borderRadius:4 }} />
+    </div>
+  );
+}
+
+// ─── SVG column chart ─────────────────────────────────────────────────────────
+function ColChart({ items, height=95, label="" }) {
+  const max = Math.max(...items.map(i => Math.abs(i.value)), 1);
+  const W=34, GAP=8;
+  const tw = items.length * (W + GAP) - GAP;
+  return (
+    <div>
+      {label && <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.7px",color:"#9ca3af",marginBottom:8}}>{label}</div>}
+      <svg width="100%" viewBox={`0 0 ${tw} ${height+26}`} style={{overflow:"visible",display:"block"}}>
+        {items.map((d,i)=>{
+          const bh = (Math.abs(d.value)/max)*height;
+          const x  = i*(W+GAP);
+          return (
+            <g key={d.name}>
+              <rect x={x} y={height-bh} width={W} height={bh} fill={d.color||"#93c5fd"} rx={3} opacity={0.92}/>
+              <text x={x+W/2} y={height+11} textAnchor="middle" fontSize={7.5} fill="#6b7280" fontFamily="Inter,sans-serif">{d.name.slice(0,9)}</text>
+              <text x={x+W/2} y={height-bh-3} textAnchor="middle" fontSize={7} fill={d.color||"#6b7280"} fontFamily="Inter,sans-serif" fontWeight="700">
+                {Math.abs(d.value)>=1000?`$${(d.value/1000).toFixed(0)}k`:`$${d.value.toFixed(0)}`}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ─── Waterfall ────────────────────────────────────────────────────────────────
+function Waterfall({ gpi, vacLoss, opex, taxes, netCF }) {
+  const rows = [
+    { label:"GPI",        value: gpi,    color:"#3b82f6" },
+    { label:"− Vacancy",  value:-vacLoss, color:"#f59e0b" },
+    { label:"− OPEX",     value:-opex,   color:"#f87171" },
+    { label:"− Taxes",    value:-taxes,  color:"#c084fc" },
+    { label:"Net Cash Flow", value:netCF, color: netCF>=0?"#10b981":"#b91c1c", bold:true },
+  ];
+  const max = Math.max(...rows.map(r=>Math.abs(r.value)),1);
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+      {rows.map(r=>(
+        <div key={r.label}>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:10.5,color:"#374151",marginBottom:2}}>
+            <span style={{fontWeight:r.bold?700:400}}>{r.label}</span>
+            <span style={{fontWeight:700,color:r.value>=0?"#1a1d23":"#b91c1c"}}>
+              {r.value<0?`(${$(Math.abs(r.value))})`:`${$(r.value)}`}
+            </span>
+          </div>
+          <HBar value={Math.abs(r.value)} max={max} color={r.color}/>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const AI_TEXT_KEY = "portfolio-ai-report-text";
+
+// ─── AI narrative ─────────────────────────────────────────────────────────────
+function useAISection(properties, agg) {
+  const [text, setText]       = useState(() => localStorage.getItem(AI_TEXT_KEY) || null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr]         = useState(null);
+
+  async function generate() {
+    setLoading(true); setErr(null);
+    try {
+      const snapshot = properties.map(p=>({
+        name:p.name, status:p.status, type:p.type, area:p.area,
+        gpi:p.gpi, egi:p.egi, opex:p.opex, noi:p.noi, netCF:p.netCF,
+        capex:p.capex, taxes:p.taxes,
+        capRate:p.capRate, yoy:p.yoy, monthsLeft:p.monthsLeft,
+        taxStatus:p.taxStatus, margin:p.margin, vacRate:p.vacRate,
+        rentM2:+p.rentM2.toFixed(1), noiM2:+p.noiM2.toFixed(1),
+        valueM2:+p.valueM2.toFixed(0), value:p.value, debt:p.debt,
+        capexEff: p.capexEff!=null ? +p.capexEff.toFixed(2) : null,
+      }));
+
+      const sorted = {
+        byRentM2:   [...properties].sort((a,b)=>b.rentM2-a.rentM2).map(p=>p.name),
+        byNOIM2:    [...properties].sort((a,b)=>b.noiM2-a.noiM2).map(p=>p.name),
+        byCapRate:  [...properties].filter(p=>p.capRate!=null).sort((a,b)=>b.capRate-a.capRate).map(p=>p.name),
+        byOPEX:     [...properties].sort((a,b)=>b.opex-a.opex).map(p=>p.name),
+        byNetCF:    [...properties].sort((a,b)=>b.netCF-a.netCF).map(p=>p.name),
+        byValueM2:  [...properties].sort((a,b)=>b.valueM2-a.valueM2).map(p=>p.name),
+        expiringSoon: properties.filter(p=>p.monthsLeft!=null&&p.monthsLeft<=6&&p.status==="Rented").map(p=>({name:p.name,monthsLeft:p.monthsLeft,rentM2:+p.rentM2.toFixed(1),gpi:p.gpi})),
+        vacant:       properties.filter(p=>p.status==="Vacant").map(p=>({name:p.name,monthlyCost:+Math.abs(p.netCF/12).toFixed(0)})),
+        highOPEX:     properties.filter(p=>p.opex>0).sort((a,b)=>b.opex-a.opex).slice(0,3).map(p=>({name:p.name,opex:p.opex,opexPctGPI:p.gpi>0?+((p.opex/p.gpi)*100).toFixed(1):null})),
+        rentBelowM2avg: properties.filter(p=>p.rentM2 < (agg.rentM2Port*0.85) && p.status==="Rented").map(p=>({name:p.name,rentM2:+p.rentM2.toFixed(1),portfolioAvgRentM2:+agg.rentM2Port.toFixed(1)})),
+      };
+
+      const thePrompt = `You are a senior real estate portfolio analyst writing a private report for the portfolio owner.
+
+Portfolio data (USD, annual):
+${JSON.stringify({totals:agg, properties:snapshot, crossPropertyRankings:sorted},null,2)}
+
+Write a professional analyst commentary using this exact structure. Be specific with real numbers at every point. No generic advice. No filler.
+
+**Executive Summary**
+2-3 sentences on overall portfolio health, total NOI, net cash flow, and the single most important insight.
+
+**Highlights**
+5-6 bullet points surfacing the most interesting cross-property facts. Each bullet should be a concrete, specific callout — not generic. Cover things like:
+- Which unit generates the highest rent/m² and how it compares to the rest
+- Which property has the best NOI/m² and what makes it stand out vs its peers
+- Efficiency comparisons: e.g. a large property generating less NOI/m² than a smaller one, or a renovated unit where CAPEX investment hasn't yet translated to income
+- The biggest expense line in the portfolio (property name + OPEX amount + % of its GPI)
+- Upcoming contract renewals and the rent negotiation opportunity they represent (name the property, months left, current rent/m², and whether it is below portfolio average)
+- Any property where rent/m² is below the portfolio average and a rent increase is warranted
+- Any vacancy dragging the portfolio with its monthly cost
+Start each bullet with a specific emoji that matches its theme (💰 for rent, 📐 for efficiency, 🔧 for costs, 📅 for contracts, 🏠 for vacancy, 📈 for performance, etc.)
+
+**Strengths**
+3 bullet points. Bold the property name or metric. One sentence of insight with specific figures each.
+
+**Weaknesses & Risks**
+3 bullet points. Cover vacancy drag, negative NOI, low cap rates, expiring contracts, pending taxes. Use numbers.
+
+**Recommended Actions**
+4 numbered items. Each must name a specific property and a specific action. Examples of the level of specificity required: "Renegotiate Apto 108's contract at renewal in 4 months — current rent/m² of $X is 20% below portfolio average"; "Review OPEX on Apto 102 — at $Y/year it exceeds its GPI with no rent income"; "Target rent increase of 10-15% on Apto 128 at next IPC adjustment". No vague advice.
+
+**Outlook**
+2 sentences on portfolio trajectory given current occupancy, contract pipeline, and value trends.
+
+Tone: direct, confident, professional. Think like a fund manager writing to a sophisticated owner who wants real insight, not reassurance. No markdown code blocks.`;
+      const client = new Anthropic({ apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY, dangerouslyAllowBrowser: true });
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1400,
+        messages: [{ role: "user", content: thePrompt }],
+      });
+      const rawText = message.content.find(b => b.type === "text")?.text || "";
+      localStorage.setItem(AI_TEXT_KEY, rawText);
+      setText(rawText);
+    } catch { setErr("Could not load analysis. Please try again."); }
+    setLoading(false);
+  }
+
+  return { text, loading, err, generate };
+}
+
+function AISection({ text, loading, err, generate }) {
+  function render(raw) {
+    return raw.split("\n").map((line,i)=>{
+      if (!line.trim()) return <div key={i} style={{height:7}}/>;
+      if (/^\*\*(.+)\*\*$/.test(line.trim())) return (
+        <div key={i} style={{fontSize:11,fontWeight:700,color:"var(--accent-bg,#3b82f6)",textTransform:"uppercase",letterSpacing:"0.8px",marginTop:16,marginBottom:5,borderBottom:"1px solid #e8ecf2",paddingBottom:4}}>
+          {line.trim().replace(/\*\*/g,"")}
+        </div>
+      );
+      if (/^[-•]/.test(line.trim())) return (
+        <div key={i} style={{display:"flex",gap:8,fontSize:12,color:"#374151",lineHeight:1.7,marginBottom:3}}>
+          <span style={{color:"#3b82f6",flexShrink:0}}>•</span>
+          <span dangerouslySetInnerHTML={{__html:line.trim().replace(/^[-•]\s*/,"").replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")}}/>
+        </div>
+      );
+      if (/^\d+\./.test(line.trim())) return (
+        <div key={i} style={{display:"flex",gap:8,fontSize:12,color:"#374151",lineHeight:1.7,marginBottom:3}}>
+          <span style={{color:"#3b82f6",fontWeight:700,flexShrink:0,minWidth:14}}>{line.trim().match(/^\d+/)[0]}.</span>
+          <span dangerouslySetInnerHTML={{__html:line.trim().replace(/^\d+\.\s*/,"").replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")}}/>
+        </div>
+      );
+      return <p key={i} style={{fontSize:12,color:"#374151",lineHeight:1.75,margin:"0 0 3px"}} dangerouslySetInnerHTML={{__html:line.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")}}/>;
+    });
+  }
+
+  if (loading) return (
+    <div style={{textAlign:"center",padding:"36px 0",color:"#6b7280",fontSize:13}}>
+      <img className="fs-photo-spinner" src="/App-Icon.svg" alt="" width={32} height={32} style={{marginBottom:12,display:"block",margin:"0 auto 12px"}}/>
+      Analysing your portfolio…
+    </div>
+  );
+  if (!text) return (
+    <div style={{textAlign:"center",padding:"30px 0"}}>
+      <button
+        onClick={generate}
+        disabled={loading}
+        style={{background:"var(--accent-bg,#3b82f6)",border:"none",borderRadius:8,padding:"8px 20px",fontSize:13,color:"#fff",cursor:"pointer",fontWeight:600,fontFamily:"inherit",marginBottom:12}}
+      >
+        Generate Analysis
+      </button>
+      <div style={{fontSize:13,color:"#6b7280"}}>AI-powered interpretation of your portfolio data</div>
+      {err && <div style={{color:"#b91c1c",fontSize:12,marginTop:10}}>{err}</div>}
+    </div>
+  );
+  return (
+    <div>
+      {render(text)}
+      {err && <div style={{color:"#b91c1c",fontSize:12,marginTop:10}}>{err}</div>}
+    </div>
+  );
+}
+
+// ─── MAIN EXPORT ─────────────────────────────────────────────────────────────
+export default function PortfolioReport({ properties: rawProps = [], year, onBack }) {
+  const printRef = useRef();
+  const props = rawProps.map(norm);
+
+  // aggregates
+  const totalValue = props.reduce((s,p)=>s+p.value,0);
+  const totalGPI   = props.reduce((s,p)=>s+p.gpi,0);
+  const totalEGI   = props.reduce((s,p)=>s+p.egi,0);
+  const totalOPEX  = props.reduce((s,p)=>s+p.opex,0);
+  const totalNOI   = props.reduce((s,p)=>s+p.noi,0);
+  const totalTaxes = props.reduce((s,p)=>s+p.taxes,0);
+  const totalNetCF = props.reduce((s,p)=>s+p.netCF,0);
+  const totalArea  = props.reduce((s,p)=>s+p.area,0);
+  const totalDebt  = props.reduce((s,p)=>s+p.debt,0);
+  const vacLoss    = totalGPI - totalEGI;
+  const rented     = props.filter(p=>p.status==="Rented");
+  const portCapRate= totalValue>0?(totalNOI/totalValue)*100:0;
+  const occupancy  = props.length?(rented.length/props.length)*100:0;
+  const noiMargin  = totalEGI>0?(totalNOI/totalEGI)*100:0;
+  const avgYoY     = props.filter(p=>p.yoy!=null).reduce((s,p)=>s+p.yoy,0)/(props.filter(p=>p.yoy!=null).length||1);
+  const rentM2Port = totalGPI/totalArea;
+  const noiM2Port  = totalNOI/totalArea;
+  const valueM2Port= totalValue/totalArea;
+
+  const agg = {
+    count:props.length, rented:rented.length, vacant:props.filter(p=>p.status==="Vacant").length,
+    totalValue, totalGPI, totalEGI, totalOPEX, totalNOI, totalTaxes, totalNetCF,
+    totalArea, totalDebt, vacLoss, portCapRate, occupancy, noiMargin, avgYoY,
+    rentM2Port, noiM2Port, valueM2Port, equity:totalValue-totalDebt,
+  };
+
+  const { text, loading, err, generate } = useAISection(props, agg);
+
+  const today = new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
+
+  const expiring   = props.filter(p=>p.monthsLeft!=null&&p.monthsLeft<=3&&p.status==="Rented");
+  const pendingTax = props.filter(p=>(p.taxStatus||"").toLowerCase()==="pending");
+  const negNOI     = props.filter(p=>p.noi<0);
+
+  return (
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Averia+Serif+Libre:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&family=Fraunces:wght@700&family=Inter:wght@400;500;600;700&display=swap');
+        @media print {
+          body * { visibility: hidden !important; }
+          #pt-report, #pt-report * { visibility: visible !important; }
+          #pt-report { position: absolute; top:0; left:0; width:100%; }
+          .no-print { display: none !important; }
+          .page-break { page-break-before: always; margin-top: 0; }
+        }
+      `}</style>
+
+      {/* Toolbar */}
+      <div className="no-print" style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,justifyContent:"flex-end",position:"sticky",top:0,zIndex:20,background:"#fff",padding:"10px 0",margin:"0 -24px",borderBottom:"1px solid #e8ecf2",paddingLeft:32,paddingRight:32}}>
+        {onBack && (
+          <button onClick={onBack} style={{background:"none",border:"1px solid #e8ecf2",borderRadius:8,padding:"6px 20px",fontSize:12,fontWeight:600,fontFamily:"inherit",cursor:"pointer",color:"#6b7280",marginRight:"auto"}}>
+            ← Back
+          </button>
+        )}
+        <button onClick={()=>window.print()} style={{background:"none",color:"var(--accent-bg,#3b82f6)",border:"1.5px solid var(--accent-bg,#3b82f6)",borderRadius:8,padding:"6px 16px",fontSize:12,fontWeight:600,fontFamily:"inherit",cursor:"pointer"}}>
+          Print / Save PDF
+        </button>
+        <button
+          onClick={generate}
+          disabled={loading}
+          style={{background:loading?"#93c5fd":"var(--accent-bg,#3b82f6)",border:"none",borderRadius:8,padding:"6px 24px",fontSize:12,color:"#fff",cursor:loading?"not-allowed":"pointer",fontWeight:600,fontFamily:"inherit"}}
+        >
+          {loading ? "Generating…" : text ? "Regenerate" : "Generate Analysis"}
+        </button>
+      </div>
+
+      {/* ── REPORT ── */}
+      <div id="pt-report" ref={printRef} style={{fontFamily:"Inter,system-ui,sans-serif",color:"#1a1d23",background:"#fff",maxWidth:760,margin:"0 auto"}}>
+
+        {/* PAGE 1 header */}
+        <div style={{borderBottom:"3px solid #1a1d23",paddingBottom:14,marginBottom:20,marginTop:15,display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+          <div>
+            <div style={{fontFamily:"'Averia Serif Libre',Georgia,serif",fontSize:24,fontWeight:700,color:"#1a1d23",lineHeight:1}}>
+              <span style={{fontStyle:"italic"}}>Simplified</span> Property Tracker
+            </div>
+            <div style={{fontSize:16,fontWeight:700,color:"#1a1d23",marginTop:4}}>Portfolio Performance Report{year?` · ${year}`:""}</div>
+          </div>
+          <div style={{textAlign:"right",fontSize:10.5,color:"#9ca3af"}}>
+            <div>{today}</div>
+            <div>{agg.count} properties · {agg.rented} rented · {agg.vacant} vacant</div>
+          </div>
+        </div>
+
+        {/* KPI strip — 4 cols × 2 rows */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:9,marginBottom:20}}>
+          {[
+            {label:"Portfolio Value",  val:$(totalValue),       sub:`${$(agg.equity)} equity`},
+            {label:"Annual NOI",       val:$(totalNOI),         sub:`Cap rate ${pct(portCapRate)}`},
+            {label:"Net Cash Flow",    val:$(totalNetCF),       sub:`NOI margin ${pct(noiMargin)}`, c:clr(totalNetCF)},
+            {label:"Occupancy",        val:pct(occupancy,0),   sub:`${agg.rented}/${agg.count} leased`},
+            {label:"Avg Value YoY",    val:pct(avgYoY),         sub:"Appreciation", c:clr(avgYoY)},
+            {label:"Rent / m²",        val:`$${n2(rentM2Port)}/m²`, sub:"Pricing power"},
+            {label:"NOI / m²",         val:`$${n2(noiM2Port)}/m²`,  sub:"Performance density", c:clr(noiM2Port)},
+            {label:"Value / m²",       val:`$${n2(valueM2Port,0)}/m²`, sub:"Market rate"},
+          ].map(k=>(
+            <div key={k.label} style={{background:"#f7f9fc",borderRadius:10,padding:"10px 12px",border:"1px solid #e8ecf2"}}>
+              <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.7px",color:"#9ca3af",marginBottom:4}}>{k.label}</div>
+              <div style={{fontSize:15,fontWeight:700,color:k.c||"#1a1d23"}}>{k.val}</div>
+              <div style={{fontSize:9.5,color:"#6b7280",marginTop:2}}>{k.sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Waterfall + NOI chart */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20}}>
+          <div style={{background:"#f7f9fc",borderRadius:12,padding:15,border:"1px solid #e8ecf2"}}>
+            <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.7px",color:"#9ca3af",marginBottom:11}}>Income Waterfall</div>
+            <Waterfall gpi={totalGPI} vacLoss={vacLoss} opex={totalOPEX} taxes={totalTaxes} netCF={totalNetCF}/>
+          </div>
+          <div style={{background:"#f7f9fc",borderRadius:12,padding:15,border:"1px solid #e8ecf2"}}>
+            <ColChart label="NOI by Property" height={92} items={props.map((p,i)=>({name:p.name,value:p.noi,color:COLORS[i%COLORS.length]}))}/>
+          </div>
+        </div>
+
+        {/* Detail table */}
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.7px",color:"#9ca3af",marginBottom:8}}>Property Detail</div>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:10.5}}>
+            <thead>
+              <tr style={{background:"#f7f9fc"}}>
+                {["Property","Status","m²","GPI","EGI","OPEX","NOI","Net CF","Cap Rate","$/m²","NOI/m²"].map(h=>(
+                  <th key={h} style={{padding:"6px 7px",textAlign:["Property","Status"].includes(h)?"left":"right",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.5px",color:"#9ca3af",borderBottom:"2px solid #e8ecf2"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {props.map((p,i)=>(
+                <tr key={p.name} style={{borderBottom:"1px solid #f3f4f6"}}>
+                  <td style={{padding:"7px 7px",fontWeight:600,whiteSpace:"nowrap"}}>
+                    <span style={{display:"inline-block",width:6,height:6,borderRadius:"50%",background:COLORS[i%COLORS.length],marginRight:6,verticalAlign:"middle"}}/>
+                    {p.name}
+                  </td>
+                  <td style={{padding:"7px 7px"}}>
+                    <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:5,background:p.status==="Rented"?"rgba(16,185,129,0.10)":"rgba(245,158,11,0.10)",color:p.status==="Rented"?"#065f46":"#92400e"}}>
+                      {p.status}
+                    </span>
+                  </td>
+                  <td style={{padding:"7px 7px",textAlign:"right"}}>{n2(p.area,0)}</td>
+                  <td style={{padding:"7px 7px",textAlign:"right"}}>{$(p.gpi)}</td>
+                  <td style={{padding:"7px 7px",textAlign:"right"}}>{$(p.egi)}</td>
+                  <td style={{padding:"7px 7px",textAlign:"right",color:"#b91c1c"}}>{p.opex>0?`(${$(p.opex)})`:"—"}</td>
+                  <td style={{padding:"7px 7px",textAlign:"right",fontWeight:700,color:clr(p.noi)}}>{$(p.noi)}</td>
+                  <td style={{padding:"7px 7px",textAlign:"right",fontWeight:700,color:clr(p.netCF)}}>{$(p.netCF)}</td>
+                  <td style={{padding:"7px 7px",textAlign:"right",fontWeight:600,color:clr(p.capRate)}}>{pct(p.capRate)}</td>
+                  <td style={{padding:"7px 7px",textAlign:"right"}}>${n2(p.valueM2,0)}</td>
+                  <td style={{padding:"7px 7px",textAlign:"right",color:clr(p.noiM2)}}>${n2(p.noiM2,1)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{background:"#f7f9fc",fontWeight:700,borderTop:"2px solid #e8ecf2"}}>
+                <td style={{padding:"7px 7px"}}>Total / Avg</td><td/>
+                <td style={{padding:"7px 7px",textAlign:"right"}}>{n2(totalArea,0)}</td>
+                <td style={{padding:"7px 7px",textAlign:"right"}}>{$(totalGPI)}</td>
+                <td style={{padding:"7px 7px",textAlign:"right"}}>{$(totalEGI)}</td>
+                <td style={{padding:"7px 7px",textAlign:"right",color:"#b91c1c"}}>({$(totalOPEX)})</td>
+                <td style={{padding:"7px 7px",textAlign:"right",color:clr(totalNOI)}}>{$(totalNOI)}</td>
+                <td style={{padding:"7px 7px",textAlign:"right",color:clr(totalNetCF)}}>{$(totalNetCF)}</td>
+                <td style={{padding:"7px 7px",textAlign:"right"}}>{pct(portCapRate)}</td>
+                <td style={{padding:"7px 7px",textAlign:"right"}}>${n2(valueM2Port,0)}</td>
+                <td style={{padding:"7px 7px",textAlign:"right",color:clr(noiM2Port)}}>${n2(noiM2Port,1)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        {/* Rent/m² bars + Cap rate ranking */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20}}>
+          <div style={{background:"#f7f9fc",borderRadius:12,padding:15,border:"1px solid #e8ecf2"}}>
+            <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.7px",color:"#9ca3af",marginBottom:10}}>Rent / m² Ranking</div>
+            {[...props].sort((a,b)=>b.rentM2-a.rentM2).map(p=>(
+              <div key={p.name} style={{marginBottom:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:10.5}}>
+                  <span style={{color:"#374151"}}>{p.name}</span>
+                  <span style={{fontWeight:700}}>${n2(p.rentM2)}/m²</span>
+                </div>
+                <HBar value={p.rentM2} max={Math.max(...props.map(p=>p.rentM2))} color={COLORS[props.indexOf(p)%COLORS.length]}/>
+              </div>
+            ))}
+          </div>
+          <div style={{background:"#f7f9fc",borderRadius:12,padding:15,border:"1px solid #e8ecf2"}}>
+            <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.7px",color:"#9ca3af",marginBottom:10}}>Cap Rate Ranking</div>
+            {[...props].filter(p=>p.capRate!=null).sort((a,b)=>b.capRate-a.capRate).map((p,rank)=>(
+              <div key={p.name} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"1px solid #e8ecf2"}}>
+                <span style={{fontSize:10,fontWeight:700,color:rank===0?"#b45309":"#9ca3af",width:14}}>#{rank+1}</span>
+                <span style={{flex:1,fontSize:11,color:"#374151"}}>{p.name}</span>
+                <span style={{fontSize:12,fontWeight:700,color:clr(p.capRate)}}>{pct(p.capRate)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Alerts */}
+        {(expiring.length>0||pendingTax.length>0||negNOI.length>0)&&(
+          <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+            {expiring.length>0&&(
+              <div style={{flex:1,minWidth:180,background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"10px 14px"}}>
+                <div style={{fontSize:9.5,fontWeight:700,color:"#92400e",marginBottom:5}}>⏰ CONTRACTS EXPIRING ≤ 3 MONTHS</div>
+                {expiring.map(p=><div key={p.name} style={{fontSize:11,color:"#374151"}}>{p.name} — <strong>{p.monthsLeft} mo left</strong></div>)}
+              </div>
+            )}
+            {pendingTax.length>0&&(
+              <div style={{flex:1,minWidth:180,background:"#fff1f2",border:"1px solid #fecdd3",borderRadius:10,padding:"10px 14px"}}>
+                <div style={{fontSize:9.5,fontWeight:700,color:"#9f1239",marginBottom:5}}>🧾 PENDING TAX STATUS</div>
+                {pendingTax.map(p=><div key={p.name} style={{fontSize:11,color:"#374151"}}>{p.name}</div>)}
+              </div>
+            )}
+            {negNOI.length>0&&(
+              <div style={{flex:1,minWidth:180,background:"#fff1f2",border:"1px solid #fecdd3",borderRadius:10,padding:"10px 14px"}}>
+                <div style={{fontSize:9.5,fontWeight:700,color:"#9f1239",marginBottom:5}}>📉 NEGATIVE NOI</div>
+                {negNOI.map(p=><div key={p.name} style={{fontSize:11,color:"#374151"}}>{p.name} — <strong>{$(p.noi)}</strong></div>)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* PAGE 2 — Analyst Commentary */}
+        <div className="page-break"/>
+        <div style={{borderBottom:"1px solid #e8ecf2",paddingBottom:12,marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+          <div style={{fontFamily:"'Averia Serif Libre',Georgia,serif",fontSize:18,fontWeight:700,color:"#1a1d23"}}>Analyst Commentary</div>
+          <div style={{fontSize:10,color:"#9ca3af"}}>AI-generated · {today}</div>
+        </div>
+
+        <AISection text={text} loading={loading} err={err} generate={generate}/>
+
+        {/* Footer */}
+        <div style={{marginTop:32,paddingTop:12,borderTop:"1px solid #e8ecf2",display:"flex",justifyContent:"space-between",fontSize:9.5,color:"#9ca3af"}}>
+          <span>Simplified Property Tracker · Portfolio Report · {today}</span>
+          <span>All figures USD · For personal use only</span>
+        </div>
+
+      </div>
+    </>
+  );
+}
