@@ -111,8 +111,8 @@ body {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #0539FF;
-  color: #fff;
+  background: var(--accent-bg);
+  color: var(--accent-text);
   font-size: 12px;
   font-weight: 600;
   font-family: 'Inter', sans-serif;

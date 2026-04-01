@@ -1,8 +1,15 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import type { Property, TaxItem, TaxStatus } from '../../lib/types'
 import type { CurrencyCode } from '../../lib/currency'
 import { calcAnnual } from '../../lib/finance'
 import { fmt, parseNum } from '../../lib/format'
+
+const IconCopy = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+)
+const IconCheck = () => (
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#15803d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3.5 3.5L13 4"/></svg>
+)
 
 type Props = {
   prop: Property
@@ -23,6 +30,7 @@ export function TaxesTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
 
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [copied, setCopied] = useState(false)
   const [form, setForm] = useState({
     taxId: '',
     amount: '',
@@ -106,6 +114,46 @@ export function TaxesTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
     }))
   }
 
+  const formatDueCell = (dueDate: string) =>
+    dueDate
+      ? new Date(dueDate + 'T12:00').toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: '2-digit',
+          year: '2-digit',
+        })
+      : '—'
+
+  const pctForItem = (t: TaxItem) => {
+    if (!t.amount) return '—'
+    if (ann.egi) return `${((t.amount / ann.egi) * 100).toFixed(1)}%`
+    if (itemsTotal) return `${((t.amount / itemsTotal) * 100).toFixed(1)}%`
+    return '—'
+  }
+
+  const handleCopy = useCallback(() => {
+    const pctHeader = ann.egi ? '% of EGI' : '% of total'
+    const headers = ['Tax ID', 'Amount', 'Due date', 'Status', pctHeader]
+    const rows = items.map((t) =>
+      [
+        t.taxId || '—',
+        t.amount ? fmt(cx(t.amount)) : '—',
+        formatDueCell(t.dueDate),
+        t.status.charAt(0).toUpperCase() + t.status.slice(1),
+        pctForItem(t),
+      ].join('\t')
+    )
+    const totalPct =
+      ann.egi && itemsTotal
+        ? `${((itemsTotal / ann.egi) * 100).toFixed(1)}%`
+        : ann.egi
+          ? '—'
+          : '100%'
+    rows.push(['Total', fmt(cx(itemsTotal)), '', '', totalPct].join('\t'))
+    navigator.clipboard.writeText([headers.join('\t'), ...rows].join('\n'))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }, [items, itemsTotal, ann.egi, cx])
+
   return (
     <div>
       {/* Header */}
@@ -147,7 +195,17 @@ export function TaxesTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                 <th>Due date</th>
                 <th style={{ textAlign: 'left' }}>Status</th>
                 <th>{ann.egi ? '% of EGI' : '% of total'}</th>
-                <th style={{ width: 64, textAlign: 'center' }} />
+                <th style={{ width: 64, textAlign: 'center' }}>
+                  <button
+                    type="button"
+                    className="ghost"
+                    style={{ padding: 0, border: 'none', background: 'transparent', margin: '0 auto', display: 'block' }}
+                    title={copied ? 'Copied!' : 'Copy table'}
+                    onClick={handleCopy}
+                  >
+                    {copied ? <IconCheck /> : <IconCopy />}
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>

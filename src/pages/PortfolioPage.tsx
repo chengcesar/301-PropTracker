@@ -11,7 +11,6 @@ import { KpiInfoIcon } from '../components/KpiInfoIcon'
 import { COUNTRIES, countryFlagUrl } from '../lib/countries'
 import { PropertyLeaderboardMap } from '../components/PropertyLeaderboardMap'
 import { AssetValueAppreciationCard } from '../components/AssetValueAppreciationCard'
-import { FundingRatioToolPlaceholder } from '../components/portfolio/FundingRatioToolPlaceholder'
 // @ts-ignore — JS component, types inferred as any
 import PortfolioReport from '../../Temp/PortfolioReport'
 
@@ -207,8 +206,11 @@ function AIAnalysisToolContent({ properties, year, displayCurrency, fxRates, ste
   return <PortfolioReport properties={propsToUse} year={year} onBack={onBack} />
 }
 
-const PORTFOLIO_TOOL_ICONS = ['/tool-icons/tool01.svg', '/tool-icons/tool02.svg', '/tool-icons/tool03.svg'] as const
-const PORTFOLIO_TOOL_LABELS = ['Tool one', 'AI Analysis', 'Tool 3'] as const
+const PORTFOLIO_TOOL_ICONS = ['/tool-icons/tool02.svg', '/tool-icons/tool01.svg', '/tool-icons/tool03.svg'] as const
+const PORTFOLIO_TOOL_LABELS = ['AI Analysis', 'Vacancy Calculator', 'Field Notes'] as const
+/** Properties table layout toggle — masked SVGs from `public/` */
+const FILTER_BAR_LIST_VIEW_ICON = '/List-view.svg' as const
+const FILTER_BAR_GRID_VIEW_ICON = '/Grid-view.svg' as const
 
 function RowMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
   const [open, setOpen] = useState(false)
@@ -274,6 +276,33 @@ function RowMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => voi
       )}
     </>
   )
+}
+
+function IconBuildingPlaceholder() {
+  return (
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3 21h18M6 21V10l6-3.5L18 10v11M9 21v-6h6v6M10 13h4" />
+    </svg>
+  )
+}
+
+/** Elapsed share of active lease (0–1) + label aligned with portfolio table “months left”. */
+function gridCardContractProgress(p: Property): { pct: number; monthsLeftLabel: string } | null {
+  const ac = activeContract(p)
+  if (!ac) return null
+  const start = new Date(`${ac.startDate}T12:00:00`)
+  const end = new Date(`${ac.endDate}T12:00:00`)
+  const now = new Date()
+  const totalMs = end.getTime() - start.getTime()
+  if (totalMs <= 0) {
+    const months = (end.getFullYear() - now.getFullYear()) * 12 + end.getMonth() - now.getMonth()
+    return { pct: 1, monthsLeftLabel: months <= 0 ? 'Expired' : `${months} month${months === 1 ? '' : 's'} left` }
+  }
+  let pct = (now.getTime() - start.getTime()) / totalMs
+  pct = Math.max(0, Math.min(1, pct))
+  const months = (end.getFullYear() - now.getFullYear()) * 12 + end.getMonth() - now.getMonth()
+  const monthsLeftLabel = months <= 0 ? 'Expired' : months === 1 ? '1 month left' : `${months} months left`
+  return { pct, monthsLeftLabel }
 }
 
 const IconDeltaDown = () => (
@@ -469,6 +498,27 @@ function loadCustomPresets(): (CustomPreset | null)[] {
 function saveCustomPresets(p: (CustomPreset | null)[]) {
   localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(p))
 }
+
+const COL_ACTIVE_PRESET_KEY = 'col-active-preset'
+
+function loadColActivePreset(slots: (CustomPreset | null)[]): string | number | null {
+  try {
+    const raw = localStorage.getItem(COL_ACTIVE_PRESET_KEY)
+    if (raw == null || raw === '') return BUILT_IN_PRESETS[0].id
+    const v = JSON.parse(raw) as unknown
+    if (v === null) return null
+    if (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < CUSTOM_SLOT_COUNT) {
+      return slots[v] != null ? v : BUILT_IN_PRESETS[0].id
+    }
+    if (typeof v === 'string' && BUILT_IN_PRESETS.some(bp => bp.id === v)) return v
+  } catch {}
+  return BUILT_IN_PRESETS[0].id
+}
+
+function saveColActivePreset(preset: string | number | null) {
+  localStorage.setItem(COL_ACTIVE_PRESET_KEY, JSON.stringify(preset))
+}
+
 const COL_ORDER_KEY = 'col-order'
 function loadColOrder(): ColKey[] {
   try {
@@ -492,6 +542,321 @@ function loadColVisibility(): Record<ColKey, boolean> {
     if (raw) return { ...defaults, ...JSON.parse(raw) }
   } catch {}
   return defaults
+}
+
+const CARD_METRIC_VIS_KEY = 'portfolio-card-metric-visibility'
+const CARD_METRIC_ORDER_KEY = 'portfolio-card-metric-order'
+const CARD_METRIC_MAX_ON = 5
+
+function defaultCardMetricVisibility(): Record<ColKey, boolean> {
+  return Object.fromEntries(
+    COL_KEYS.map(k => [k, k === 'area' || k === 'egi' || k === 'noi']),
+  ) as Record<ColKey, boolean>
+}
+
+function loadCardMetricVisibility(): Record<ColKey, boolean> {
+  const defaults = defaultCardMetricVisibility()
+  try {
+    const raw = localStorage.getItem(CARD_METRIC_VIS_KEY)
+    if (!raw) return defaults
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const next = { ...defaults }
+    for (const k of COL_KEYS) {
+      if (typeof parsed[k] === 'boolean') next[k] = parsed[k]
+    }
+    const order = loadCardMetricOrder()
+    const visibleInOrder = order.filter(k => next[k])
+    if (visibleInOrder.length > CARD_METRIC_MAX_ON) {
+      for (let i = CARD_METRIC_MAX_ON; i < visibleInOrder.length; i++) {
+        next[visibleInOrder[i]] = false
+      }
+      localStorage.setItem(CARD_METRIC_VIS_KEY, JSON.stringify(next))
+    }
+    return next
+  } catch {
+    return defaults
+  }
+}
+
+function loadCardMetricOrder(): ColKey[] {
+  try {
+    const raw = localStorage.getItem(CARD_METRIC_ORDER_KEY)
+    if (raw) {
+      const arr = JSON.parse(raw) as ColKey[]
+      const known = new Set<string>(COL_KEYS)
+      const valid = arr.filter((k): k is ColKey => known.has(k))
+      const missing = ([...COL_KEYS] as ColKey[]).filter(k => !valid.includes(k))
+      return [...valid, ...missing]
+    }
+  } catch {}
+  return [...COL_KEYS]
+}
+
+/** Display string + optional tone for grid card metrics (aligned with wf-table cells). */
+type CardMetricFmt = { text: string; tone?: 'pos' | 'neg' | 'purple' }
+
+function formatCardMetricValue(
+  key: ColKey,
+  p: Property,
+  ctx: {
+    year: number
+    displayCurrency: CurrencyCode
+    fxRates: FxRates
+    fm: (n: number | null | undefined) => string
+  },
+): CardMetricFmt {
+  const { year, displayCurrency: dc, fxRates: fx, fm } = ctx
+  const py = { ...p, year }
+  const a = convertAnnual(calcAnnual(py), p.currency, dc, fx)
+  const gpiRow = convert(projectedGpiAnnual(py), p.currency, dc, fx)
+  const ac = activeContract(p)
+  const countryCode = COUNTRIES.find(c => c.name === p.country)?.code
+  const dash: CardMetricFmt = { text: '—' }
+
+  switch (key) {
+    case 'owner':
+      return { text: p.owner?.trim() ? p.owner : '—' }
+    case 'country':
+      return { text: p.country ? (countryCode || p.country) : '—' }
+    case 'status':
+      return { text: ac ? 'Rented' : 'Vacant' }
+    case 'nonLeaseOcc':
+      return { text: nonLeaseOccupancyLabel(p) }
+    case 'endDate': {
+      if (!ac) return dash
+      const end = new Date(ac.endDate), now = new Date()
+      const months = (end.getFullYear() - now.getFullYear()) * 12 + end.getMonth() - now.getMonth()
+      const text = months <= 0 ? 'Expired' : `${months}m`
+      return months <= 3 ? { text, tone: 'neg' } : { text }
+    }
+    case 'taxStatus': {
+      const items = p.taxes?.items ?? [], pending = items.filter(t => t.status === 'pending')
+      if (items.length === 0) return dash
+      if (pending.length === 0) return { text: 'Paid' }
+      const nearest = pending.reduce((x, b) => x.dueDate < b.dueDate ? x : b)
+      const daysLeft = Math.ceil((new Date(nearest.dueDate).getTime() - Date.now()) / 864e5)
+      return { text: `Due ${daysLeft <= 0 ? 'overdue' : `${daysLeft}d`}` }
+    }
+    case 'propertyType':
+      return { text: p.factSheet?.propertyType || '—' }
+    case 'bedrooms':
+      return { text: p.bedrooms || '—' }
+    case 'area':
+      return { text: p.area ? `${p.area} m²` : '—' }
+    case 'bathrooms':
+      return { text: p.bathrooms || '—' }
+    case 'parking':
+      return { text: p.parking || '—' }
+    case 'floor':
+      return { text: p.factSheet?.floor ?? '—' }
+    case 'estrato':
+      return { text: p.factSheet?.estrato ?? '—' }
+    case 'yearBuilt':
+      return { text: p.factSheet?.yearBuilt ?? '—' }
+    case 'lastRenovation':
+      return { text: p.factSheet?.lastRenovation ?? '—' }
+    case 'estValue': {
+      const e = estimatedPropertyValueAtYear(py, year)
+      const conv = e.value != null ? convert(e.value, p.currency, dc, fx) : null
+      if (conv == null) return dash
+      return { text: fm(conv), tone: 'purple' }
+    }
+    case 'valueYoY': {
+      const y = propertyValueYoYPct(py, year)
+      if (y == null || !Number.isFinite(y)) return dash
+      const near = Math.abs(y) < 0.05
+      const shown = near ? '0' : Math.abs(y).toFixed(1)
+      const positive = y > 0 || near
+      return { text: `${positive ? '+' : '−'}${shown}%`, tone: positive ? 'pos' : 'neg' }
+    }
+    case 'ownedSince':
+      return { text: formatOwnedSinceCell(p.factSheet?.purchaseDate) }
+    case 'debt': {
+      const m = p.factSheet?.mortgage
+      if (!m?.hasMortgage || m.outstandingBalance == null) return dash
+      const conv = convert(m.outstandingBalance, p.currency, dc, fx)
+      return { text: `−${fm(conv)}`, tone: 'neg' }
+    }
+    case 'mtgYearsLeft': {
+      const y = mortgageYearsRemaining(p.factSheet?.mortgage?.endDate)
+      if (y == null) return dash
+      return { text: y === 0 ? '0' : String(y) }
+    }
+    case 'gpi':
+      return { text: fm(gpiRow) }
+    case 'egi':
+      return { text: fm(a.egi), tone: 'pos' }
+    case 'egiPerM2': {
+      const ar = p.area
+      if (ar == null || ar <= 0) return dash
+      return { text: fm(a.egi / ar), tone: 'pos' }
+    }
+    case 'vacancyMoRate': {
+      const m = vacancyLossMonthCount(py)
+      const pct = (m / 12) * 100
+      return { text: `${pct.toFixed(1)}%` }
+    }
+    case 'opex':
+      return { text: `−${fm(a.totalOpex)}`, tone: 'neg' }
+    case 'noi':
+      return { text: fm(a.noi), tone: a.noi >= 0 ? 'pos' : 'neg' }
+    case 'noiPerM2': {
+      const ar = p.area
+      if (ar == null || ar <= 0 || !Number.isFinite(a.noi)) return dash
+      const v = a.noi / ar
+      return { text: fm(v), tone: v >= 0 ? 'pos' : 'neg' }
+    }
+    case 'valuePerM2': {
+      const ar = p.area
+      if (ar == null || ar <= 0) return dash
+      const e = estimatedPropertyValueAtYear(py, year)
+      if (e.value == null || e.value <= 0) return dash
+      const v = convert(e.value, p.currency, dc, fx) / ar
+      return { text: fm(v), tone: 'purple' }
+    }
+    case 'capRate': {
+      const cap = propertyCapRatePct(py, year, dc, fx, a)
+      if (cap == null || !Number.isFinite(cap)) return dash
+      return { text: `${cap.toFixed(2)}%`, tone: cap < 0 ? 'neg' : 'purple' }
+    }
+    case 'capex':
+      return a.totalCapex ? { text: `−${fm(a.totalCapex)}`, tone: 'neg' } : dash
+    case 'yieldOnCapex': {
+      if (!a.totalCapex || !Number.isFinite(a.noi)) return dash
+      const pct = (a.noi / a.totalCapex) * 100
+      return { text: `${pct.toFixed(1)}%`, tone: pct >= 0 ? 'purple' : 'neg' }
+    }
+    case 'payback': {
+      if (!a.totalCapex || !Number.isFinite(a.noi) || a.noi <= 0) return dash
+      return { text: (a.totalCapex / a.noi).toFixed(1) }
+    }
+    case 'taxes':
+      return a.taxes ? { text: `−${fm(a.taxes)}`, tone: 'neg' } : dash
+    case 'netCf':
+      return { text: `${a.netCf >= 0 ? '+' : ''}${fm(a.netCf)}`, tone: a.netCf >= 0 ? 'pos' : 'neg' }
+    case 'margin':
+      return gpiRow ? { text: `${Math.round((a.netCf / gpiRow) * 100)}%` } : dash
+    default:
+      return dash
+  }
+}
+
+function PortfolioPropertyGridCard({
+  property: p,
+  year,
+  displayCurrency,
+  fxRates,
+  formatMoney: fm,
+  activeCardMetrics,
+  onOpen,
+}: {
+  property: Property
+  year: number
+  displayCurrency: CurrencyCode
+  fxRates: FxRates
+  formatMoney: (n: number | null | undefined) => string
+  /** Up to five column keys in display order (first 3 = main strip, next 2 = detail rows). */
+  activeCardMetrics: ColKey[]
+  onOpen: (id: number) => void
+}) {
+  const rented = activeContract(p) != null
+  const rawPhoto = p.factSheet?.photos?.[0]?.trim()
+  const [imgFailed, setImgFailed] = useState(false)
+  const showImg = Boolean(rawPhoto && !imgFailed)
+  const leaseProgress = gridCardContractProgress(p)
+  const metricCtx = { year, displayCurrency, fxRates, fm }
+  const mainKeys: (ColKey | undefined)[] = [0, 1, 2].map(i => activeCardMetrics[i])
+  const detailKeys: (ColKey | undefined)[] = [3, 4].map(i => activeCardMetrics[i])
+  const valueToneCls = (tone: CardMetricFmt['tone']) =>
+    tone === 'pos'
+      ? ' portfolio-prop-card-metric-value--pos'
+      : tone === 'neg'
+        ? ' portfolio-prop-card-metric-value--neg'
+        : tone === 'purple'
+          ? ' portfolio-prop-card-metric-value--purple'
+          : ''
+
+  return (
+    <button type="button" className="portfolio-prop-card" onClick={() => onOpen(p.id)}>
+      <div className="portfolio-prop-card-media">
+        {showImg ? (
+          <img
+            src={rawPhoto}
+            alt=""
+            className="portfolio-prop-card-img"
+            onError={() => setImgFailed(true)}
+          />
+        ) : (
+          <div className="portfolio-prop-card-no-cover">
+            <IconBuildingPlaceholder />
+            <span className="portfolio-prop-card-no-cover-text">No cover</span>
+          </div>
+        )}
+        <span className={`badge portfolio-prop-card-badge ${rented ? 'active-c' : 'vacant'}`}>
+          {rented ? 'Rented' : 'Vacant'}
+        </span>
+      </div>
+      <div className="portfolio-prop-card-body">
+        <h3 className="portfolio-prop-card-title">{p.name}</h3>
+        <p className="portfolio-prop-card-address">{p.address?.trim() ? p.address : '—'}</p>
+        <div
+          className={`portfolio-prop-card-contract${leaseProgress ? '' : ' portfolio-prop-card-contract--placeholder'}`}
+          aria-label={leaseProgress ? 'Lease progress' : 'No active contract'}
+        >
+          <div className="portfolio-prop-card-contract-meta">
+            <span className="portfolio-prop-card-contract-label">
+              {leaseProgress ? leaseProgress.monthsLeftLabel : 'No active contract'}
+            </span>
+            {leaseProgress ? <span className="portfolio-prop-card-contract-pct">{Math.round(leaseProgress.pct * 100)}%</span> : null}
+          </div>
+          <div
+            className="portfolio-prop-card-contract-track"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={leaseProgress ? Math.round(leaseProgress.pct * 100) : 0}
+            aria-valuetext={leaseProgress ? `${Math.round(leaseProgress.pct * 100)}% complete` : 'No active contract'}
+          >
+            <div
+              className={`portfolio-prop-card-contract-fill${leaseProgress ? '' : ' portfolio-prop-card-contract-fill--inactive'}`}
+              style={{ width: leaseProgress ? `${leaseProgress.pct * 100}%` : '0%' }}
+            />
+          </div>
+        </div>
+        <div className="portfolio-prop-card-divider" />
+        <div className="portfolio-prop-card-metrics" role="group" aria-label="Key figures">
+          {mainKeys.map((colKey, idx) => {
+            const fmt = colKey ? formatCardMetricValue(colKey, p, metricCtx) : { text: '—' as const }
+            const label = colKey ? COL_LABELS[colKey] : '—'
+            return (
+              <div key={`m-${idx}`} style={{ display: 'contents' }}>
+                {idx > 0 ? <div className="portfolio-prop-card-metric-sep" aria-hidden /> : null}
+                <div className="portfolio-prop-card-metric">
+                  <span className="portfolio-prop-card-metric-label">{label}</span>
+                  <span className={`portfolio-prop-card-metric-value${valueToneCls(fmt.tone)}`}>{fmt.text}</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <div className="portfolio-prop-card-extra">
+          {detailKeys.map((colKey, idx) => {
+            const fmt = colKey ? formatCardMetricValue(colKey, p, metricCtx) : { text: '—' as const }
+            const label = colKey ? COL_LABELS[colKey] : '—'
+            const isPlaceholder = !colKey
+            return (
+              <div key={`d-${idx}`} className="portfolio-prop-card-extra-row">
+                <span className={`portfolio-prop-card-extra-label${isPlaceholder ? ' portfolio-prop-card-extra-value--ph' : ''}`}>{label}</span>
+                <span className={`portfolio-prop-card-extra-value${isPlaceholder ? ' portfolio-prop-card-extra-value--ph' : ''}${!isPlaceholder && fmt.tone === 'pos' ? ' portfolio-prop-card-metric-value--pos' : ''}${!isPlaceholder && fmt.tone === 'neg' ? ' portfolio-prop-card-metric-value--neg' : ''}${!isPlaceholder && fmt.tone === 'purple' ? ' portfolio-prop-card-metric-value--purple' : ''}`}>
+                  {fmt.text}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </button>
+  )
 }
 
 const STORAGE_KEY = 'kpi-visibility'
@@ -771,14 +1136,28 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   const [colVis, setColVis] = useState(loadColVisibility)
   const [colOrder, setColOrder] = useState(loadColOrder)
   const [colMenuOpen, setColMenuOpen] = useState(false)
-  // activePreset: built-in id string ('financial'|'details'|'all') — UI labels View 1–3 — or custom slot index (0|1|2) or null
-  const [activePreset, setActivePreset] = useState<string | number | null>(BUILT_IN_PRESETS[0].id)
+  /** List vs grid for properties section (icon reflects current mode) */
+  const [propertiesLayoutView, setPropertiesLayoutView] = useState<'list' | 'grid'>(() =>
+    _saved.propertiesLayoutView === 'grid' ? 'grid' : 'list',
+  )
   const [customPresets, setCustomPresets] = useState(loadCustomPresets)
+  // activePreset: built-in id string ('financial'|'details'|'all') — UI labels View 1–3 — or custom slot index (0|1|2) or null
+  const [activePreset, setActivePreset] = useState<string | number | null>(() => loadColActivePreset(loadCustomPresets()))
   const [renamingSlot, setRenamingSlot] = useState<number | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [dragCol, setDragCol] = useState<ColKey | null>(null)
   const [dragOverCol, setDragOverCol] = useState<ColKey | null>(null)
+  const [cardMetricVis, setCardMetricVis] = useState(loadCardMetricVisibility)
+  const [cardMetricOrder, setCardMetricOrder] = useState(loadCardMetricOrder)
+  const [dragCardMetric, setDragCardMetric] = useState<ColKey | null>(null)
+  const [dragOverCardMetric, setDragOverCardMetric] = useState<ColKey | null>(null)
+  const [cardMetricMax5Hint, setCardMetricMax5Hint] = useState(false)
   const colMenuRef = useRef<HTMLDivElement>(null)
+
+  const activeCardMetricKeys = useMemo(
+    () => cardMetricOrder.filter(k => cardMetricVis[k]).slice(0, CARD_METRIC_MAX_ON),
+    [cardMetricOrder, cardMetricVis],
+  )
 
   // Sort state
   type SortKey = 'name' | ColKey
@@ -788,9 +1167,13 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   // Persist filter state to localStorage
   useEffect(() => {
     localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify({
-      searchQuery, activeFilters, sortKey, sortDir, selectedYear, displayCurrency,
+      searchQuery, activeFilters, sortKey, sortDir, selectedYear, displayCurrency, propertiesLayoutView,
     }))
-  }, [searchQuery, activeFilters, sortKey, sortDir, selectedYear, displayCurrency])
+  }, [searchQuery, activeFilters, sortKey, sortDir, selectedYear, displayCurrency, propertiesLayoutView])
+
+  useEffect(() => {
+    saveColActivePreset(activePreset)
+  }, [activePreset])
 
   const closeToolModal = useCallback(() => {
     setOpenToolModal(null)
@@ -1141,6 +1524,10 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
   }, [filteredProperties, selectedYear, totals.noi, assetKpis.totalValue, valueEquityTotals, displayCurrency, fxRates])
 
   useEffect(() => {
+    if (propertiesLayoutView !== 'list') {
+      setShowScrollBtns(false)
+      return
+    }
     const el = tableScrollRef.current
     if (!el) return
     const check = () => setShowScrollBtns(el.scrollWidth > el.clientWidth)
@@ -1148,7 +1535,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
     const ro = new ResizeObserver(check)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [properties])
+  }, [properties, propertiesLayoutView])
 
   useEffect(() => {
     if (!kpiMenuOpen) return
@@ -1199,6 +1586,25 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
       return next
     })
     setActivePreset(null)
+  }
+
+  function toggleCardMetric(key: ColKey) {
+    setCardMetricVis(prev => {
+      const turningOn = !prev[key]
+      if (turningOn) {
+        const nOn = COL_KEYS.filter(k => prev[k]).length
+        if (nOn >= CARD_METRIC_MAX_ON) {
+          queueMicrotask(() => {
+            setCardMetricMax5Hint(true)
+            window.setTimeout(() => setCardMetricMax5Hint(false), 2200)
+          })
+          return prev
+        }
+      }
+      const next = { ...prev, [key]: !prev[key] }
+      localStorage.setItem(CARD_METRIC_VIS_KEY, JSON.stringify(next))
+      return next
+    })
   }
 
   function saveCustomPreset(slot: number, name: string) {
@@ -1603,7 +2009,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
         )}
         {/* Toolbar — placeholder row for tool actions */}
         <div className="portfolio-toolbar mb12" aria-label="Toolbar">
-          <span className="portfolio-toolbar-label">Tool</span>
+          <span className="portfolio-toolbar-label">Tools</span>
           <div className="portfolio-toolbar-tools">
             {PORTFOLIO_TOOL_ICONS.map((src, i) => (
               <button
@@ -1616,7 +2022,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                 aria-expanded={openToolModal === i}
                 onClick={() => {
                   setOpenToolModal(i)
-                  setToolModalMaximized(i === 1 && reportStep != null)
+                  setToolModalMaximized(i === 0 && reportStep != null)
                 }}
               >
                 <span
@@ -1656,11 +2062,137 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                 <IconDownload />
                 <span>CSV</span>
               </button>
+              <button
+                type="button"
+                className={`filter-bar-icon-btn${propertiesLayoutView === 'grid' ? ' active' : ''}`}
+                title={propertiesLayoutView === 'list' ? 'Switch to grid view' : 'Switch to list view'}
+                aria-label={propertiesLayoutView === 'list' ? 'Switch to grid view' : 'Switch to list view'}
+                aria-pressed={propertiesLayoutView === 'grid'}
+                onClick={() => setPropertiesLayoutView((v) => (v === 'list' ? 'grid' : 'list'))}
+              >
+                <span
+                  className="filter-bar-tool-mask-icon"
+                  style={{
+                    WebkitMaskImage: `url("${propertiesLayoutView === 'list' ? FILTER_BAR_LIST_VIEW_ICON : FILTER_BAR_GRID_VIEW_ICON}")`,
+                    maskImage: `url("${propertiesLayoutView === 'list' ? FILTER_BAR_LIST_VIEW_ICON : FILTER_BAR_GRID_VIEW_ICON}")`,
+                  }}
+                  aria-hidden
+                />
+              </button>
               <div ref={colMenuRef} style={{ position: 'relative' }}>
-                <button className={`filter-bar-icon-btn${colMenuOpen ? ' active' : ''}`} title="Column visibility" onClick={() => setColMenuOpen(v => !v)}>
+                <button
+                  type="button"
+                  className={`filter-bar-icon-btn${colMenuOpen ? ' active' : ''}`}
+                  title={propertiesLayoutView === 'grid' ? 'Card display' : 'Column visibility'}
+                  aria-label={propertiesLayoutView === 'grid' ? 'Card display' : 'Column visibility'}
+                  onClick={() => setColMenuOpen(v => !v)}
+                >
                   <IconSpreadsheet />
                 </button>
                 {colMenuOpen && (() => {
+                  if (propertiesLayoutView === 'grid') {
+                    return (
+                  <div
+                    ref={(el) => {
+                      if (el) {
+                        const top = el.getBoundingClientRect().top
+                        el.style.maxHeight = `${window.innerHeight - top - 12}px`
+                      }
+                    }}
+                    style={{
+                    position: 'absolute', right: 0, top: '100%', marginTop: 6,
+                    background: '#fff', border: '1px solid var(--border)', borderRadius: 12,
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 260,
+                    display: 'flex', flexDirection: 'column',
+                    animation: 'selectSlideIn 0.15s ease-out',
+                  }}>
+                    <div style={{ padding: '10px 14px 10px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.02em' }}>Card display — up to 5</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4, lineHeight: 1.35 }}>
+                        First three metrics: main row. Next two: detail rows. List view columns stay separate.
+                      </div>
+                      {cardMetricMax5Hint ? (
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--red)', marginTop: 8 }}>Max 5 on card — hide one to add another.</div>
+                      ) : null}
+                    </div>
+                    <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
+                    {cardMetricOrder.some(k => cardMetricVis[k]) && (
+                      <>
+                        <div style={{ padding: '10px 14px 6px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                          Visible — drag to reorder
+                        </div>
+                        {cardMetricOrder.filter(k => cardMetricVis[k]).map(key => (
+                          <div
+                            key={key}
+                            draggable
+                            onDragStart={(e) => { setDragCardMetric(key); e.dataTransfer.effectAllowed = 'move' }}
+                            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragOverCardMetric !== key) setDragOverCardMetric(key) }}
+                            onDragLeave={() => setDragOverCardMetric(prev => prev === key ? null : prev)}
+                            onDrop={(e) => {
+                              e.preventDefault()
+                              if (dragCardMetric && dragCardMetric !== key) {
+                                setCardMetricOrder(prev => {
+                                  const next = [...prev], from = next.indexOf(dragCardMetric), to = next.indexOf(key)
+                                  next.splice(from, 1); next.splice(to, 0, dragCardMetric)
+                                  localStorage.setItem(CARD_METRIC_ORDER_KEY, JSON.stringify(next))
+                                  return next
+                                })
+                              }
+                              setDragCardMetric(null); setDragOverCardMetric(null)
+                            }}
+                            onDragEnd={() => { setDragCardMetric(null); setDragOverCardMetric(null) }}
+                            style={{
+                              display: 'flex', alignItems: 'center', padding: '8px 14px', cursor: 'grab',
+                              opacity: dragCardMetric === key ? 0.35 : 1,
+                              borderTop: dragOverCardMetric === key && dragCardMetric !== key ? '2px solid var(--accent-bg)' : '2px solid transparent',
+                              transition: 'border-color 0.1s, opacity 0.1s',
+                            }}
+                          >
+                            <svg width="10" height="14" viewBox="0 0 10 14" fill="#c4c9d2" style={{ flexShrink: 0, marginRight: 8 }}>
+                              <circle cx="3" cy="2" r="1.3"/><circle cx="7" cy="2" r="1.3"/>
+                              <circle cx="3" cy="7" r="1.3"/><circle cx="7" cy="7" r="1.3"/>
+                              <circle cx="3" cy="12" r="1.3"/><circle cx="7" cy="12" r="1.3"/>
+                            </svg>
+                            <span style={{ fontSize: 13, flex: 1 }}>{COL_LABELS[key]}</span>
+                            <button
+                              type="button"
+                              className="ghost"
+                              onClick={(e) => { e.stopPropagation(); toggleCardMetric(key) }}
+                              style={{ padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0 }}
+                              aria-label={`Hide ${COL_LABELS[key]} from card`}
+                            >
+                              <IconEye visible={true} />
+                            </button>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                    {cardMetricOrder.some(k => !cardMetricVis[k]) && (
+                      <>
+                        <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+                        <div style={{ padding: '10px 14px 6px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                          Hidden
+                        </div>
+                        {cardMetricOrder.filter(k => !cardMetricVis[k]).map(key => (
+                          <button
+                            key={key}
+                            type="button"
+                            className="ghost"
+                            style={{ width: '100%', textAlign: 'left', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 0, color: 'var(--text3)' }}
+                            onClick={() => toggleCardMetric(key)}
+                            aria-label={`Show ${COL_LABELS[key]} on card`}
+                          >
+                            <span style={{ fontSize: 13 }}>{COL_LABELS[key]}</span>
+                            <IconEye visible={false} />
+                          </button>
+                        ))}
+                      </>
+                    )}
+                    <div style={{ height: 6 }} />
+                    </div>
+                  </div>
+                    )
+                  }
                   const customSlotActive = typeof activePreset === 'number' ? customPresets[activePreset] : null
                   return (
                   <div
@@ -2009,7 +2541,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
               ))}
               <button type="button" className="year-chevron" onClick={() => setSelectedYear((y) => y + 1)}>›</button>
             </div>
-            {showScrollBtns && (
+            {showScrollBtns && propertiesLayoutView === 'list' && (
               <>
                 <button type="button" className="scroll-arrow-btn" onClick={() => tableScrollRef.current?.scrollBy({ left: -300, behavior: 'smooth' })}>←</button>
                 <button type="button" className="scroll-arrow-btn" onClick={() => tableScrollRef.current?.scrollBy({ left: 300, behavior: 'smooth' })}>→</button>
@@ -2017,7 +2549,8 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
             )}
           </div>
         </div>
-        <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="card mb24" style={{ overflow: 'hidden' }}>
+          {propertiesLayoutView === 'list' ? (
           <div className="prop-table-scroll" ref={tableScrollRef}>
             <table className="wf-table">
               <thead>
@@ -2323,6 +2856,29 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
               </tbody>
             </table>
           </div>
+          ) : (
+          <div className="portfolio-props-grid" role="list" aria-label="Properties">
+            {sortedProperties.length === 0 ? (
+              <div className="portfolio-props-grid-empty">
+                No properties match your search or filters.
+              </div>
+            ) : (
+              sortedProperties.map((p) => (
+                <div key={p.id} className="portfolio-prop-grid-cell" role="listitem">
+                  <PortfolioPropertyGridCard
+                    property={p}
+                    year={selectedYear}
+                    displayCurrency={displayCurrency}
+                    fxRates={fxRates}
+                    formatMoney={fm}
+                    activeCardMetrics={activeCardMetricKeys}
+                    onOpen={onSelectProperty}
+                  />
+                </div>
+              ))
+            )}
+          </div>
+          )}
         </div>
 
         <PropertyLeaderboardMap
@@ -2374,7 +2930,7 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                     <div className="modal-title" id="portfolio-tool-modal-title">
                       {PORTFOLIO_TOOL_LABELS[openToolModal]}
                     </div>
-                    <div className="modal-sub">{openToolModal === 1 ? 'Portfolio Performance Report' : 'Placeholder'}</div>
+                    <div className="modal-sub">{openToolModal === 0 ? 'Portfolio Performance Report' : 'Placeholder'}</div>
                   </div>
                 </div>
               </div>
@@ -2402,10 +2958,8 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                 </button>
               </div>
             </div>
-            <div className="modal-body" style={{ minHeight: 100, paddingTop: openToolModal === 1 ? 0 : undefined }}>
+            <div className="modal-body" style={{ minHeight: 100, paddingTop: openToolModal === 0 ? 0 : undefined }}>
               {openToolModal === 0 ? (
-                <FundingRatioToolPlaceholder />
-              ) : openToolModal === 1 ? (
                 <AIAnalysisToolContent
                   properties={filteredProperties}
                   year={selectedYear}
@@ -2416,6 +2970,10 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                   onBack={() => { setReportStep(null); setToolModalMaximized(false) }}
                   onMaximize={() => setToolModalMaximized(true)}
                 />
+              ) : openToolModal === 1 ? (
+                <p style={{ fontSize: 14, color: 'var(--text3)', margin: 0, lineHeight: 1.5 }}>
+                  New tool in progress
+                </p>
               ) : (
                 <p style={{ fontSize: 14, color: 'var(--text3)', margin: 0, lineHeight: 1.5 }}>
                   Tool content placeholder — connect UI here (see Temp/FundingRatioCalculator.jsx for a full goals table + breakdown).

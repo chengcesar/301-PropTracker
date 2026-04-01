@@ -213,19 +213,19 @@ function AISection({ text, loading, err, generate }) {
     return raw.split("\n").map((line,i)=>{
       if (!line.trim()) return <div key={i} style={{height:7}}/>;
       if (/^\*\*(.+)\*\*$/.test(line.trim())) return (
-        <div key={i} style={{fontSize:11,fontWeight:700,color:"var(--accent-bg,#3b82f6)",textTransform:"uppercase",letterSpacing:"0.8px",marginTop:16,marginBottom:5,borderBottom:"1px solid #e8ecf2",paddingBottom:4}}>
+        <div key={i} style={{fontSize:11,fontWeight:700,color:"#1a1d23",textTransform:"uppercase",letterSpacing:"0.8px",marginTop:16,marginBottom:5,borderBottom:"1px solid #e8ecf2",paddingBottom:4}}>
           {line.trim().replace(/\*\*/g,"")}
         </div>
       );
       if (/^[-•]/.test(line.trim())) return (
         <div key={i} style={{display:"flex",gap:8,fontSize:12,color:"#374151",lineHeight:1.7,marginBottom:3}}>
-          <span style={{color:"#3b82f6",flexShrink:0}}>•</span>
+          <span style={{color:"#1a1d23",flexShrink:0}}>•</span>
           <span dangerouslySetInnerHTML={{__html:line.trim().replace(/^[-•]\s*/,"").replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")}}/>
         </div>
       );
       if (/^\d+\./.test(line.trim())) return (
         <div key={i} style={{display:"flex",gap:8,fontSize:12,color:"#374151",lineHeight:1.7,marginBottom:3}}>
-          <span style={{color:"#3b82f6",fontWeight:700,flexShrink:0,minWidth:14}}>{line.trim().match(/^\d+/)[0]}.</span>
+          <span style={{color:"#1a1d23",fontWeight:700,flexShrink:0,minWidth:14}}>{line.trim().match(/^\d+/)[0]}.</span>
           <span dangerouslySetInnerHTML={{__html:line.trim().replace(/^\d+\.\s*/,"").replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")}}/>
         </div>
       );
@@ -294,6 +294,50 @@ export default function PortfolioReport({ properties: rawProps = [], year, onBac
 
   const { text, loading, err, generate } = useAISection(props, agg);
 
+  const [detailTableCopied, setDetailTableCopied] = useState(false);
+
+  async function copyPropertyDetailTable() {
+    const headers = ["Property","Status","m²","GPI","EGI","OPEX","NOI","Net CF","Cap Rate","$/m²","NOI/m²"];
+    const tsvLine = (cells) =>
+      cells.map((c) => String(c).replace(/[\r\n\t]/g, " ")).join("\t");
+    const lines = [tsvLine(headers)];
+    for (const p of props) {
+      lines.push(tsvLine([
+        p.name,
+        p.status ?? "",
+        n2(p.area, 0),
+        $(p.gpi),
+        $(p.egi),
+        p.opex > 0 ? `(${$(p.opex)})` : "—",
+        $(p.noi),
+        $(p.netCF),
+        pct(p.capRate),
+        `$${n2(p.valueM2, 0)}`,
+        `$${n2(p.noiM2, 1)}`,
+      ]));
+    }
+    lines.push(tsvLine([
+      "Total / Avg",
+      "",
+      n2(totalArea, 0),
+      $(totalGPI),
+      $(totalEGI),
+      `(${$(totalOPEX)})`,
+      $(totalNOI),
+      $(totalNetCF),
+      pct(portCapRate),
+      `$${n2(valueM2Port, 0)}`,
+      `$${n2(noiM2Port, 1)}`,
+    ]));
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setDetailTableCopied(true);
+      window.setTimeout(() => setDetailTableCopied(false), 2000);
+    } catch {
+      /* clipboard API unavailable */
+    }
+  }
+
   const today = new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
 
   const expiring   = props.filter(p=>p.monthsLeft!=null&&p.monthsLeft<=3&&p.status==="Rented");
@@ -310,6 +354,7 @@ export default function PortfolioReport({ properties: rawProps = [], year, onBac
           #pt-report { position: absolute; top:0; left:0; width:100%; }
           .no-print { display: none !important; }
           .page-break { page-break-before: always; margin-top: 0; }
+          .prop-table-scroll { overflow: visible !important; max-width: none !important; }
         }
       `}</style>
 
@@ -380,10 +425,33 @@ export default function PortfolioReport({ properties: rawProps = [], year, onBac
           </div>
         </div>
 
-        {/* Detail table */}
-        <div style={{marginBottom:20}}>
-          <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.7px",color:"#9ca3af",marginBottom:8}}>Property Detail</div>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:10.5}}>
+        {/* Detail table — scroll wrapper so wide tables aren’t clipped in narrow modals */}
+        <div style={{marginBottom:20,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:8,minWidth:0}}>
+            <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.7px",color:"#9ca3af"}}>Property Detail</div>
+            <button
+              type="button"
+              className="no-print"
+              onClick={copyPropertyDetailTable}
+              aria-label="Copy property detail table to clipboard"
+              style={{
+                background:"none",
+                border:"1px solid #e8ecf2",
+                borderRadius:8,
+                padding:"4px 10px",
+                fontSize:11,
+                fontWeight:600,
+                fontFamily:"inherit",
+                cursor:"pointer",
+                color: detailTableCopied ? "#0d9488" : "#6b7280",
+                flexShrink:0,
+              }}
+            >
+              {detailTableCopied ? "Copied" : "Copy table"}
+            </button>
+          </div>
+          <div className="prop-table-scroll" style={{maxWidth:"100%"}}>
+          <table style={{width:"max-content",minWidth:"100%",borderCollapse:"collapse",fontSize:10.5}}>
             <thead>
               <tr style={{background:"#f7f9fc"}}>
                 {["Property","Status","m²","GPI","EGI","OPEX","NOI","Net CF","Cap Rate","$/m²","NOI/m²"].map(h=>(
@@ -430,6 +498,7 @@ export default function PortfolioReport({ properties: rawProps = [], year, onBac
               </tr>
             </tfoot>
           </table>
+          </div>
         </div>
 
         {/* Rent/m² bars + Cap rate ranking */}
