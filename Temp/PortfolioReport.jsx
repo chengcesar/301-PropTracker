@@ -35,6 +35,7 @@ function norm(p) {
     status:    f("status","Status") || "",
     monthsLeft: n("monthsLeft","Months Left"),
     taxStatus: f("taxStatus","Tax Status") || "",
+    pendingTaxItems: Array.isArray(p.pendingTaxItems) ? p.pendingTaxItems : [],
     type:      f("type","Type") || "",
     beds:      n("beds","Beds"),
     area, gpi, egi, opex, noi, capex, taxes, netCF, value, debt,
@@ -63,8 +64,8 @@ const COLORS = ["#3b82f6","#1BC5BD","#f59e0b","#8b5cf6","#ec4899","#10b981","#f9
 function HBar({ value, max, color="#3b82f6" }) {
   const w = max ? Math.max(0, Math.min(100, (Math.abs(value) / Math.abs(max)) * 100)) : 0;
   return (
-    <div style={{ height:6, background:"#e8ecf2", borderRadius:4, overflow:"hidden", marginTop:3 }}>
-      <div style={{ height:"100%", width:`${w}%`, background:color, borderRadius:4 }} />
+    <div style={{ height:6, background:"#e8ecf2", borderRadius:4, overflow:"hidden", marginTop:3, WebkitPrintColorAdjust:"exact", printColorAdjust:"exact" }}>
+      <div style={{ height:"100%", width:`${w}%`, background:color, borderRadius:4, WebkitPrintColorAdjust:"exact", printColorAdjust:"exact" }} />
     </div>
   );
 }
@@ -83,7 +84,7 @@ function ColChart({ items, height=95, label="" }) {
           const pct = (Math.abs(d.value)/max)*100;
           const valLabel = Math.abs(d.value)>=1000?`$${(d.value/1000).toFixed(0)}k`:`$${d.value.toFixed(0)}`;
           return (
-            <div key={d.name} style={{flex:1,height:`${pct}%`,minWidth:0,position:"relative",background:d.color||"#93c5fd",borderRadius:"3px 3px 0 0",opacity:0.92}}>
+            <div key={d.name} style={{flex:1,height:`${pct}%`,minWidth:0,position:"relative",background:d.color||"#93c5fd",borderRadius:"3px 3px 0 0",opacity:0.92,WebkitPrintColorAdjust:"exact",printColorAdjust:"exact"}}>
               <div style={{position:"absolute",bottom:"100%",left:0,right:0,textAlign:"center",fontSize:labelSize,fontWeight:700,color:d.color||"#6b7280",marginBottom:2,lineHeight:1,whiteSpace:"nowrap"}}>{valLabel}</div>
             </div>
           );
@@ -244,17 +245,22 @@ function AISection({ text, loading, err, generate }) {
     </div>
   );
   if (!text) return (
-    <div style={{textAlign:"center",padding:"30px 0"}}>
-      <button
-        onClick={generate}
-        disabled={loading}
-        style={{background:"var(--accent-bg,#3b82f6)",border:"none",borderRadius:8,padding:"8px 20px",fontSize:13,color:"#fff",cursor:"pointer",fontWeight:600,fontFamily:"inherit",marginBottom:12}}
-      >
-        Generate Analysis
-      </button>
-      <div style={{fontSize:13,color:"#6b7280"}}>AI-powered interpretation of your portfolio data</div>
-      {err && <div style={{color:"#b91c1c",fontSize:12,marginTop:10}}>{err}</div>}
-    </div>
+    <>
+      <div className="no-print" style={{textAlign:"center",padding:"30px 0"}}>
+        <button
+          onClick={generate}
+          disabled={loading}
+          style={{background:"var(--accent-bg,#3b82f6)",border:"none",borderRadius:8,padding:"8px 20px",fontSize:13,color:"#fff",cursor:"pointer",fontWeight:600,fontFamily:"inherit",marginBottom:12}}
+        >
+          Generate Analysis
+        </button>
+        <div style={{fontSize:13,color:"#6b7280"}}>AI-powered interpretation of your portfolio data</div>
+        {err && <div style={{color:"#b91c1c",fontSize:12,marginTop:10}}>{err}</div>}
+      </div>
+      <div style={{fontSize:12,color:"#9ca3af",fontStyle:"italic",display:"none"}} className="print-only-placeholder">
+        AI analysis not yet generated. Open the report and click "Generate Analysis" before printing.
+      </div>
+    </>
   );
   return (
     <div>
@@ -356,12 +362,13 @@ export default function PortfolioReport({ properties: rawProps = [], year, displ
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Averia+Serif+Libre:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&family=Fraunces:wght@700&family=Inter:wght@400;500;600;700&display=swap');
         @media print {
-          body * { visibility: hidden !important; }
-          #pt-report, #pt-report * { visibility: visible !important; }
-          #pt-report { position: absolute; top:0; left:0; width:100%; }
+          body > *:not(#pt-report) { display: none !important; }
+          #pt-report { display: block !important; position: static !important; width: 100% !important; margin: 0 auto !important; max-width: 760px !important; }
           .no-print { display: none !important; }
-          .page-break { page-break-before: always; margin-top: 0; }
+          .print-only-placeholder { display: block !important; }
+          .page-break { page-break-before: always; break-before: page; margin-top: 0; }
           .prop-table-scroll { overflow: visible !important; max-width: none !important; }
+          #pt-report * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
       `}</style>
 
@@ -372,7 +379,16 @@ export default function PortfolioReport({ properties: rawProps = [], year, displ
             ← Back
           </button>
         )}
-        <button onClick={()=>window.print()} style={{background:"none",color:"var(--accent-bg,#3b82f6)",border:"1.5px solid var(--accent-bg,#3b82f6)",borderRadius:8,padding:"6px 16px",fontSize:12,fontWeight:600,fontFamily:"inherit",cursor:"pointer"}}>
+        <button onClick={()=>{
+          const el = document.getElementById('pt-report');
+          const parent = el.parentNode;
+          const anchor = document.createComment('print-anchor');
+          parent.insertBefore(anchor, el.nextSibling);
+          document.body.appendChild(el);
+          window.print();
+          anchor.parentNode.insertBefore(el, anchor);
+          anchor.remove();
+        }} style={{background:"none",color:"var(--accent-bg,#3b82f6)",border:"1.5px solid var(--accent-bg,#3b82f6)",borderRadius:8,padding:"6px 16px",fontSize:12,fontWeight:600,fontFamily:"inherit",cursor:"pointer"}}>
           Print / Save PDF
         </button>
         <button
@@ -550,8 +566,27 @@ export default function PortfolioReport({ properties: rawProps = [], year, displ
             )}
             {pendingTax.length>0&&(
               <div style={{flex:1,minWidth:180,background:"#fff1f2",border:"1px solid #fecdd3",borderRadius:10,padding:"10px 14px"}}>
-                <div style={{fontSize:9.5,fontWeight:700,color:"#9f1239",marginBottom:5}}>🧾 PENDING TAX STATUS</div>
-                {pendingTax.map(p=><div key={p.name} style={{fontSize:11,color:"#374151"}}>{p.name}</div>)}
+                <div style={{fontSize:9.5,fontWeight:700,color:"#9f1239",marginBottom:6}}>🧾 PENDING TAX STATUS</div>
+                {pendingTax.map(p=>{
+                  const total = p.pendingTaxItems.reduce((s,t)=>s+t.amount,0);
+                  return (
+                    <div key={p.name} style={{marginBottom:8}}>
+                      <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:3}}>{p.name}</div>
+                      {p.pendingTaxItems.map((t,i)=>(
+                        <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:10.5,color:"#6b7280",paddingLeft:8}}>
+                          <span>{t.dueDate ? new Date(t.dueDate).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}) : "—"}</span>
+                          <span style={{fontWeight:600,color:"#9f1239"}}>{$(t.amount)}</span>
+                        </div>
+                      ))}
+                      {p.pendingTaxItems.length>1&&(
+                        <div style={{display:"flex",justifyContent:"space-between",fontSize:10.5,fontWeight:700,color:"#9f1239",paddingLeft:8,marginTop:3,borderTop:"1px solid #fecdd3",paddingTop:3}}>
+                          <span>Total</span>
+                          <span>{$(total)}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
             {negNOI.length>0&&(

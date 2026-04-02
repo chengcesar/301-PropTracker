@@ -125,7 +125,12 @@ function toReportProps(p: Property, year: number, dc: CurrencyCode, fx: FxRates)
   })() : null
 
   // Tax status — same as taxStatus column
-  const hasPendingTax = (p.taxes?.items ?? []).some(t => t.status === 'pending')
+  const pendingTaxItems = (p.taxes?.items ?? [])
+    .filter(t => t.status === 'pending')
+    .map(t => ({
+      amount: convert(t.amount, p.currency, dc, fx),
+      dueDate: t.dueDate,
+    }))
 
   return {
     name: p.name,
@@ -136,7 +141,8 @@ function toReportProps(p: Property, year: number, dc: CurrencyCode, fx: FxRates)
     area: p.area,
     status,
     monthsLeft,
-    taxStatus: hasPendingTax ? 'Pending' : 'Paid',
+    taxStatus: pendingTaxItems.length > 0 ? 'Pending' : 'Paid',
+    pendingTaxItems,
     vacRate,
     gpi,
     egi: a.egi,
