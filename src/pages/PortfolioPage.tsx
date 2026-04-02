@@ -153,8 +153,9 @@ function toReportProps(p: Property, year: number, dc: CurrencyCode, fx: FxRates)
   }
 }
 
-function AIAnalysisToolContent({ properties, year, displayCurrency, fxRates, step, onStep, onBack, onMaximize }: {
-  properties: Property[]
+function AIAnalysisToolContent({ allProperties, initialFilters, year, displayCurrency, fxRates, step, onStep, onBack, onMaximize }: {
+  allProperties: Property[]
+  initialFilters: Record<string, PortfolioFilterSelection>
   year: number
   displayCurrency: CurrencyCode
   fxRates: FxRates
@@ -163,29 +164,222 @@ function AIAnalysisToolContent({ properties, year, displayCurrency, fxRates, ste
   onBack: () => void
   onMaximize: () => void
 }) {
+  const [modalFilters, setModalFilters] = useState<Record<string, string[]>>(() => {
+    const out: Record<string, string[]> = {}
+    for (const [k, v] of Object.entries(initialFilters)) {
+      if (v && v.length > 0) out[k] = v
+    }
+    return out
+  })
+  const [showList, setShowList] = useState(false)
+
+  const filterDims = useMemo(() => {
+    const owners = Array.from(new Set(allProperties.map(p => p.owner).filter(Boolean) as string[])).sort()
+    const countries = Array.from(new Set(allProperties.map(p => p.country).filter(Boolean) as string[])).sort()
+    const cities = Array.from(new Set(allProperties.map(p => p.city).filter(Boolean) as string[])).sort()
+    const dims: { key: string; label: string; values: string[] }[] = []
+    if (owners.length > 1) dims.push({ key: 'owner', label: 'Owner', values: owners })
+    if (countries.length > 1) dims.push({ key: 'country', label: 'Country', values: countries })
+    if (cities.length > 1) dims.push({ key: 'city', label: 'City', values: cities })
+    dims.push({ key: 'status', label: 'Status', values: ['Rented', 'Vacant'] })
+    return dims
+  }, [allProperties])
+
+  const reportProperties = useMemo(() => {
+    let result = allProperties
+    for (const [key, selection] of Object.entries(modalFilters)) {
+      if (!selection || selection.length === 0) continue
+      if (key === 'status') {
+        result = result.filter(p => selection.some(v => {
+          if (v === 'Rented') return activeContract(p) !== null
+          if (v === 'Vacant') return activeContract(p) === null
+          return false
+        }))
+      } else {
+        result = result.filter(p => selection.some(v => (p as any)[key] === v))
+      }
+    }
+    return result
+  }, [allProperties, modalFilters])
+
+  function toggleFilter(key: string, value: string) {
+    setModalFilters(prev => {
+      const cur = prev[key] ?? []
+      const next = cur.includes(value) ? cur.filter(v => v !== value) : [...cur, value]
+      if (next.length === 0) {
+        const { [key]: _removed, ...rest } = prev
+        return rest
+      }
+      return { ...prev, [key]: next }
+    })
+  }
+
   function choose(mode: 'ai' | 'sample') {
     onStep(mode)
     onMaximize()
   }
 
   if (!step) {
+    const hasFilters = Object.keys(modalFilters).length > 0
+    const count = reportProperties.length
+    const total = allProperties.length
+
     return (
-      <div style={{ textAlign: 'center', padding: '40px 24px' }}>
-        <div style={{ fontSize: 14, color: 'var(--text3)', marginBottom: 24 }}>
-          Choose how to run the analysis:
+      <div style={{ padding: '20px 24px 24px' }}>
+        {/* Scope card */}
+        <div style={{
+          border: '1px solid var(--border)',
+          borderRadius: 12,
+          marginBottom: 20,
+          overflow: 'hidden',
+        }}>
+          {/* Card header */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '12px 16px',
+            background: 'var(--surface2)',
+            borderBottom: filterDims.length > 0 ? '1px solid var(--border)' : undefined,
+          }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+              Properties in report
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {hasFilters && (
+                <button
+                  type="button"
+                  onClick={() => setModalFilters({})}
+                  style={{
+                    fontSize: 12, color: 'var(--text3)', background: 'none', border: 'none',
+                    cursor: 'pointer', padding: 0, fontFamily: 'inherit', textDecoration: 'underline',
+                    textUnderlineOffset: 2,
+                  }}
+                >
+                  Clear filters
+                </button>
+              )}
+              <span style={{
+                fontSize: 13, fontWeight: 700,
+                color: count === 0 ? '#dc2626' : 'var(--text)',
+                background: count === 0 ? '#fef2f2' : 'var(--surface)',
+                border: '1px solid',
+                borderColor: count === 0 ? '#fca5a5' : 'var(--border)',
+                borderRadius: 20, padding: '1px 10px',
+              }}>
+                {count} / {total}
+              </span>
+            </div>
+          </div>
+
+          {/* Filter rows */}
+          {filterDims.length > 0 && (
+            <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {filterDims.map(dim => (
+                <div key={dim.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <span style={{
+                    fontSize: 11, color: 'var(--text3)', fontWeight: 600,
+                    whiteSpace: 'nowrap', paddingTop: 4, minWidth: 50, textAlign: 'right',
+                  }}>
+                    {dim.label}
+                  </span>
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                    {dim.values.map(val => {
+                      const active = modalFilters[dim.key]?.includes(val) ?? false
+                      return (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => toggleFilter(dim.key, val)}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center',
+                            padding: '3px 11px', borderRadius: 20, border: '1px solid',
+                            fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                            fontFamily: 'inherit', transition: 'all 0.12s',
+                            background: active ? 'var(--accent-bg)' : 'var(--surface)',
+                            color: active ? 'var(--accent-text)' : 'var(--text2)',
+                            borderColor: active ? 'var(--accent-bg)' : 'var(--border)',
+                          }}
+                        >
+                          {val}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Property list */}
+          <div style={{ borderTop: '1px solid var(--border)', padding: '10px 16px' }}>
+            {count === 0 ? (
+              <span style={{ fontSize: 13, color: '#dc2626' }}>No properties match these filters.</span>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowList(v => !v)}
+                  style={{
+                    fontSize: 12, color: 'var(--text3)', background: 'none', border: 'none',
+                    cursor: 'pointer', padding: 0, fontFamily: 'inherit',
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                  }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ transform: showList ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+                    <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  {showList ? 'Hide' : 'Show'} {count} {count === 1 ? 'property' : 'properties'}
+                </button>
+                {showList && (
+                  <div style={{ marginTop: 8, maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 0 }}>
+                    {reportProperties.map((p, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '5px 0',
+                          borderBottom: i < reportProperties.length - 1 ? '1px solid var(--border)' : 'none',
+                        }}
+                      >
+                        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {p.name}
+                        </span>
+                        {p.owner && (
+                          <span style={{ fontSize: 11, color: 'var(--text3)', whiteSpace: 'nowrap' }}>{p.owner}</span>
+                        )}
+                        {p.country && (
+                          <span style={{ fontSize: 11, color: 'var(--text3)', whiteSpace: 'nowrap' }}>{p.country}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+
+        {/* CTAs */}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
           <button
             type="button"
             onClick={() => choose('ai')}
+            disabled={count === 0}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
-              padding: '9px 20px', borderRadius: 10, border: '1.5px solid var(--accent-bg)',
-              background: 'var(--accent-subtle-bg)', color: 'var(--accent-bg)', fontSize: 14, fontWeight: 600,
-              fontFamily: 'inherit', cursor: 'pointer', transition: 'background 0.15s',
+              padding: '9px 20px', borderRadius: 10,
+              border: '1.5px solid',
+              borderColor: count === 0 ? 'var(--border)' : 'var(--accent-bg)',
+              background: count === 0 ? 'var(--surface2)' : 'var(--accent-subtle-bg)',
+              color: count === 0 ? 'var(--text3)' : 'var(--accent-bg)',
+              fontSize: 14, fontWeight: 600,
+              fontFamily: 'inherit',
+              cursor: count === 0 ? 'not-allowed' : 'pointer',
+              transition: 'all 0.15s',
+              opacity: count === 0 ? 0.7 : 1,
             }}
           >
-            <img src="/claude-color.svg" alt="" style={{ width: 16, height: 16 }} /> AI Analysis
+            <img src="/claude-color.svg" alt="" style={{ width: 16, height: 16, opacity: count === 0 ? 0.4 : 1 }} />
+            AI Analysis
           </button>
           <button
             type="button"
@@ -202,8 +396,8 @@ function AIAnalysisToolContent({ properties, year, displayCurrency, fxRates, ste
 
   const propsToUse = step === 'sample'
     ? SAMPLE_PROPERTIES
-    : properties.map(p => toReportProps(p, year, displayCurrency, fxRates))
-  return <PortfolioReport properties={propsToUse} year={year} onBack={onBack} />
+    : reportProperties.map(p => toReportProps(p, year, displayCurrency, fxRates))
+  return <PortfolioReport properties={propsToUse} year={year} displayCurrency={displayCurrency} onBack={onBack} />
 }
 
 const PORTFOLIO_TOOL_ICONS = ['/tool-icons/tool02.svg', '/tool-icons/tool01.svg', '/tool-icons/tool03.svg'] as const
@@ -3321,7 +3515,8 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
             <div className="modal-body" style={{ minHeight: 100, paddingTop: openToolModal === 0 ? 0 : undefined }}>
               {openToolModal === 0 ? (
                 <AIAnalysisToolContent
-                  properties={filteredProperties}
+                  allProperties={properties}
+                  initialFilters={activeFilters}
                   year={selectedYear}
                   displayCurrency={displayCurrency}
                   fxRates={fxRates}

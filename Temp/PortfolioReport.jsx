@@ -69,29 +69,33 @@ function HBar({ value, max, color="#3b82f6" }) {
   );
 }
 
-// ─── SVG column chart ─────────────────────────────────────────────────────────
+// ─── Column chart ─────────────────────────────────────────────────────────────
 function ColChart({ items, height=95, label="" }) {
   const max = Math.max(...items.map(i => Math.abs(i.value)), 1);
-  const W=34, GAP=8;
-  const tw = items.length * (W + GAP) - GAP;
+  const N = items.length || 1;
+  const labelSize = Math.max(5, Math.min(9, Math.floor(45 / N)));
+  const nameSize  = Math.max(5, Math.min(8, Math.floor(40 / N)));
   return (
     <div>
       {label && <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.7px",color:"#9ca3af",marginBottom:8}}>{label}</div>}
-      <svg width="100%" viewBox={`0 0 ${tw} ${height+26}`} style={{overflow:"visible",display:"block"}}>
+      <div style={{display:"flex",alignItems:"flex-end",gap:4,height}}>
         {items.map((d,i)=>{
-          const bh = (Math.abs(d.value)/max)*height;
-          const x  = i*(W+GAP);
+          const pct = (Math.abs(d.value)/max)*100;
+          const valLabel = Math.abs(d.value)>=1000?`$${(d.value/1000).toFixed(0)}k`:`$${d.value.toFixed(0)}`;
           return (
-            <g key={d.name}>
-              <rect x={x} y={height-bh} width={W} height={bh} fill={d.color||"#93c5fd"} rx={3} opacity={0.92}/>
-              <text x={x+W/2} y={height+11} textAnchor="middle" fontSize={7.5} fill="#6b7280" fontFamily="Inter,sans-serif">{d.name.slice(0,9)}</text>
-              <text x={x+W/2} y={height-bh-3} textAnchor="middle" fontSize={7} fill={d.color||"#6b7280"} fontFamily="Inter,sans-serif" fontWeight="700">
-                {Math.abs(d.value)>=1000?`$${(d.value/1000).toFixed(0)}k`:`$${d.value.toFixed(0)}`}
-              </text>
-            </g>
+            <div key={d.name} style={{flex:1,height:`${pct}%`,minWidth:0,position:"relative",background:d.color||"#93c5fd",borderRadius:"3px 3px 0 0",opacity:0.92}}>
+              <div style={{position:"absolute",bottom:"100%",left:0,right:0,textAlign:"center",fontSize:labelSize,fontWeight:700,color:d.color||"#6b7280",marginBottom:2,lineHeight:1,whiteSpace:"nowrap"}}>{valLabel}</div>
+            </div>
           );
         })}
-      </svg>
+      </div>
+      <div style={{display:"flex",gap:4,marginTop:5}}>
+        {items.map(d=>(
+          <div key={d.name} style={{flex:1,fontSize:nameSize,color:"#6b7280",textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>
+            {d.name.slice(0,10)}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -126,7 +130,7 @@ function Waterfall({ gpi, vacLoss, opex, taxes, netCF }) {
 const AI_TEXT_KEY = "portfolio-ai-report-text";
 
 // ─── AI narrative ─────────────────────────────────────────────────────────────
-function useAISection(properties, agg) {
+function useAISection(properties, agg, currencyLabel="USD") {
   const [text, setText]       = useState(() => localStorage.getItem(AI_TEXT_KEY) || null);
   const [loading, setLoading] = useState(false);
   const [err, setErr]         = useState(null);
@@ -160,7 +164,7 @@ function useAISection(properties, agg) {
 
       const thePrompt = `You are a senior real estate portfolio analyst writing a private report for the portfolio owner.
 
-Portfolio data (USD, annual):
+Portfolio data (${currencyLabel}, annual):
 ${JSON.stringify({totals:agg, properties:snapshot, crossPropertyRankings:sorted},null,2)}
 
 Write a professional analyst commentary using this exact structure. Be specific with real numbers at every point. No generic advice. No filler.
@@ -261,7 +265,7 @@ function AISection({ text, loading, err, generate }) {
 }
 
 // ─── MAIN EXPORT ─────────────────────────────────────────────────────────────
-export default function PortfolioReport({ properties: rawProps = [], year, onBack }) {
+export default function PortfolioReport({ properties: rawProps = [], year, displayCurrency, onBack }) {
   const printRef = useRef();
   const props = rawProps.map(norm);
 
@@ -292,7 +296,10 @@ export default function PortfolioReport({ properties: rawProps = [], year, onBac
     rentM2Port, noiM2Port, valueM2Port, equity:totalValue-totalDebt,
   };
 
-  const { text, loading, err, generate } = useAISection(props, agg);
+  const owners = [...new Set(props.map(p => p.owner).filter(Boolean))].sort();
+  const currencyLabel = displayCurrency || "USD";
+
+  const { text, loading, err, generate } = useAISection(props, agg, currencyLabel);
 
   const [detailTableCopied, setDetailTableCopied] = useState(false);
 
@@ -387,10 +394,14 @@ export default function PortfolioReport({ properties: rawProps = [], year, onBac
               <span style={{fontStyle:"italic"}}>Simplified</span> Property Tracker
             </div>
             <div style={{fontSize:16,fontWeight:700,color:"#1a1d23",marginTop:4}}>Portfolio Performance Report{year?` · ${year}`:""}</div>
+            <div style={{fontSize:10.5,color:"#9ca3af",marginTop:3}}>Currency: {currencyLabel}</div>
           </div>
-          <div style={{textAlign:"right",fontSize:10.5,color:"#9ca3af"}}>
+          <div style={{textAlign:"right",fontSize:10.5,color:"#9ca3af",display:"flex",flexDirection:"column",gap:2}}>
             <div>{today}</div>
-            <div>{agg.count} properties · {agg.rented} rented · {agg.vacant} vacant</div>
+            <div>{agg.count} {agg.count === 1 ? "property" : "properties"} · {agg.rented} rented · {agg.vacant} vacant</div>
+            {owners.length > 0 && (
+              <div>Owner{owners.length > 1 ? "s" : ""}: {owners.join(" · ")}</div>
+            )}
           </div>
         </div>
 
@@ -420,8 +431,9 @@ export default function PortfolioReport({ properties: rawProps = [], year, onBac
             <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.7px",color:"#9ca3af",marginBottom:11}}>Income Waterfall</div>
             <Waterfall gpi={totalGPI} vacLoss={vacLoss} opex={totalOPEX} taxes={totalTaxes} netCF={totalNetCF}/>
           </div>
-          <div style={{background:"#f7f9fc",borderRadius:12,padding:15,border:"1px solid #e8ecf2"}}>
-            <ColChart label="NOI by Property" height={92} items={props.map((p,i)=>({name:p.name,value:p.noi,color:COLORS[i%COLORS.length]}))}/>
+          <div style={{background:"#f7f9fc",borderRadius:12,padding:15,border:"1px solid #e8ecf2",display:"flex",flexDirection:"column"}}>
+            <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.7px",color:"#9ca3af",marginBottom:"auto"}}>NOI by Property</div>
+            <ColChart height={92} items={props.map((p,i)=>({name:p.name,value:p.noi,color:COLORS[i%COLORS.length]}))}/>
           </div>
         </div>
 
@@ -563,7 +575,7 @@ export default function PortfolioReport({ properties: rawProps = [], year, onBac
         {/* Footer */}
         <div style={{marginTop:32,paddingTop:12,borderTop:"1px solid #e8ecf2",display:"flex",justifyContent:"space-between",fontSize:9.5,color:"#9ca3af"}}>
           <span>Simplified Property Tracker · Portfolio Report · {today}</span>
-          <span>All figures USD · For personal use only</span>
+          <span>All figures {currencyLabel} · For personal use only</span>
         </div>
 
       </div>
