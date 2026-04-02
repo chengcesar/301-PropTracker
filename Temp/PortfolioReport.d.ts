@@ -4,6 +4,7 @@ import type { FC } from 'react'
 export interface PortfolioReportProps {
   properties?: unknown[]
   year?: number
+  displayCurrency?: string
   onBack?: () => void
 }
 

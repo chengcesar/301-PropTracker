@@ -361,6 +361,13 @@ export default function PortfolioReport({ properties: rawProps = [], year, displ
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Averia+Serif+Libre:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&family=Fraunces:wght@700&family=Inter:wght@400;500;600;700&display=swap');
+        @media (max-width: 600px) {
+          .rpt-header { flex-direction: column !important; align-items: flex-start !important; gap: 6px !important; }
+          .rpt-header-meta { text-align: left !important; }
+          .rpt-kpi-grid { grid-template-columns: repeat(2,1fr) !important; }
+          .rpt-2col { grid-template-columns: 1fr !important; }
+          .prop-table-scroll { overflow-x: auto !important; }
+        }
         @media print {
           body > *:not(#pt-report) { display: none !important; }
           #pt-report { display: block !important; position: static !important; width: 100% !important; margin: 0 auto !important; max-width: 760px !important; }
@@ -404,7 +411,7 @@ export default function PortfolioReport({ properties: rawProps = [], year, displ
       <div id="pt-report" ref={printRef} style={{fontFamily:"Inter,system-ui,sans-serif",color:"#1a1d23",background:"#fff",maxWidth:760,margin:"0 auto"}}>
 
         {/* PAGE 1 header */}
-        <div style={{borderBottom:"3px solid #1a1d23",paddingBottom:14,marginBottom:20,marginTop:15,display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+        <div className="rpt-header" style={{borderBottom:"3px solid #1a1d23",paddingBottom:14,marginBottom:20,marginTop:15,display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
           <div>
             <div style={{fontFamily:"'Averia Serif Libre',Georgia,serif",fontSize:24,fontWeight:700,color:"#1a1d23",lineHeight:1}}>
               <span style={{fontStyle:"italic"}}>Simplified</span> Property Tracker
@@ -412,7 +419,7 @@ export default function PortfolioReport({ properties: rawProps = [], year, displ
             <div style={{fontSize:16,fontWeight:700,color:"#1a1d23",marginTop:4}}>Portfolio Performance Report{year?` · ${year}`:""}</div>
             <div style={{fontSize:10.5,color:"#9ca3af",marginTop:3}}>Currency: {currencyLabel}</div>
           </div>
-          <div style={{textAlign:"right",fontSize:10.5,color:"#9ca3af",display:"flex",flexDirection:"column",gap:2}}>
+          <div className="rpt-header-meta" style={{textAlign:"right",fontSize:10.5,color:"#9ca3af",display:"flex",flexDirection:"column",gap:2}}>
             <div>{today}</div>
             <div>{agg.count} {agg.count === 1 ? "property" : "properties"} · {agg.rented} rented · {agg.vacant} vacant</div>
             {owners.length > 0 && (
@@ -422,7 +429,7 @@ export default function PortfolioReport({ properties: rawProps = [], year, displ
         </div>
 
         {/* KPI strip — 4 cols × 2 rows */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:9,marginBottom:20}}>
+        <div className="rpt-kpi-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:9,marginBottom:20}}>
           {[
             {label:"Portfolio Value",  val:$(totalValue),       sub:`${$(agg.equity)} equity`},
             {label:"Annual NOI",       val:$(totalNOI),         sub:`Cap rate ${pct(portCapRate)}`},
@@ -442,7 +449,7 @@ export default function PortfolioReport({ properties: rawProps = [], year, displ
         </div>
 
         {/* Waterfall + NOI chart */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20}}>
+        <div className="rpt-2col" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20}}>
           <div style={{background:"#f7f9fc",borderRadius:12,padding:15,border:"1px solid #e8ecf2"}}>
             <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.7px",color:"#9ca3af",marginBottom:11}}>Income Waterfall</div>
             <Waterfall gpi={totalGPI} vacLoss={vacLoss} opex={totalOPEX} taxes={totalTaxes} netCF={totalNetCF}/>
@@ -478,7 +485,7 @@ export default function PortfolioReport({ properties: rawProps = [], year, displ
               {detailTableCopied ? "Copied" : "Copy table"}
             </button>
           </div>
-          <div className="prop-table-scroll" style={{maxWidth:"100%"}}>
+          <div className="prop-table-scroll" style={{maxWidth:"100%",overflowX:"auto"}}>
           <table style={{width:"max-content",minWidth:"100%",borderCollapse:"collapse",fontSize:10.5}}>
             <thead>
               <tr style={{background:"#f7f9fc"}}>
@@ -530,7 +537,7 @@ export default function PortfolioReport({ properties: rawProps = [], year, displ
         </div>
 
         {/* Rent/m² bars + Cap rate ranking */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20}}>
+        <div className="rpt-2col" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20}}>
           <div style={{background:"#f7f9fc",borderRadius:12,padding:15,border:"1px solid #e8ecf2"}}>
             <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.7px",color:"#9ca3af",marginBottom:10}}>Rent / m² Ranking</div>
             {[...props].sort((a,b)=>b.rentM2-a.rentM2).map(p=>(
