@@ -6,6 +6,7 @@ import type { CurrencyCode } from '../../lib/currency'
 import { COUNTRIES } from '../../lib/countries'
 import { uploadPropertyPhoto, deletePropertyPhoto, uploadPropertyDocument, deletePropertyDocument } from '../../lib/photoStorage'
 import { PROPERTY_TYPES, getSpatialFields } from '../../lib/constants'
+import { ContactPickerModal } from '../modals/ContactPickerModal'
 
 const CARTO_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
 
@@ -15,7 +16,7 @@ const IconCopy = () => (
 const IconCheck = () => (
   <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#15803d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3.5 3.5L13 4"/></svg>
 )
-const CONTACT_ROLES = ['Owner', 'Property Manager', 'Building Manager', 'Broker', 'Insurance', 'Lawyer', 'Accountant', 'Other'] as const
+const CONTACT_ROLES = ['Owner', 'Property Manager', 'Building Manager', 'Broker', 'Insurance', 'Lawyer', 'Accountant', 'Architect', 'Contractor', 'Plumber', 'MEP', 'Other'] as const
 
 type Props = {
   prop: Property
@@ -138,16 +139,26 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
   const contacts = fs.contacts ?? []
 
   const [showContactForm, setShowContactForm] = useState(false)
+  const [showContactPicker, setShowContactPicker] = useState(false)
   const [editingContactId, setEditingContactId] = useState<number | null>(null)
-  const [contactForm, setContactForm] = useState({ name: '', role: 'Property Manager' as string, phone: '', email: '' })
+  const [contactForm, setContactForm] = useState({ name: '', role: 'Property Manager' as string, phone: '', email: '', bankInstitution: '', accountDetails: '' })
   const setContactField = <K extends keyof typeof contactForm>(k: K, v: (typeof contactForm)[K]) => {
     setContactForm((p) => ({ ...p, [k]: v }))
   }
 
   const resetContactForm = () => {
-    setContactForm({ name: '', role: 'Property Manager', phone: '', email: '' })
+    setContactForm({ name: '', role: 'Property Manager', phone: '', email: '', bankInstitution: '', accountDetails: '' })
     setShowContactForm(false)
     setEditingContactId(null)
+  }
+
+  const handlePickContact = (c: PropertyContact) => {
+    const entry: PropertyContact = { ...c, id: Date.now() }
+    onUpdateProp((p) => {
+      const f = p.factSheet ?? EMPTY
+      return { ...p, factSheet: { ...f, contacts: [...(f.contacts ?? []), entry] } }
+    })
+    setShowContactPicker(false)
   }
 
   const addContact = () => {
@@ -158,6 +169,8 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
       role: contactForm.role,
       phone: contactForm.phone.trim(),
       email: contactForm.email.trim(),
+      bankInstitution: contactForm.bankInstitution.trim(),
+      accountDetails: contactForm.accountDetails.trim(),
     }
     onUpdateProp((p) => {
       const f = p.factSheet ?? EMPTY
@@ -168,7 +181,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
 
   const startEditContact = (c: PropertyContact) => {
     setEditingContactId(c.id)
-    setContactForm({ name: c.name, role: c.role, phone: c.phone, email: c.email })
+    setContactForm({ name: c.name, role: c.role, phone: c.phone, email: c.email, bankInstitution: c.bankInstitution ?? '', accountDetails: c.accountDetails ?? '' })
     setShowContactForm(true)
   }
 
@@ -182,7 +195,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
           ...f,
           contacts: (f.contacts ?? []).map((c) =>
             c.id === editingContactId
-              ? { ...c, name: contactForm.name.trim(), role: contactForm.role, phone: contactForm.phone.trim(), email: contactForm.email.trim() }
+              ? { ...c, name: contactForm.name.trim(), role: contactForm.role, phone: contactForm.phone.trim(), email: contactForm.email.trim(), bankInstitution: contactForm.bankInstitution.trim(), accountDetails: contactForm.accountDetails.trim() }
               : c
           ),
         },
@@ -310,9 +323,9 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
 
   const [copied, setCopied] = useState(false)
   const handleCopy = useCallback(() => {
-    const headers = ['Name', 'Role', 'Phone', 'Email']
+    const headers = ['Name', 'Role', 'Phone', 'Email', 'Bank Institution', 'Account Details']
     const rows = contacts.map((c) =>
-      [c.name, c.role, c.phone || '—', c.email || '—'].join('\t')
+      [c.name, c.role, c.phone || '—', c.email || '—', c.bankInstitution || '—', c.accountDetails || '—'].join('\t')
     )
     navigator.clipboard.writeText([headers.join('\t'), ...rows].join('\n'))
     setCopied(true)
@@ -903,14 +916,24 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
       {/* Contacts */}
       <div className="sec-hdr mb12">
         <span className="sec-title">Contacts</span>
-        <button
-          type="button"
-          className="primary"
-          style={{ fontSize: 12, padding: '5px 14px' }}
-          onClick={() => setShowContactForm(true)}
-        >
-          + Add contact
-        </button>
+        <div className="flex gap8">
+          <button
+            type="button"
+            className="ghost"
+            style={{ fontSize: 12, padding: '5px 14px' }}
+            onClick={() => setShowContactPicker(true)}
+          >
+            Browse all
+          </button>
+          <button
+            type="button"
+            className="primary"
+            style={{ fontSize: 12, padding: '5px 14px' }}
+            onClick={() => setShowContactForm(true)}
+          >
+            + Add contact
+          </button>
+        </div>
       </div>
 
       {contacts.length === 0 && !showContactForm && (
@@ -936,6 +959,8 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
                 <th style={{ textAlign: 'left' }}>Role</th>
                 <th style={{ textAlign: 'left' }}>Phone</th>
                 <th style={{ textAlign: 'left' }}>Email</th>
+                <th style={{ textAlign: 'left' }}>Bank Institution</th>
+                <th style={{ textAlign: 'left' }}>Account Details</th>
                 <th style={{ width: 64, textAlign: 'center' }}>
                   <button
                     className="ghost"
@@ -957,6 +982,8 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
                   </td>
                   <td style={{ textAlign: 'left', fontSize: 13 }}>{c.phone || '—'}</td>
                   <td style={{ textAlign: 'left', fontSize: 13 }}>{c.email || '—'}</td>
+                  <td style={{ textAlign: 'left', fontSize: 13 }}>{c.bankInstitution || '—'}</td>
+                  <td style={{ textAlign: 'left', fontSize: 13 }}>{c.accountDetails || '—'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button
                       type="button"
@@ -1024,6 +1051,24 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
                   onChange={(e) => setContactField('email', e.target.value)}
                 />
               </div>
+              <div className="field">
+                <label>Bank Institution</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Chase, HSBC"
+                  value={contactForm.bankInstitution}
+                  onChange={(e) => setContactField('bankInstitution', e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label>Account Details</label>
+                <input
+                  type="text"
+                  placeholder="Account / routing number"
+                  value={contactForm.accountDetails}
+                  onChange={(e) => setContactField('accountDetails', e.target.value)}
+                />
+              </div>
             </div>
             <div className="flex gap8 mt12">
               <button type="button" className="primary" style={{ fontSize: 12, padding: '6px 16px' }} onClick={editingContactId ? saveEditContact : addContact}>
@@ -1035,6 +1080,15 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
             </div>
           </div>
         </div>
+      )}
+
+      {showContactPicker && (
+        <ContactPickerModal
+          currentPropertyId={prop.id}
+          currentContacts={contacts}
+          onPick={handlePickContact}
+          onClose={() => setShowContactPicker(false)}
+        />
       )}
 
       {/* Notes */}

@@ -1,7 +1,7 @@
 import { createContext } from 'react'
 import type { Property } from '../lib/types'
 
-export type Selection = 'portfolio' | number
+export type Selection = 'portfolio' | 'contacts' | number
 
 export type AppStateContextValue = {
   properties: Property[]

@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { CAPEX_CATS, MONTHS } from '../../lib/constants'
-import type { CapexItem, Property } from '../../lib/types'
+import { CAPEX_CATS, CAPEX_STATUSES, MONTHS } from '../../lib/constants'
+import type { CapexItem, CapexStatus, Property } from '../../lib/types'
 import type { CurrencyCode } from '../../lib/currency'
 import { expenseRowsForYear, yearMonths } from '../../lib/finance'
 import { fmt, parseNum } from '../../lib/format'
@@ -29,6 +29,7 @@ type CapexForm = {
   desc: string
   cat: (typeof CAPEX_CATS)[number]
   amount: string
+  status: CapexStatus
 }
 
 const emptyCapexForm = (): CapexForm => ({
@@ -37,6 +38,7 @@ const emptyCapexForm = (): CapexForm => ({
   desc: '',
   cat: 'Improvement',
   amount: '',
+  status: 'To do',
 })
 
 export function OpexCapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
@@ -52,6 +54,7 @@ export function OpexCapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
       desc: c.desc,
       cat: c.cat,
       amount: String(Math.round(c.amount)),
+      status: c.status ?? 'To do',
     })
   }
 
@@ -74,6 +77,7 @@ export function OpexCapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
           desc: editForm.desc,
           cat: editForm.cat,
           amount: parseNum(editForm.amount),
+          status: editForm.status,
         }
         return editForm.dateEnd.trim() ? { ...base, dateEnd: editForm.dateEnd.trim() } : base
       }),
@@ -89,6 +93,7 @@ export function OpexCapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
       desc: newCapex.desc,
       cat: newCapex.cat,
       amount: parseNum(newCapex.amount),
+      status: newCapex.status,
       ...(newCapex.dateEnd.trim() ? { dateEnd: newCapex.dateEnd.trim() } : {}),
     }
     onUpdateProp((p) => ({ ...p, capex: [...p.capex, item] }))
@@ -157,7 +162,7 @@ export function OpexCapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                   <div
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '130px 130px 1fr 130px 140px',
+                      gridTemplateColumns: '130px 130px 1fr 130px 140px 120px',
                       gap: '10px',
                       width: '100%',
                       flexBasis: '100%',
@@ -196,6 +201,14 @@ export function OpexCapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                         value={editForm.amount}
                         onChange={(e) => setEditForm((p) => ({ ...p, amount: e.target.value }))}
                       />
+                    </div>
+                    <div className="field">
+                      <label>Status</label>
+                      <select value={editForm.status} onChange={(e) => setEditForm((p) => ({ ...p, status: e.target.value as CapexStatus }))}>
+                        {CAPEX_STATUSES.map((x) => (
+                          <option key={x} value={x}>{x}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto', flexWrap: 'wrap' }}>
@@ -248,6 +261,9 @@ export function OpexCapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                 <span className={`badge ${c.cat === 'Improvement' ? 'rented' : c.cat === 'Equipment' ? 'override' : 'pending'}`}>
                   {c.cat}
                 </span>
+                <span className={`badge ${c.status === 'Completed' ? 'rented' : c.status === 'Ongoing' ? 'override' : 'pending'}`}>
+                  {c.status ?? 'To do'}
+                </span>
                 <div style={{ width: '130px', textAlign: 'right' }}>
                   <div className="fs11 text3">Amount</div>
                   <div className="fs13 fw6 neg">−{fmt(cx(c.amount))}</div>
@@ -283,7 +299,7 @@ export function OpexCapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: '130px 130px 1fr 130px 140px auto',
+              gridTemplateColumns: '130px 130px 1fr 130px 140px 120px auto',
               gap: '10px',
               alignItems: 'end',
             }}
@@ -323,6 +339,14 @@ export function OpexCapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                 placeholder="0"
                 onChange={(e) => setNewCapex((p) => ({ ...p, amount: e.target.value }))}
               />
+            </div>
+            <div className="field">
+              <label>Status</label>
+              <select value={newCapex.status} onChange={(e) => setNewCapex((p) => ({ ...p, status: e.target.value as CapexStatus }))}>
+                {CAPEX_STATUSES.map((x) => (
+                  <option key={x} value={x}>{x}</option>
+                ))}
+              </select>
             </div>
             <button type="button" className="primary" onClick={addCapex}>
               Add

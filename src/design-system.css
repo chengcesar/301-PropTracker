@@ -444,6 +444,7 @@
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.18); backdrop-filter: blur(2px); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
   .modal { background: var(--surface); border-radius: var(--radius-modal); width: 100%; max-width: 560px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.15); animation: toastSlideUp 0.2s ease-out; }
   .modal-sm { max-width: 370px; }
+  .modal-lg { max-width: 760px; }
   .modal-header { flex-shrink: 0; padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; }
   .modal-title { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
   .modal-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
@@ -1951,6 +1952,7 @@
     flex-direction: column;
     overflow-y: auto;
     flex: 1;
+    max-height: 480px;
   }
   .todo-feed-empty {
     padding: 32px 20px;
@@ -2066,6 +2068,23 @@
   .todo-scorecard--pending {
     background: color-mix(in srgb, #f59e0b 6%, transparent);
     border-color: color-mix(in srgb, #f59e0b 20%, transparent);
+  }
+  .todo-scorecard--overdue {
+    background: color-mix(in srgb, #ef4444 6%, transparent);
+    border-color: color-mix(in srgb, #ef4444 20%, transparent);
+  }
+  .todo-overdue-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: #b91c1c;
+    background: color-mix(in srgb, #ef4444 10%, transparent);
+    border: 1px solid color-mix(in srgb, #ef4444 20%, transparent);
+    border-radius: 20px;
+    padding: 1px 7px;
+    margin-left: 6px;
+    white-space: nowrap;
   }
   .todo-scorecard-label {
     font-size: 11px;
@@ -2228,4 +2247,27 @@
     color: var(--text3);
     line-height: 1.5;
     margin-top: 8px;
+  }
+
+  /* ── Contacts page ── */
+  .contacts-filter-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .filter-search-wrap { position: relative; display: flex; align-items: center; min-width: 220px; }
+  .filter-search-input {
+    width: 100%; padding: 7px 10px 7px 30px; font-size: 13px; font-family: inherit;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .filter-search-input::placeholder { color: var(--text4); }
+  .filter-search-input:focus { border-color: var(--accent-bg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-bg) 12%, transparent); }
+  .contacts-filter-select {
+    padding: 7px 10px; font-size: 13px; font-family: inherit;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); outline: none; cursor: pointer; transition: border-color 0.15s;
+  }
+  .contacts-filter-select:focus { border-color: var(--accent-bg); }
+
+  @media (max-width: 768px) {
+    .contacts-filter-bar { flex-direction: column; align-items: stretch; }
+    .filter-search-wrap { min-width: 0; }
+    .col-bank, .col-acct { display: none; }
   }

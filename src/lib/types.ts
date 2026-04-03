@@ -33,6 +33,8 @@ export interface MonthData {
   expenses: Record<string, number | { label: string; amount: number }>
 }
 
+export type CapexStatus = 'To do' | 'Ongoing' | 'Completed'
+
 export interface CapexItem {
   id: number
   date: string
@@ -40,6 +42,7 @@ export interface CapexItem {
   desc: string
   cat: 'Improvement' | 'Equipment' | 'Repair' | 'Other'
   amount: number
+  status?: CapexStatus
 }
 
 export type OccupantRelation = 'Owner' | 'Family' | 'Caretaker' | 'Other'
@@ -136,6 +139,8 @@ export interface PropertyContact {
   role: string
   phone: string
   email: string
+  bankInstitution?: string
+  accountDetails?: string
 }
 
 export interface Property {

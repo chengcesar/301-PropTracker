@@ -10,6 +10,7 @@ import {
   deleteUser,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, increment, serverTimestamp } from 'firebase/firestore';
+import { setAccentPreset as applyAccentPreset, getStoredAccent } from '../lib/accentTheme';
 
 const AuthContext = createContext(null);
 
@@ -39,6 +40,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [accent, setAccent] = useState(() => getStoredAccent());
 
   useEffect(() => {
     if (!isConfigured || !auth) {
@@ -55,6 +57,11 @@ export function AuthProvider({ children }) {
           setIsAdmin(
             (data && firestoreRoleIsAdmin(data)) || (Boolean(email) && allow.has(email)),
           );
+          const savedAccent = data?.accentPreset;
+          if (savedAccent === 'blue' || savedAccent === 'teal' || savedAccent === 'terracotta') {
+            applyAccentPreset(savedAccent);
+            setAccent(savedAccent);
+          }
           const baseFields = { email: u.email, displayName: u.displayName || null, lastLoginAt: serverTimestamp() };
           if (!snap.exists()) baseFields.createdAt = serverTimestamp();
           await setDoc(doc(firestore, 'users', u.uid), baseFields, { merge: true });
@@ -96,8 +103,18 @@ export function AuthProvider({ children }) {
     await deleteUser(auth.currentUser);
   };
 
+  const updateAccentPreset = async (preset) => {
+    applyAccentPreset(preset);
+    setAccent(preset);
+    if (auth?.currentUser && firestore) {
+      try {
+        await updateDoc(doc(firestore, 'users', auth.currentUser.uid), { accentPreset: preset });
+      } catch { /* ignore */ }
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isAdmin, loading, isConfigured, loginWithGoogle, loginWithEmail, signupWithEmail, logout, deleteAccount }}>
+    <AuthContext.Provider value={{ user, isAdmin, loading, isConfigured, loginWithGoogle, loginWithEmail, signupWithEmail, logout, deleteAccount, accent, updateAccentPreset }}>
       {children}
     </AuthContext.Provider>
   );

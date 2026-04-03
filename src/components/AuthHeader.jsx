@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthConfirmDialog } from './AuthConfirmDialog';
+import { ACCENT_PRESETS, ACCENT_HEX_BY_PRESET } from '../lib/accentTheme';
+import { useAppState } from '../context/useAppState';
 
 function getInitials(email) {
   const local = email.split('@')[0];
@@ -19,7 +21,8 @@ function getDisplayName(user) {
 }
 
 export default function AuthHeader() {
-  const { user, isAdmin, logout, deleteAccount } = useAuth();
+  const { user, isAdmin, logout, deleteAccount, accent, updateAccentPreset } = useAuth();
+  const { selectedId, setSelectedId } = useAppState();
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -70,6 +73,15 @@ export default function AuthHeader() {
             <path d="M78.001 30.3232H65.623C65.5666 22.9727 59.5914 17.0313 52.2275 17.0312C44.8636 17.0312 38.8884 22.9726 38.832 30.3232H24.332V7H78.001V30.3232Z" fill="#6D2F20"/>
           </svg>
         </a>
+        {user && (
+          <button
+            type="button"
+            className={`header-nav-link${selectedId === 'contacts' ? ' active' : ''}`}
+            onClick={() => setSelectedId('contacts')}
+          >
+            Contacts
+          </button>
+        )}
       </div>
       {user && (
         <div className="header-right" ref={menuRef}>
@@ -102,6 +114,21 @@ export default function AuthHeader() {
               <div className="header-user-menu-row">
                 <span className="header-user-menu-label">Email</span>
                 <span className="header-user-menu-value">{user.email}</span>
+              </div>
+              <div className="header-user-menu-row">
+                <span className="header-user-menu-label">Accent color</span>
+                <div className="accent-picker">
+                  {ACCENT_PRESETS.map(p => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={`accent-swatch${accent === p.id ? ' accent-swatch-active' : ''}`}
+                      style={{ background: ACCENT_HEX_BY_PRESET[p.id]['--accent-bg'] }}
+                      title={p.label}
+                      onClick={() => updateAccentPreset(p.id)}
+                    />
+                  ))}
+                </div>
               </div>
               <div className="header-user-menu-actions">
                 <button type="button" className="header-user-menu-btn header-user-menu-btn-danger" onClick={openDeleteModal}>

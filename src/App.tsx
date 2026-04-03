@@ -11,15 +11,17 @@ import AdminLayout from './components/admin/AdminLayout'
 import AuthHeader from './components/AuthHeader'
 import { PortfolioPage } from './pages/PortfolioPage'
 import { PropertyPage } from './pages/PropertyPage'
+import { ContactsPage } from './pages/ContactsPage'
 import { AddPropertyModal } from './components/modals/AddPropertyModal'
 
 function AppContent() {
   const { properties, selectedId, setSelectedId, updateProperty, addProperty, addPropertyOpen, setAddPropertyOpen } = useAppState()
   const activeProp = properties.find((p) => p.id === selectedId)
-  const showPortfolio = selectedId === 'portfolio' || !activeProp
+  const showContacts = selectedId === 'contacts'
+  const showPortfolio = !showContacts && (selectedId === 'portfolio' || !activeProp)
 
   useEffect(() => {
-    if (selectedId !== 'portfolio' && !activeProp) {
+    if (selectedId !== 'portfolio' && selectedId !== 'contacts' && !activeProp) {
       setSelectedId('portfolio')
     }
   }, [selectedId, activeProp, setSelectedId])
@@ -28,7 +30,9 @@ function AppContent() {
     <>
       <AuthHeader />
       <div className="app-body">
-        {showPortfolio ? (
+        {showContacts ? (
+          <ContactsPage />
+        ) : showPortfolio ? (
           <PortfolioPage properties={properties} onSelectProperty={setSelectedId} />
         ) : (
           <PropertyPage key={activeProp!.id} prop={activeProp!} onUpdateProp={(fn) => updateProperty(activeProp!.id, fn)} />

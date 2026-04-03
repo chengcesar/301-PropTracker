@@ -25,6 +25,7 @@ export const EXPENSE_CATS = [
 ]
 
 export const CAPEX_CATS = ['Improvement', 'Equipment', 'Repair', 'Other'] as const
+export const CAPEX_STATUSES = ['To do', 'Ongoing', 'Completed'] as const
 
 export const INCREMENT_OPTS = [
   { value: 'ipc+', label: 'IPC + fixed %' },

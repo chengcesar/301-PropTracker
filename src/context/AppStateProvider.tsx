@@ -6,11 +6,13 @@ import { createSeedProperties } from '../lib/seedProperties'
 
 function selectionFromHash(): Selection {
   const hash = window.location.hash
+  if (hash === '#contacts') return 'contacts'
   const match = hash.match(/^#property\/(\d+)$/)
   return match ? Number(match[1]) : 'portfolio'
 }
 
 function hashFromSelection(id: Selection): string {
+  if (id === 'contacts') return '#contacts'
   return id === 'portfolio' ? '#' : `#property/${id}`
 }
 

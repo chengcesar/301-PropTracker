@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import type { Contract, Property } from '../lib/types'
+import type { CapexItem, CapexStatus, Contract, Property } from '../lib/types'
 import { activeContract, calcAnnual, calcIrr, calcPortfolioAssetKpis, calcPortfolioProjectedGpiIn, calcPortfolioTotalsIn, contractForMonth, convertAnnual, estimatedPropertyValueAtYear, hasNonLeaseOccupant, nonLeaseOccupancyExportValue, nonLeaseOccupancyLabel, occupancyFilterBucket, projectedGpiAnnual, vacancyLossMonthCount } from '../lib/finance'
 import { fmtCurrencyM } from '../lib/format'
 import { type CurrencyCode, type FxRates, CURRENCIES, CURRENCY_LIST, convert, loadFxRates, saveFxRates, flagUrl } from '../lib/currency'
@@ -949,6 +949,7 @@ function PaymentTodoCard({
   rentInDisplay,
   displayCurrency,
   received,
+  overdueCount,
   onToggle,
   onOpen,
 }: {
@@ -958,7 +959,8 @@ function PaymentTodoCard({
   rentInDisplay: string | null
   displayCurrency: CurrencyCode
   received: boolean
-  onToggle: () => void
+  overdueCount?: number
+  onToggle: (() => void) | undefined
   onOpen: () => void
 }) {
   return (
@@ -977,6 +979,9 @@ function PaymentTodoCard({
       <div className="todo-feed-card-body">
         <div className="todo-feed-card-top">
           <span className="todo-feed-card-name">{propertyName}</span>
+          {overdueCount != null && overdueCount > 0 && (
+            <span className="todo-overdue-badge">{overdueCount} {overdueCount === 1 ? 'month' : 'months'} overdue</span>
+          )}
         </div>
         <div className="todo-feed-card-amounts">
           <span className="todo-feed-card-amount-primary">
@@ -990,28 +995,133 @@ function PaymentTodoCard({
             </span>
           )}
         </div>
-        <button
-          type="button"
-          className="ghost"
-          aria-label={received ? 'Mark as not received' : 'Mark rent as received'}
-          title={received ? 'Received' : 'Mark received'}
-          onClick={e => { e.stopPropagation(); onToggle() }}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            marginTop: 7, padding: 0, lineHeight: 0,
-            color: received ? 'var(--accent-bg)' : 'var(--text3)',
-            fontSize: 12, fontWeight: 500,
-          }}
+        {onToggle != null && (
+          <button
+            type="button"
+            className="ghost"
+            aria-label={received ? 'Mark as not received' : 'Mark rent as received'}
+            title={received ? 'Received' : 'Mark received'}
+            onClick={e => { e.stopPropagation(); onToggle() }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              marginTop: 7, padding: 0, lineHeight: 0,
+              color: received ? 'var(--accent-bg)' : 'var(--text3)',
+              fontSize: 12, fontWeight: 500,
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="1" y="1" width="13" height="13" rx="2.5"
+                fill={received ? 'var(--accent-bg)' : 'none'}
+                stroke={received ? 'var(--accent-bg)' : 'currentColor'}
+              />
+              {received && <path d="M3.5 7.5l2.5 2.5L11 5" stroke="#fff" strokeWidth="1.8" />}
+            </svg>
+            Receive payment
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const CAT_COLORS: Record<string, string> = {
+  Improvement: '#3b82f6',
+  Equipment:   '#8b5cf6',
+  Repair:      '#f59e0b',
+  Other:       '#6b7280',
+}
+
+function CapexTodoCard({
+  item,
+  onStatusChange,
+  onOpen,
+}: {
+  item: CapexItem & { propertyName: string }
+  onStatusChange: (next: CapexStatus) => void
+  onOpen: () => void
+}) {
+  const status = item.status ?? 'To do'
+  const catColor = CAT_COLORS[item.cat] ?? '#6b7280'
+
+  const nextStatus: CapexStatus | null =
+    status === 'To do'    ? 'Ongoing'   :
+    status === 'Ongoing'  ? 'Completed' : null
+
+  const prevStatus: CapexStatus | null =
+    status === 'Completed' ? 'Ongoing' :
+    status === 'Ongoing'   ? 'To do'   : null
+
+  return (
+    <div
+      className="todo-feed-card"
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={e => e.key === 'Enter' && onOpen()}
+    >
+      <div className="todo-feed-card-left">
+        <div
+          className="todo-feed-card-initial"
+          style={{ background: catColor + '18', color: catColor }}
+          aria-hidden
         >
-          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="1" y="1" width="13" height="13" rx="2.5"
-              fill={received ? 'var(--accent-bg)' : 'none'}
-              stroke={received ? 'var(--accent-bg)' : 'currentColor'}
-            />
-            {received && <path d="M3.5 7.5l2.5 2.5L11 5" stroke="#fff" strokeWidth="1.8" />}
-          </svg>
-          Receive payment
-        </button>
+          {item.cat.charAt(0)}
+        </div>
+      </div>
+      <div className="todo-feed-card-body">
+        <div className="todo-feed-card-top">
+          <span className="todo-feed-card-name" style={{ flex: 1 }}>{item.desc}</span>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>
+          {item.propertyName}
+          <span style={{
+            display: 'inline-block', marginLeft: 6,
+            padding: '0 6px', borderRadius: 4,
+            background: catColor + '18', color: catColor,
+            fontWeight: 600, fontSize: 11,
+          }}>{item.cat}</span>
+        </div>
+        <div className="todo-feed-card-amounts" style={{ marginTop: 4 }}>
+          <span className="todo-feed-card-amount-primary" style={{ fontSize: 13 }}>
+            {item.amount > 0 ? `−${item.amount.toLocaleString()}` : '—'}
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          {nextStatus && (
+            <button
+              type="button"
+              className="ghost"
+              onClick={e => { e.stopPropagation(); onStatusChange(nextStatus) }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '3px 9px', borderRadius: 6,
+                border: '1px solid var(--border)',
+                background: 'var(--surface2)',
+                fontSize: 12, fontWeight: 500, color: 'var(--text2)',
+                cursor: 'pointer',
+              }}
+            >
+              {nextStatus === 'Ongoing'   ? '▶ Start'  : '✓ Complete'}
+            </button>
+          )}
+          {prevStatus && (
+            <button
+              type="button"
+              className="ghost"
+              onClick={e => { e.stopPropagation(); onStatusChange(prevStatus) }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '3px 9px', borderRadius: 6,
+                border: '1px solid var(--border)',
+                background: 'transparent',
+                fontSize: 12, fontWeight: 500, color: 'var(--text3)',
+                cursor: 'pointer',
+              }}
+            >
+              ↩ Undo
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -1181,14 +1291,15 @@ const TODO_PANEL_VIS_KEY = 'portfolio-todo-panel-vis'
 const TODO_PANELS = [
   { key: 'feed',        label: 'Feed',                 mandatory: true  },
   { key: 'payments',    label: 'Payments',              mandatory: false },
+  { key: 'overdue',     label: 'Overdue Payments',      mandatory: false },
   { key: 'maintenance', label: 'Maintenance \u0026 Works', mandatory: false },
 ] as const
 type TodoPanelKey = typeof TODO_PANELS[number]['key']
 function loadTodoPanelVis(): Record<TodoPanelKey, boolean> {
-  const defaults: Record<TodoPanelKey, boolean> = { feed: true, payments: true, maintenance: true }
+  const defaults: Record<TodoPanelKey, boolean> = { feed: true, payments: true, overdue: true, maintenance: true }
   try {
     const raw = localStorage.getItem(TODO_PANEL_VIS_KEY)
-    if (raw) return { ...defaults, ...JSON.parse(raw), feed: true }
+    if (raw) return { ...defaults, ...JSON.parse(raw), feed: true, overdue: JSON.parse(raw).overdue ?? true }
   } catch {}
   return defaults
 }
@@ -1459,6 +1570,13 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
     })
   }
 
+  function handleCapexStatus(propertyId: number, capexId: number, next: CapexStatus) {
+    updateProperty(propertyId, p => ({
+      ...p,
+      capex: p.capex.map(c => c.id === capexId ? { ...c, status: next } : c),
+    }))
+  }
+
   function toggleTodoPanel(key: TodoPanelKey) {
     setTodoPanelVis(prev => {
       const next = { ...prev, [key]: !prev[key], feed: true }
@@ -1699,6 +1817,56 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
         return { property: p, rent, received, calYear, calMonth }
       })
   }, [sortedProperties])
+
+  // Overdue payments — past months with active contract but rent not marked received
+  const overduePayments = useMemo(() => {
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentMonth = now.getMonth() // 0-based
+    // Scan back up to 24 months
+    const LOOKBACK = 24
+    const results: { property: typeof sortedProperties[0]; overdueMonths: { calYear: number; calMonth: number; rent: number }[]; totalRent: number }[] = []
+    for (const p of sortedProperties) {
+      const overdueMonths: { calYear: number; calMonth: number; rent: number }[] = []
+      for (let i = 1; i <= LOOKBACK; i++) {
+        let y = currentYear
+        let m = currentMonth - i
+        while (m < 0) { m += 12; y -= 1 }
+        const contract = contractForMonth(p.contracts, y, m)
+        if (!contract) continue
+        const monthData = (p.months[y] ?? {})[m]
+        if (monthData?.rentReceived === true) continue
+        const rent = monthData?.incomeOverride ?? contract.monthlyRent
+        overdueMonths.push({ calYear: y, calMonth: m, rent })
+      }
+      if (overdueMonths.length > 0) {
+        results.push({
+          property: p,
+          overdueMonths,
+          totalRent: overdueMonths.reduce((s, x) => s + x.rent, 0),
+        })
+      }
+    }
+    return results
+  }, [sortedProperties])
+
+  // Maintenance panel — current-year CAPEX items from all filtered properties
+  const maintenanceItems = useMemo(() => {
+    const calYear = new Date().getFullYear()
+    const out: Array<CapexItem & { propertyId: number; propertyName: string }> = []
+    for (const p of filteredProperties) {
+      for (const c of (p.capex ?? [])) {
+        if (new Date(c.date).getFullYear() === calYear) {
+          out.push({ ...c, propertyId: p.id, propertyName: p.name })
+        }
+      }
+    }
+    return out
+  }, [filteredProperties])
+
+  const mTodo      = maintenanceItems.filter(c => !c.status || c.status === 'To do')
+  const mOngoing   = maintenanceItems.filter(c => c.status === 'Ongoing')
+  const mCompleted = maintenanceItems.filter(c => c.status === 'Completed')
 
   const totals = calcPortfolioTotalsIn(filteredProperties.map(withYear), displayCurrency, fxRates)
   const portfolioProjectedGpi = useMemo(
@@ -3390,31 +3558,107 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
               </div>
               )
             })()}
-            {todoPanelVis.maintenance && (
-            <div className="todo-panel-col">
-              <div className="todo-feed-header">
-                <span className="todo-feed-title">Maintenance &amp; Works</span>
-                <span className="todo-feed-count">Upcoming</span>
-              </div>
-              <div className="todo-payments-scorecards">
-                <div className="todo-scorecard">
-                  <span className="todo-scorecard-label">—</span>
-                  <span className="todo-scorecard-value">—</span>
+            {todoPanelVis.overdue && (() => {
+              const totalOverdue = overduePayments.reduce((s, x) => s + convert(x.totalRent, x.property.currency, displayCurrency, fxRates), 0)
+              const totalMonths = overduePayments.reduce((s, x) => s + x.overdueMonths.length, 0)
+              return (
+              <div className="todo-panel-col">
+                <div className="todo-feed-header">
+                  <span className="todo-feed-title">Overdue</span>
+                  <span className="todo-feed-count">{overduePayments.length} {overduePayments.length === 1 ? 'property' : 'properties'} · {totalMonths} {totalMonths === 1 ? 'month' : 'months'}</span>
                 </div>
-                <div className="todo-scorecard">
-                  <span className="todo-scorecard-label">—</span>
-                  <span className="todo-scorecard-value">—</span>
+                <div className="todo-payments-scorecards">
+                  <div className="todo-scorecard todo-scorecard--overdue">
+                    <span className="todo-scorecard-label">Overdue</span>
+                    <span className="todo-scorecard-value">
+                      <span className="todo-amount-code">{displayCurrency}</span>
+                      {fm(totalOverdue)}
+                    </span>
+                  </div>
+                  <div className="todo-scorecard">
+                    <span className="todo-scorecard-label">Months</span>
+                    <span className="todo-scorecard-value">{totalMonths}</span>
+                  </div>
+                </div>
+                <div className="todo-feed-list">
+                  {overduePayments.length === 0 ? (
+                    <div className="todo-feed-empty">No overdue payments.</div>
+                  ) : overduePayments.map(({ property: p, overdueMonths, totalRent }) => (
+                    <PaymentTodoCard
+                      key={p.id}
+                      propertyName={p.name}
+                      rent={totalRent}
+                      currency={p.currency}
+                      rentInDisplay={p.currency !== displayCurrency ? fm(convert(totalRent, p.currency, displayCurrency, fxRates)) : null}
+                      displayCurrency={displayCurrency}
+                      received={false}
+                      overdueCount={overdueMonths.length}
+                      onToggle={undefined}
+                      onOpen={() => onSelectProperty(p.id)}
+                    />
+                  ))}
                 </div>
               </div>
-              <div className="todo-feed-list">
-                <div className="todo-section-label">Ongoing works · 0</div>
-                <div className="todo-feed-empty">No ongoing works.</div>
-                <div className="todo-section-divider" />
-                <div className="todo-section-label">Completed · 0</div>
-                <div className="todo-feed-empty">None yet.</div>
+              )
+            })()}
+            {todoPanelVis.maintenance && (() => {
+              const totalOngoingAmt = mOngoing.reduce((s, c) => s + c.amount, 0)
+              return (
+              <div className="todo-panel-col">
+                <div className="todo-feed-header">
+                  <span className="todo-feed-title">Maintenance & Works</span>
+                  <span className="todo-feed-count">{maintenanceItems.length} {maintenanceItems.length === 1 ? 'item' : 'items'} · {new Date().getFullYear()}</span>
+                </div>
+                <div className="todo-payments-scorecards">
+                  <div className="todo-scorecard todo-scorecard--pending">
+                    <span className="todo-scorecard-label">Ongoing</span>
+                    <span className="todo-scorecard-value">{mOngoing.length}</span>
+                  </div>
+                  <div className="todo-scorecard todo-scorecard--received">
+                    <span className="todo-scorecard-label">Completed</span>
+                    <span className="todo-scorecard-value">{mCompleted.length}</span>
+                  </div>
+                </div>
+                <div className="todo-feed-list">
+                  <div className="todo-section-label">To Do · {mTodo.length}</div>
+                  {mTodo.length === 0 ? (
+                    <div className="todo-feed-empty">No tasks.</div>
+                  ) : mTodo.map(c => (
+                    <CapexTodoCard
+                      key={`${c.propertyId}-${c.id}`}
+                      item={c}
+                      onStatusChange={next => handleCapexStatus(c.propertyId, c.id, next)}
+                      onOpen={() => onSelectProperty(c.propertyId)}
+                    />
+                  ))}
+                  <div className="todo-section-divider" />
+                  <div className="todo-section-label">Ongoing · {mOngoing.length}{totalOngoingAmt > 0 ? ` · ${totalOngoingAmt.toLocaleString()}` : ''}</div>
+                  {mOngoing.length === 0 ? (
+                    <div className="todo-feed-empty">No ongoing works.</div>
+                  ) : mOngoing.map(c => (
+                    <CapexTodoCard
+                      key={`${c.propertyId}-${c.id}`}
+                      item={c}
+                      onStatusChange={next => handleCapexStatus(c.propertyId, c.id, next)}
+                      onOpen={() => onSelectProperty(c.propertyId)}
+                    />
+                  ))}
+                  <div className="todo-section-divider" />
+                  <div className="todo-section-label">Completed · {mCompleted.length}</div>
+                  {mCompleted.length === 0 ? (
+                    <div className="todo-feed-empty">None yet.</div>
+                  ) : mCompleted.map(c => (
+                    <CapexTodoCard
+                      key={`${c.propertyId}-${c.id}`}
+                      item={c}
+                      onStatusChange={next => handleCapexStatus(c.propertyId, c.id, next)}
+                      onOpen={() => onSelectProperty(c.propertyId)}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-            )}
+              )
+            })()}
           </div>
           )})() : (
           <div className="portfolio-props-grid" role="list" aria-label="Properties">
