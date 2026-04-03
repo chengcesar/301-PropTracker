@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthConfirmDialog } from './AuthConfirmDialog';
 import { ACCENT_PRESETS, ACCENT_HEX_BY_PRESET } from '../lib/accentTheme';
-import { useAppState } from '../context/useAppState';
+import { useContext } from 'react';
+import { AppStateContext } from '../context/app-state-context';
 
 function getInitials(email) {
   const local = email.split('@')[0];
@@ -22,7 +23,7 @@ function getDisplayName(user) {
 
 export default function AuthHeader() {
   const { user, isAdmin, logout, deleteAccount, accent, updateAccentPreset } = useAuth();
-  const { selectedId, setSelectedId } = useAppState();
+  const appState = useContext(AppStateContext);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -73,11 +74,11 @@ export default function AuthHeader() {
             <path d="M78.001 30.3232H65.623C65.5666 22.9727 59.5914 17.0313 52.2275 17.0312C44.8636 17.0312 38.8884 22.9726 38.832 30.3232H24.332V7H78.001V30.3232Z" fill="#6D2F20"/>
           </svg>
         </a>
-        {user && (
+        {user && appState && (
           <button
             type="button"
-            className={`header-nav-link${selectedId === 'contacts' ? ' active' : ''}`}
-            onClick={() => setSelectedId('contacts')}
+            className={`header-nav-link${appState.selectedId === 'contacts' ? ' active' : ''}`}
+            onClick={() => appState.setSelectedId('contacts')}
           >
             Contacts
           </button>
