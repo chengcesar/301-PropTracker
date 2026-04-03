@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useAppState } from '../context/useAppState'
 import type { PropertyContact } from '../lib/types'
-import { ContactPickerModal } from '../components/modals/ContactPickerModal'
 
 const CONTACT_ROLES = ['Owner', 'Property Manager', 'Building Manager', 'Broker', 'Insurance', 'Lawyer', 'Accountant', 'Architect', 'Contractor', 'Plumber', 'MEP', 'Other']
 
