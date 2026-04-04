@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Property } from '../lib/types'
 import { type CurrencyCode, type FxRates, loadFxRates, convert } from '../lib/currency'
 import { useAppState } from '../context/useAppState'
@@ -33,6 +33,67 @@ const RIGHT_TABS: [TabId, string][] = [
   ['valuation', 'Value & Equity'],
   ['factsheet', 'Fact Sheet'],
 ]
+
+const ALL_PROPERTY_TABS: [TabId, string][] = [...TABS, ...RIGHT_TABS]
+
+function PropertyTabPicker({ tab, setTab }: { tab: TabId; setTab: (id: TabId) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const label = ALL_PROPERTY_TABS.find(([id]) => id === tab)?.[1] ?? ''
+
+  useEffect(() => {
+    if (!open) return
+    const onMouse = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onMouse)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onMouse)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div ref={ref} className="property-tab-picker">
+      <button
+        type="button"
+        className="property-tab-picker-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Property section, ${label}. Open to choose another section.`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden>
+          <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="property-tab-picker-menu" role="listbox" aria-label="Property sections">
+          {ALL_PROPERTY_TABS.map(([id, lbl]) => (
+            <button
+              key={id}
+              type="button"
+              role="option"
+              aria-selected={tab === id}
+              className={`property-tab-picker-option${tab === id ? ' active' : ''}`}
+              onClick={() => {
+                setTab(id)
+                setOpen(false)
+              }}
+            >
+              {lbl}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function PropertyPage({ prop, onUpdateProp }: Props) {
   const [tab, setTab] = useState<TabId>('overview')
@@ -150,7 +211,10 @@ export function PropertyPage({ prop, onUpdateProp }: Props) {
           )}
         </div>
       </div>
-      <div className="tabs">
+      <div className="property-tab-picker-outer">
+        <PropertyTabPicker tab={tab} setTab={setTab} />
+      </div>
+      <div className="tabs property-page-tabs">
         {TABS.map(([id, label]) => (
           <button key={id} type="button" className={`tab-btn${tab === id ? ' active' : ''}`} onClick={() => setTab(id)}>
             {label}
