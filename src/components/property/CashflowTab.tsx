@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { MONTHS_FULL } from '../../lib/constants'
 import type { Property } from '../../lib/types'
 import type { CurrencyCode } from '../../lib/currency'
-import { calcAnnual, expenseRowsForYear, getMonthData, projectedGpiAnnual, yearMonths } from '../../lib/finance'
+import { calcAnnual, expenseRowsForYear, getMonthData, projectedGpiAnnual, sumServiceOneTimeForMonth, yearMonths } from '../../lib/finance'
 import { fmt, fmtCurrencyM } from '../../lib/format'
 import { KpiInfoIcon } from '../KpiInfoIcon'
 
@@ -25,6 +25,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
       d: ReturnType<typeof getMonthData>
       mCapex: number
       mTax: number
+      mOneTime: number
       net: number
       cumulative: number
     }[] = []
@@ -37,7 +38,8 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
           return new Date(t.dueDate + 'T12:00').getMonth() === i
         })
         .reduce((a, t) => a + (t.amount ?? 0), 0)
-      const net = d.noi - mCapex - mTax
+      const mOneTime = sumServiceOneTimeForMonth(prop, i)
+      const net = d.noi - mCapex - mTax - mOneTime
       cumulative += net
       rows.push({
         fullName: MONTHS_FULL[i],
@@ -45,6 +47,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
         d,
         mCapex,
         mTax,
+        mOneTime,
         net,
         cumulative,
       })
@@ -70,6 +73,10 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
         <div className="kpi-card">
           <div className="kpi-label">Taxes <KpiInfoIcon tip="Annual property and income taxes" /></div>
           <div className="kpi-value red">−{fmtCurrencyM(cx(ann.taxes), dc)}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">One-time services <KpiInfoIcon tip="Lump utility or service payments dated in this year (e.g. broker fee, annual insurance)" /></div>
+          <div className="kpi-value red">−{fmtCurrencyM(cx(ann.serviceOneTime), dc)}</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Net cashflow <KpiInfoIcon tip="Final cashflow after all income and expenses" /></div>
@@ -220,6 +227,23 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
               <td className="text3">—</td>
               <td>{gpiDen && ann.taxes ? `${Math.round((ann.taxes / gpiDen) * 100)}%` : '—'}</td>
             </tr>
+            <tr className="indent">
+              <td>− One-time services</td>
+              <td>
+                <div className="wf-bar">
+                  <div
+                    className="wf-bar-fill"
+                    style={{
+                      width: gpiDen && ann.serviceOneTime ? `${Math.max(1, Math.round((ann.serviceOneTime / gpiDen) * 100))}%` : '0%',
+                      background: '#ea580c',
+                    }}
+                  />
+                </div>
+              </td>
+              <td className={ann.serviceOneTime ? 'neg' : 'text3'}>{ann.serviceOneTime ? `−${fmt(cx(ann.serviceOneTime))}` : '—'}</td>
+              <td className="text3">—</td>
+              <td>{gpiDen && ann.serviceOneTime ? `${Math.round((ann.serviceOneTime / gpiDen) * 100)}%` : '—'}</td>
+            </tr>
             <tr className="total-row">
               <td>Net cashflow</td>
               <td />
@@ -248,13 +272,14 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
               <th>CAPEX</th>
               <th>NOI</th>
               <th>Taxes</th>
+              <th>One-time</th>
               <th>Net CF</th>
               <th>Cumulative</th>
             </tr>
           </thead>
           <tbody>
             {scheduleRows.map((row) => {
-              const { d, mCapex, mTax, net, cumulative, fullName } = row
+              const { d, mCapex, mTax, mOneTime, net, cumulative, fullName } = row
               return (
                 <tr
                   key={row.i}
@@ -272,6 +297,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
                   <td className={mCapex ? 'neg' : 'text3'}>{mCapex ? `−${fmt(cx(mCapex))}` : '—'}</td>
                   <td className={d.noi > 0 ? 'pos' : d.noi < 0 ? 'neg' : 'text3'}>{d.noi !== 0 ? fmt(cx(d.noi)) : '—'}</td>
                   <td className={mTax ? 'neg' : 'text3'}>{mTax ? `−${fmt(cx(mTax))}` : '—'}</td>
+                  <td className={mOneTime ? 'neg' : 'text3'}>{mOneTime ? `−${fmt(cx(mOneTime))}` : '—'}</td>
                   <td className={net > 0 ? 'pos' : net < 0 ? 'neg' : 'text3'}>{net !== 0 ? fmt(cx(net)) : '—'}</td>
                   <td className="mono">{fmt(cx(cumulative))}</td>
                 </tr>
@@ -286,6 +312,7 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
               <td>{ann.totalCapex ? `−${fmt(cx(ann.totalCapex))}` : '—'}</td>
               <td>{fmt(cx(ann.noi))}</td>
               <td>{ann.taxes ? `−${fmt(cx(ann.taxes))}` : '—'}</td>
+              <td>{ann.serviceOneTime ? `−${fmt(cx(ann.serviceOneTime))}` : '—'}</td>
               <td>
                 {ann.netCf >= 0 ? '+' : ''}
                 {fmt(cx(ann.netCf))}

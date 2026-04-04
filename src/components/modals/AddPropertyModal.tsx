@@ -241,6 +241,7 @@ export function AddPropertyModal({ onSave, onClose }: Props) {
       months: {},
       capex: [],
       taxes: { items: [] },
+      serviceOneTimeItems: [],
       factSheet: {
         propertyType: form.propertyType,
         estrato: null,

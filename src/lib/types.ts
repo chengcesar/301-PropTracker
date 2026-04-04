@@ -73,6 +73,18 @@ export interface ServiceEntry {
   notes: string
 }
 
+/** One-off utility / service payments (broker fee, annual insurance, etc.) — allocated by paymentDate. */
+export interface ServiceOneTimeItem {
+  id: number
+  provider: string
+  type: string
+  accountNumber?: string
+  amount: number
+  paymentDate: string
+  notes?: string
+  status?: TaxStatus
+}
+
 export interface OwnershipEntry {
   id: number
   name: string
@@ -173,5 +185,6 @@ export interface Property {
   capex: CapexItem[]
   taxes: { items: TaxItem[] }
   services?: Record<number, ServiceEntry[]>
+  serviceOneTimeItems?: ServiceOneTimeItem[]
   factSheet?: FactSheet
 }

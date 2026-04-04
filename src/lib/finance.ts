@@ -9,6 +9,8 @@ export interface AnnualResult {
   noi: number
   totalCapex: number
   taxes: number
+  /** Sum of one-time service/utility payments dated in prop.year */
+  serviceOneTime: number
   netCf: number
 }
 
@@ -294,6 +296,33 @@ export function getMonthData(prop: Property, mIdx: number): MonthDataResult {
   }
 }
 
+/**
+ * Sum of `serviceOneTimeItems` attributed to calendar month `monthIndex` (0–11)
+ * when `paymentDate` falls in `prop.year`. Missing `paymentDate` contributes 0.
+ */
+export function sumServiceOneTimeForMonth(prop: Property, monthIndex: number): number {
+  let sum = 0
+  for (const item of prop.serviceOneTimeItems ?? []) {
+    if (!item.paymentDate?.trim()) continue
+    const d = new Date(item.paymentDate + 'T12:00')
+    if (d.getFullYear() !== prop.year) continue
+    if (d.getMonth() !== monthIndex) continue
+    sum += item.amount ?? 0
+  }
+  return sum
+}
+
+export function sumServiceOneTimeAnnual(prop: Property): number {
+  let sum = 0
+  for (const item of prop.serviceOneTimeItems ?? []) {
+    if (!item.paymentDate?.trim()) continue
+    const d = new Date(item.paymentDate + 'T12:00')
+    if (d.getFullYear() !== prop.year) continue
+    sum += item.amount ?? 0
+  }
+  return sum
+}
+
 export function calcAnnual(prop: Property): AnnualResult {
   let gpi = 0
   let egi = 0
@@ -308,6 +337,7 @@ export function calcAnnual(prop: Property): AnnualResult {
   const vacancy = Math.max(0, gpi - egi)
   const totalCapex = prop.capex.reduce((a, b) => a + b.amount, 0)
   const taxes = (prop.taxes.items ?? []).reduce((a, t) => a + (t.amount ?? 0), 0)
+  const serviceOneTime = sumServiceOneTimeAnnual(prop)
   const noi = egi - totalOpex
   return {
     gpi,
@@ -317,7 +347,8 @@ export function calcAnnual(prop: Property): AnnualResult {
     noi,
     totalCapex,
     taxes,
-    netCf: noi - totalCapex - taxes,
+    serviceOneTime,
+    netCf: noi - totalCapex - taxes - serviceOneTime,
   }
 }
 
@@ -371,6 +402,7 @@ export function convertAnnual(result: AnnualResult, from: CurrencyCode, to: Curr
     noi: c(result.noi),
     totalCapex: c(result.totalCapex),
     taxes: c(result.taxes),
+    serviceOneTime: c(result.serviceOneTime),
     netCf: c(result.netCf),
   }
 }

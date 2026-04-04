@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { MONTHS, MONTHS_FULL } from '../../lib/constants'
 import type { MonthData, Occupant, Property } from '../../lib/types'
-import { activeContract, calcAnnual, contractForMonth, estimatedPropertyValueAtYear, expenseRowsForYear, getMonthData, projectedGpiAnnual, resolveServices, vacancyLossMonthCount, yearMonths } from '../../lib/finance'
+import { activeContract, calcAnnual, contractForMonth, estimatedPropertyValueAtYear, expenseRowsForYear, getMonthData, projectedGpiAnnual, resolveServices, sumServiceOneTimeForMonth, vacancyLossMonthCount, yearMonths } from '../../lib/finance'
 import { type CurrencyCode } from '../../lib/currency'
 import { fmt, fmtCurrency, fmtCurrencyM } from '../../lib/format'
 import { MonthModal } from '../modals/MonthModal'
@@ -252,11 +252,12 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
         return new Date(t.dueDate + 'T12:00').getMonth() === i
       })
       .reduce((a, t) => a + (t.amount ?? 0), 0)
-    return { income: m.income, expense: m.totalOpex, tax }
+    const oneTime = sumServiceOneTimeForMonth(prop, i)
+    return { income: m.income, expense: m.totalOpex, tax, oneTime }
   })
   const maxVal = Math.max(
     ...monthlyData.map((d) => d.income),
-    ...monthlyData.map((d) => d.expense + d.tax),
+    ...monthlyData.map((d) => d.expense + d.tax + d.oneTime),
     1,
   )
 
@@ -407,6 +408,8 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                   const incPct = maxVal > 0 ? (d.income / maxVal) * 100 : 0
                   const expPct = maxVal > 0 ? (d.expense / maxVal) * 100 : 0
                   const taxPct = maxVal > 0 ? (d.tax / maxVal) * 100 : 0
+                  const oneTimePct = maxVal > 0 ? (d.oneTime / maxVal) * 100 : 0
+                  const stackH = expPct + taxPct + oneTimePct
                   return (
                     <div key={i} className="ie-col ie-col-hover">
                       <div className="ie-col-upper">
@@ -416,15 +419,38 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                         />
                       </div>
                       <div className="ie-col-lower" style={{ alignItems: 'stretch' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', height: `${expPct + taxPct}%` }}>
-                          <div
-                            className="ie-bar"
-                            style={{ flex: expPct, background: '#fca5a5', borderRadius: taxPct ? '3px 3px 0 0' : '3px', minHeight: expPct ? 1 : 0 }}
-                          />
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', height: `${stackH}%` }}>
+                          {expPct > 0 && (
+                            <div
+                              className="ie-bar"
+                              style={{
+                                flex: expPct,
+                                background: '#fca5a5',
+                                borderRadius: taxPct || oneTimePct ? '3px 3px 0 0' : '3px',
+                                minHeight: 1,
+                              }}
+                            />
+                          )}
                           {taxPct > 0 && (
                             <div
                               className="ie-bar"
-                              style={{ flex: taxPct, background: '#c4b5fd', borderRadius: expPct ? '0 0 3px 3px' : '3px', minHeight: 1 }}
+                              style={{
+                                flex: taxPct,
+                                background: '#c4b5fd',
+                                borderRadius: oneTimePct ? 0 : expPct ? '0 0 3px 3px' : '3px',
+                                minHeight: 1,
+                              }}
+                            />
+                          )}
+                          {oneTimePct > 0 && (
+                            <div
+                              className="ie-bar"
+                              style={{
+                                flex: oneTimePct,
+                                background: '#fdba74',
+                                borderRadius: '0 0 3px 3px',
+                                minHeight: 1,
+                              }}
                             />
                           )}
                         </div>
@@ -435,7 +461,8 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#86efac' }}>Income</span><span>{fmt(cx(d.income))}</span></div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#fca5a5' }}>OPEX</span><span>{fmt(cx(d.expense))}</span></div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#c4b5fd' }}>Taxes</span><span>{fmt(cx(d.tax))}</span></div>
-                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: 4, paddingTop: 4, display: 'flex', justifyContent: 'space-between', gap: 12, fontWeight: 600 }}><span>Net</span><span>{fmt(cx(d.income - d.expense - d.tax))}</span></div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#fdba74' }}>One-time</span><span>{fmt(cx(d.oneTime))}</span></div>
+                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: 4, paddingTop: 4, display: 'flex', justifyContent: 'space-between', gap: 12, fontWeight: 600 }}><span>Net</span><span>{fmt(cx(d.income - d.expense - d.tax - d.oneTime))}</span></div>
                       </div>
                     </div>
                   )
@@ -971,6 +998,29 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                   )
                 })()}
                 {(() => {
+                  const oneTimeByMonth = MONTHS.map((_, i) => sumServiceOneTimeForMonth(prop, i))
+                  const oneTimeTotal = oneTimeByMonth.reduce((a, b) => a + b, 0)
+                  const oneTimeFilled = oneTimeByMonth.filter((v) => v > 0).length
+                  return (
+                    <tr style={{ background: '#fff7ed' }}>
+                      <td style={{ ...stickyLabel, background: '#fff7ed', color: '#c2410c', fontWeight: 600, fontSize: 13, borderRight: '2px solid #fed7aa' }}>
+                        One-time services
+                      </td>
+                      {oneTimeByMonth.map((v, i) => (
+                        <td key={i} style={{ ...cellStyle, color: v ? '#c2410c' : 'var(--text3)', fontWeight: v ? 600 : 400 }}>
+                          {v ? `−${fmt(cx(v))}` : ''}
+                        </td>
+                      ))}
+                      <td style={{ ...cellStyle, color: '#c2410c', fontWeight: 700, background: '#ffedd5' }}>
+                        {oneTimeTotal ? `−${fmt(cx(oneTimeTotal))}` : ''}
+                      </td>
+                      <td style={{ ...cellStyle, color: '#9a3412', fontWeight: 500, background: '#ffedd5' }}>
+                        {oneTimeFilled ? fmt(cx(Math.round(oneTimeTotal / oneTimeFilled))) : ''}
+                      </td>
+                    </tr>
+                  )
+                })()}
+                {(() => {
                   const taxItems = prop.taxes.items ?? []
                   const taxByMonth = MONTHS.map((_, i) =>
                     taxItems
@@ -980,24 +1030,25 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                       })
                       .reduce((a, t) => a + (t.amount ?? 0), 0),
                   )
-                  const netAfterTax = MONTHS.map((_, i) => incomeVals[i] - totals[i] - taxByMonth[i])
-                  const netAfterTaxTotal = netAfterTax.reduce((a, b) => a + b, 0)
-                  const netAfterTaxFilled = netAfterTax.filter((v) => v !== 0).length
+                  const oneTimeByMonth = MONTHS.map((_, i) => sumServiceOneTimeForMonth(prop, i))
+                  const netAfter = MONTHS.map((_, i) => incomeVals[i] - totals[i] - taxByMonth[i] - oneTimeByMonth[i])
+                  const netAfterTotal = netAfter.reduce((a, b) => a + b, 0)
+                  const netAfterFilled = netAfter.filter((v) => v !== 0).length
                   return (
                 <tr style={{ background: '#f0fdf4' }}>
                   <td style={{ ...stickyLabel, background: '#f0fdf4', fontWeight: 700, fontSize: 13, color: '#1A6B47' }}>
                     Net
                   </td>
-                  {netAfterTax.map((v, i) => (
+                  {netAfter.map((v, i) => (
                     <td key={i} style={{ ...cellStyle, fontWeight: 600, color: v >= 0 ? '#1A6B47' : '#b91c1c' }}>
                       {v ? `${v >= 0 ? '+' : ''}${fmt(cx(v))}` : ''}
                     </td>
                   ))}
-                  <td style={{ ...summaryCell, background: '#e8f5e9', fontWeight: 700, color: netAfterTaxTotal >= 0 ? '#1A6B47' : '#b91c1c' }}>
-                    {netAfterTaxTotal ? `${netAfterTaxTotal >= 0 ? '+' : ''}${fmt(cx(netAfterTaxTotal))}` : ''}
+                  <td style={{ ...summaryCell, background: '#e8f5e9', fontWeight: 700, color: netAfterTotal >= 0 ? '#1A6B47' : '#b91c1c' }}>
+                    {netAfterTotal ? `${netAfterTotal >= 0 ? '+' : ''}${fmt(cx(netAfterTotal))}` : ''}
                   </td>
                   <td style={{ ...summaryCell, background: '#e8f5e9', fontWeight: 500, color: 'var(--text3)' }}>
-                    {netAfterTaxFilled ? fmt(cx(Math.round(netAfterTaxTotal / netAfterTaxFilled))) : ''}
+                    {netAfterFilled ? fmt(cx(Math.round(netAfterTotal / netAfterFilled))) : ''}
                   </td>
                 </tr>
                   )

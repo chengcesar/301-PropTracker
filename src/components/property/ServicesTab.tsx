@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
-import type { Property, ServiceEntry } from '../../lib/types'
+import type { Property, ServiceEntry, ServiceOneTimeItem, TaxStatus } from '../../lib/types'
 import type { CurrencyCode } from '../../lib/currency'
-import { fmt } from '../../lib/format'
+import { fmt, parseNum } from '../../lib/format'
 
 const IconCopy = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
@@ -11,6 +11,11 @@ const IconCheck = () => (
 )
 
 const SERVICE_TYPES = ['Admin', 'Electricity', 'Water', 'Gas', 'Internet', 'TV', 'Phone', 'Insurance', 'Cleaning', 'Security', 'Management Fee', 'Broker Fee', 'Other'] as const
+
+const OT_STATUS_COLORS: Record<string, { bg: string; color: string }> = {
+  paid: { bg: '#d1fae5', color: '#047857' },
+  pending: { bg: '#fef9c3', color: '#a16207' },
+}
 
 const SERVICE_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   Admin:       { bg: '#f3e8ff', color: '#7c3aed' },
@@ -155,6 +160,135 @@ export function ServicesTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
   }
 
   const totalMonthlyCost = services.reduce((a, s) => a + s.monthlyCost, 0)
+
+  const oneTimeItems = prop.serviceOneTimeItems ?? []
+  const oneTimeYearTotal = oneTimeItems.reduce((a, it) => {
+    if (!it.paymentDate?.trim()) return a
+    const d = new Date(it.paymentDate + 'T12:00')
+    if (d.getFullYear() !== prop.year) return a
+    return a + (it.amount ?? 0)
+  }, 0)
+
+  const [showOtForm, setShowOtForm] = useState(false)
+  const [editingOtId, setEditingOtId] = useState<number | null>(null)
+  const [copiedOt, setCopiedOt] = useState(false)
+  const [formOt, setFormOt] = useState({
+    provider: '',
+    type: 'Electricity' as string,
+    accountNumber: '',
+    amount: '',
+    paymentDate: '',
+    notes: '',
+    status: 'pending' as TaxStatus,
+  })
+
+  const setOt = <K extends keyof typeof formOt>(k: K, v: (typeof formOt)[K]) => {
+    setFormOt((p) => ({ ...p, [k]: v }))
+  }
+
+  const resetOtForm = () => {
+    setFormOt({ provider: '', type: 'Electricity', accountNumber: '', amount: '', paymentDate: '', notes: '', status: 'pending' })
+    setShowOtForm(false)
+    setEditingOtId(null)
+  }
+
+  const addOneTime = () => {
+    if (!formOt.provider.trim() || !formOt.paymentDate.trim()) return
+    const item: ServiceOneTimeItem = {
+      id: Date.now(),
+      provider: formOt.provider.trim(),
+      type: formOt.type,
+      accountNumber: formOt.accountNumber.trim() || undefined,
+      amount: parseNum(formOt.amount),
+      paymentDate: formOt.paymentDate,
+      notes: formOt.notes.trim() || undefined,
+      status: formOt.status,
+    }
+    onUpdateProp((p) => ({
+      ...p,
+      serviceOneTimeItems: [...(p.serviceOneTimeItems ?? []), item],
+    }))
+    resetOtForm()
+  }
+
+  const startEditOt = (it: ServiceOneTimeItem) => {
+    setEditingOtId(it.id)
+    setFormOt({
+      provider: it.provider,
+      type: it.type,
+      accountNumber: it.accountNumber ?? '',
+      amount: it.amount ? String(it.amount) : '',
+      paymentDate: it.paymentDate,
+      notes: it.notes ?? '',
+      status: it.status ?? 'pending',
+    })
+    setShowOtForm(true)
+  }
+
+  const saveEditOt = () => {
+    if (!formOt.provider.trim() || !formOt.paymentDate.trim() || editingOtId === null) return
+    onUpdateProp((p) => ({
+      ...p,
+      serviceOneTimeItems: (p.serviceOneTimeItems ?? []).map((it) =>
+        it.id === editingOtId
+          ? {
+              ...it,
+              provider: formOt.provider.trim(),
+              type: formOt.type,
+              accountNumber: formOt.accountNumber.trim() || undefined,
+              amount: parseNum(formOt.amount),
+              paymentDate: formOt.paymentDate,
+              notes: formOt.notes.trim() || undefined,
+              status: formOt.status,
+            }
+          : it,
+      ),
+    }))
+    resetOtForm()
+  }
+
+  const updateOtStatus = (id: number, status: TaxStatus) => {
+    onUpdateProp((p) => ({
+      ...p,
+      serviceOneTimeItems: (p.serviceOneTimeItems ?? []).map((it) => (it.id === id ? { ...it, status } : it)),
+    }))
+  }
+
+  const removeOneTime = (id: number) => {
+    onUpdateProp((p) => ({
+      ...p,
+      serviceOneTimeItems: (p.serviceOneTimeItems ?? []).filter((it) => it.id !== id),
+    }))
+  }
+
+  const formatPayCell = (dateStr: string) =>
+    dateStr
+      ? new Date(dateStr + 'T12:00').toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: '2-digit',
+          year: '2-digit',
+        })
+      : '—'
+
+  const handleCopyOt = useCallback(() => {
+    const headers = ['Provider', 'Type', 'Account #', 'Amount', 'Payment date', 'Status', 'Notes']
+    const rows = oneTimeItems.map((it) =>
+      [
+        it.provider || '—',
+        it.type,
+        it.accountNumber || '—',
+        it.amount ? fmt(cx(it.amount)) : '—',
+        formatPayCell(it.paymentDate),
+        (it.status ?? 'pending').charAt(0).toUpperCase() + (it.status ?? 'pending').slice(1),
+        it.notes || '—',
+      ].join('\t'),
+    )
+    const totalAll = oneTimeItems.reduce((a, it) => a + (it.amount ?? 0), 0)
+    rows.push(['Total (all)', '', '', totalAll ? fmt(cx(totalAll)) : '—', '', '', ''].join('\t'))
+    navigator.clipboard.writeText([headers.join('\t'), ...rows].join('\n'))
+    setCopiedOt(true)
+    setTimeout(() => setCopiedOt(false), 2000)
+  }, [oneTimeItems, cx])
 
   const [copied, setCopied] = useState(false)
   const handleCopy = useCallback(() => {
@@ -334,6 +468,212 @@ export function ServicesTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                 {editingId ? 'Save changes' : 'Add service'}
               </button>
               <button type="button" className="ghost" style={{ fontSize: 12 }} onClick={resetForm}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="sec-hdr mb12 mt24">
+        <span className="sec-title">One-time payments · {prop.year}</span>
+        <button
+          type="button"
+          className="primary"
+          style={{ fontSize: 12, padding: '5px 14px' }}
+          onClick={() => setShowOtForm(true)}
+        >
+          + Add payment
+        </button>
+      </div>
+      <div className="fs12 text3 mb12" style={{ maxWidth: 640 }}>
+        Lump fees dated in a month (broker, annual insurance, etc.) appear on Overview and Cashflow for that month when the payment year matches {prop.year}.
+      </div>
+
+      {oneTimeItems.length === 0 && !showOtForm && (
+        <div className="card mb24">
+          <div className="card-inner">
+            <div className="empty-state" style={{ padding: 24 }}>
+              <div className="empty-title">No one-time payments</div>
+              <div className="fs12 text3 mt4">Add fees that hit cashflow in a single month</div>
+              <button type="button" className="primary mt12" onClick={() => setShowOtForm(true)}>
+                + Add first payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {oneTimeItems.length > 0 && (
+        <div className="card mb24" style={{ overflow: 'hidden' }}>
+          <table className="cf-table">
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left' }}>Provider</th>
+                <th style={{ textAlign: 'left' }}>Type</th>
+                <th style={{ textAlign: 'left' }}>Account #</th>
+                <th>Amount</th>
+                <th>Payment date</th>
+                <th style={{ textAlign: 'left' }}>Status</th>
+                <th style={{ textAlign: 'left' }}>Notes</th>
+                <th style={{ width: 64, textAlign: 'center' }}>
+                  <button
+                    className="ghost"
+                    style={{ padding: 0, border: 'none', background: 'transparent', margin: '0 auto', display: 'block' }}
+                    title={copiedOt ? 'Copied!' : 'Copy table'}
+                    onClick={handleCopyOt}
+                  >
+                    {copiedOt ? <IconCheck /> : <IconCopy />}
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {oneTimeItems.map((it) => {
+                const st = it.status ?? 'pending'
+                return (
+                  <tr key={it.id}>
+                    <td style={{ textAlign: 'left', fontWeight: 500 }}>{it.provider}</td>
+                    <td style={{ textAlign: 'left' }}>
+                      <span
+                        className="badge"
+                        style={{
+                          background: SERVICE_TYPE_COLORS[it.type]?.bg ?? '#f3f4f6',
+                          color: SERVICE_TYPE_COLORS[it.type]?.color ?? '#6b7280',
+                        }}
+                      >
+                        {it.type}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'left', fontFamily: 'var(--mono)', fontSize: 12 }}>{it.accountNumber || '—'}</td>
+                    <td style={{ textAlign: 'right' }}>{it.amount ? fmt(cx(it.amount)) : '—'}</td>
+                    <td style={{ textAlign: 'right' }}>{formatPayCell(it.paymentDate)}</td>
+                    <td style={{ textAlign: 'left' }}>
+                      <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                        <select
+                          value={st}
+                          onChange={(e) => updateOtStatus(it.id, e.target.value as TaxStatus)}
+                          style={{
+                            appearance: 'none',
+                            WebkitAppearance: 'none',
+                            background: OT_STATUS_COLORS[st]?.bg ?? '#f3f4f6',
+                            color: OT_STATUS_COLORS[st]?.color ?? '#6b7280',
+                            border: 'none',
+                            borderRadius: 20,
+                            padding: '3px 22px 3px 10px',
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            textTransform: 'capitalize',
+                            width: 'auto',
+                          }}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="paid">Paid</option>
+                        </select>
+                        <svg
+                          width="10"
+                          height="10"
+                          viewBox="0 0 10 10"
+                          style={{ position: 'absolute', right: 8, pointerEvents: 'none', fill: OT_STATUS_COLORS[st]?.color ?? '#6b7280' }}
+                        >
+                          <path
+                            d="M2 3.5L5 6.5L8 3.5"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            fill="none"
+                          />
+                        </svg>
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'left', color: 'var(--text3)', fontSize: 12 }}>{it.notes || '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button
+                        type="button"
+                        className="ghost"
+                        style={{ padding: '4px 8px', fontSize: 13 }}
+                        onClick={() => startEditOt(it)}
+                        title="Edit"
+                      >
+                        ✎
+                      </button>
+                      <button type="button" className="ghost danger" style={{ padding: '4px 8px' }} onClick={() => removeOneTime(it.id)} title="Delete">
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+              <tr className="total-row">
+                <td style={{ textAlign: 'left' }}>Total ({prop.year})</td>
+                <td />
+                <td />
+                <td style={{ textAlign: 'right', fontWeight: 700 }}>{oneTimeYearTotal ? fmt(cx(oneTimeYearTotal)) : '—'}</td>
+                <td />
+                <td />
+                <td />
+                <td />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showOtForm && (
+        <div className="card mb24">
+          <div className="card-inner">
+            <div className="sec-title mb12">{editingOtId ? 'Edit one-time payment' : 'New one-time payment'}</div>
+            <div className="contract-grid">
+              <div className="field">
+                <label>Provider *</label>
+                <input type="text" placeholder="Agency, insurer…" value={formOt.provider} onChange={(e) => setOt('provider', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Type</label>
+                <select value={formOt.type} onChange={(e) => setOt('type', e.target.value)}>
+                  {SERVICE_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Account number</label>
+                <input type="text" value={formOt.accountNumber} onChange={(e) => setOt('accountNumber', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Amount ({prop.currency})</label>
+                <input type="text" placeholder="500,000" value={formOt.amount} onChange={(e) => setOt('amount', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Payment date *</label>
+                <input type="date" value={formOt.paymentDate} onChange={(e) => setOt('paymentDate', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Status</label>
+                <select value={formOt.status} onChange={(e) => setOt('status', e.target.value as TaxStatus)}>
+                  <option value="pending">Pending</option>
+                  <option value="paid">Paid</option>
+                </select>
+              </div>
+              <div className="field" style={{ gridColumn: 'span 2' }}>
+                <label>Notes</label>
+                <input type="text" value={formOt.notes} onChange={(e) => setOt('notes', e.target.value)} />
+              </div>
+            </div>
+            <div className="flex gap8 mt12">
+              <button
+                type="button"
+                className="primary"
+                style={{ fontSize: 12, padding: '6px 16px' }}
+                onClick={editingOtId ? saveEditOt : addOneTime}
+              >
+                {editingOtId ? 'Save changes' : 'Add payment'}
+              </button>
+              <button type="button" className="ghost" style={{ fontSize: 12 }} onClick={resetOtForm}>
                 Cancel
               </button>
             </div>
