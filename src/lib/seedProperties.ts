@@ -460,3 +460,19 @@ export function createSeedProperties(): Property[] {
     },
   ]
 }
+
+/** Sorted identity lines for the five default seed properties — must match `createSeedProperties` name/address/city. */
+const DEFAULT_SEED_PORTFOLIO_SIGNATURE = [
+  'Downtown Loft|350 5th Avenue, Apt 12B|New York',
+  'Kensington Studio|18 Cromwell Road, Flat 3|London',
+  'Maple Street House|742 Maple Street|Austin',
+  'Ocean View Condo|1200 Coastal Blvd, Unit 8A|Miami',
+  'Riverside Duplex|892 Wacker Drive, Unit A/B|Chicago',
+].sort()
+
+/** True when the portfolio is still exactly the five auto-seeded sample properties (same name, address, city for each). */
+export function isUnmodifiedDefaultSeedPortfolio(properties: Property[]): boolean {
+  if (properties.length !== DEFAULT_SEED_PORTFOLIO_SIGNATURE.length) return false
+  const got = properties.map(p => `${p.name}|${p.address}|${p.city}`).sort()
+  return got.every((line, i) => line === DEFAULT_SEED_PORTFOLIO_SIGNATURE[i])
+}

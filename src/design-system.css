@@ -457,6 +457,75 @@
     border-color: var(--accent-hover);
   }
 
+  /* First-time sample portfolio tip (below filter bar, above property table) */
+  .portfolio-sample-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 14px 18px;
+    border: 1px solid #fcd34d;
+    border-radius: 12px;
+    background: #fffbeb;
+    box-sizing: border-box;
+  }
+  .portfolio-sample-banner-main {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-width: 0;
+    flex: 1;
+  }
+  .portfolio-sample-banner-icon {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    margin-top: 1px;
+    color: #d97706;
+  }
+  .portfolio-sample-banner-text {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.45;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .portfolio-sample-banner-inline-action {
+    display: inline;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    font-weight: 600;
+    color: var(--accent-bg);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .portfolio-sample-banner-inline-action:hover {
+    color: var(--accent-hover);
+  }
+  .portfolio-sample-banner-cta {
+    flex-shrink: 0;
+    padding: 10px 18px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    color: #fff;
+    background: #f59e0b;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+  .portfolio-sample-banner-cta:hover {
+    background: #d97706;
+  }
+  .portfolio-sample-banner-cta:active {
+    transform: scale(0.98);
+  }
+
   .sec-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
   .sec-title { font-size: 12px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
@@ -1457,6 +1526,15 @@
     .portfolio-toolbar-tools > .filter-bar-icon-btn {
       flex-shrink: 0;
       scroll-snap-align: start;
+    }
+
+    .portfolio-sample-banner {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .portfolio-sample-banner-cta {
+      width: 100%;
+      text-align: center;
     }
 
     .property-page-tabs {

@@ -22,6 +22,7 @@ import {
   type AlertSeverity,
   type EvaluatedAlertMatch,
 } from '../lib/alertRuleConfig'
+import { isUnmodifiedDefaultSeedPortfolio } from '../lib/seedProperties'
 
 type Props = {
   properties: Property[]
@@ -49,6 +50,12 @@ const IconFilter = () => (
     <path d="M2.666 5.083h10.667" />
     <path d="M5.334 8.75h5.333" />
     <path d="M7.334 12.417h1.333" />
+  </svg>
+)
+const IconSamplePortfolioTip = () => (
+  <svg className="portfolio-sample-banner-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <path d="M12 4L3 19h18L12 4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    <path d="M12 10v5M12 17h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
   </svg>
 )
 const IconSearch = () => (
@@ -1789,6 +1796,8 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
     return cols
   }, [properties])
 
+  const showSamplePortfolioTip = useMemo(() => isUnmodifiedDefaultSeedPortfolio(properties), [properties])
+
   const filteredProperties = useMemo(() => {
     let result = properties
     for (const [key, selection] of Object.entries(activeFilters)) {
@@ -3259,6 +3268,25 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
             </div>
           )}
         </div>
+
+        {showSamplePortfolioTip && (
+          <div className="portfolio-sample-banner mb12" role="region" aria-label="Sample portfolio">
+            <div className="portfolio-sample-banner-main">
+              <IconSamplePortfolioTip />
+              <p className="portfolio-sample-banner-text">
+                You are seeing a sample portfolio of 5 properties. Delete properties and replace them with your own. To add a
+                new property, click{' '}
+                <button type="button" className="portfolio-sample-banner-inline-action" onClick={openAddProperty}>
+                  + Add Property
+                </button>
+                .
+              </p>
+            </div>
+            <button type="button" className="portfolio-sample-banner-cta" onClick={openAddProperty}>
+              + Add Property
+            </button>
+          </div>
+        )}
 
         <div className="sec-hdr mb12">
           <span className="sec-title">Properties</span>

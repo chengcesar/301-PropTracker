@@ -79,9 +79,9 @@ export const PLANS = {
   free_trial: {
     label: 'Free',
     description: 'Get started with up to 5 properties and 5 AI reports.',
-    propertyLimit: 5,       // ← edit to raise/lower the free property cap
-    aiLimit: 5,             // ← edit to raise/lower the free AI cap
-    uploadLimit: 5,         // ← only first 5 properties get image uploads
+    propertyLimit: 7,       // ← edit to raise/lower the free property cap
+    aiLimit: 15,             // ← edit to raise/lower the free AI cap
+    uploadLimit: 7,         // ← only first 5 properties get image uploads
     badgeColor: '#6b7280',  // gray
     public: true,
     pricing: { monthly: 0, freeLabel: 'forever' },
