@@ -797,14 +797,23 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
                     onPointerDown={handleDocPointerDown}
                     onPointerMove={handleDocPointerMove}
                     onPointerUp={handleDocPointerUp}
+                    onPointerLeave={handleDocPointerUp}
+                    onPointerCancel={handleDocPointerUp}
                   >
-                    <img
-                      className="fs-doc-img"
-                      src={documents[activeDoc] ?? documents[0]}
-                      alt="Document"
-                      draggable={false}
-                      style={{ transform: `translate(${docPan.x}px, ${docPan.y}px) scale(${docZoom})` }}
-                    />
+                    {/* Pan/zoom on a wrapper — avoids filter+transform on the same node (iOS Safari trail bug). */}
+                    <div
+                      className="fs-doc-pan-layer"
+                      style={{
+                        transform: `translate3d(${docPan.x}px, ${docPan.y}px, 0) scale(${docZoom})`,
+                      }}
+                    >
+                      <img
+                        className="fs-doc-img"
+                        src={documents[activeDoc] ?? documents[0]}
+                        alt="Document"
+                        draggable={false}
+                      />
+                    </div>
                   </div>
                 )}
                 {docZoom > 1 && !isPdf(documents[activeDoc] ?? '') && (

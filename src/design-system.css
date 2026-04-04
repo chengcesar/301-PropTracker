@@ -768,7 +768,9 @@
   .portfolio-prop-card {
     display: flex;
     flex-direction: column;
+    align-items: stretch;
     width: 100%;
+    min-width: 0;
     height: 100%;
     margin: 0;
     padding: 0;
@@ -782,6 +784,11 @@
     color: inherit;
     overflow: hidden;
     transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    /* Global `button { white-space: nowrap }` is inherited by all descendants and breaks
+       line-clamp + intrinsic widths on iOS Safari; reset for this layout-heavy control. */
+    white-space: normal;
+    -webkit-appearance: none;
+    appearance: none;
   }
   .portfolio-prop-card:hover {
     border-color: color-mix(in srgb, var(--accent-bg) 35%, #e5e7eb);
@@ -793,17 +800,23 @@
   }
   .portfolio-prop-card-media {
     position: relative;
+    width: 100%;
+    min-width: 0;
     height: 144px;
     flex-shrink: 0;
     background: #f9fafb;
+    overflow: hidden;
   }
   .portfolio-prop-card-img {
     width: 100%;
+    max-width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
   }
   .portfolio-prop-card-no-cover {
+    width: 100%;
+    min-width: 0;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -811,6 +824,7 @@
     justify-content: center;
     gap: 8px;
     color: #9ca3af;
+    box-sizing: border-box;
   }
   .portfolio-prop-card-no-cover-text {
     font-size: 12px;
@@ -829,6 +843,8 @@
     line-height: 1.2;
   }
   .portfolio-prop-card-body {
+    width: 100%;
+    min-width: 0;
     padding: 16px 18px 18px;
     flex: 1;
     display: flex;
@@ -859,6 +875,8 @@
     overflow: hidden;
   }
   .portfolio-prop-card-contract {
+    width: 100%;
+    min-width: 0;
     margin-top: 12px;
   }
   .portfolio-prop-card-contract-meta {
@@ -883,6 +901,9 @@
     flex-shrink: 0;
   }
   .portfolio-prop-card-contract-track {
+    display: block;
+    width: 100%;
+    min-width: 0;
     height: 9px;
     border-radius: 4.5px;
     background: rgba(0, 0, 0, 0.15);
@@ -1353,17 +1374,27 @@
     justify-content: center;
     touch-action: none;
     user-select: none;
+    /* Clip composited descendants on iOS Safari (pan/zoom trail / “stacked pages”). */
+    contain: paint;
+    isolation: isolate;
   }
   .fs-doc-canvas:active { cursor: grabbing; }
+  .fs-doc-pan-layer {
+    display: block;
+    transform-origin: center center;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
   .fs-doc-img {
     max-width: 95%;
     max-height: 580px;
     object-fit: contain;
     display: block;
-    transform-origin: center center;
     transition: none;
     pointer-events: none;
-    filter: drop-shadow(0 4px 16px rgba(0,0,0,0.12)) drop-shadow(0 1px 4px rgba(0,0,0,0.08));
+    /* No filter/box-shadow on the bitmap: both compose badly under transformed parents on iOS Safari. */
+    border-radius: 2px;
+    border: 1px solid rgba(0, 0, 0, 0.06);
   }
   .fs-doc-minimap {
     position: absolute;
