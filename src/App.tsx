@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AppStateProvider } from './context/AppStateProvider'
@@ -13,9 +13,14 @@ import { PortfolioPage } from './pages/PortfolioPage'
 import { PropertyPage } from './pages/PropertyPage'
 import { ContactsPage } from './pages/ContactsPage'
 import { AddPropertyModal } from './components/modals/AddPropertyModal'
+import { UpgradeModal } from './components/modals/UpgradeModal'
+import type { UpgradeReason } from './components/modals/UpgradeModal'
+import { useEntitlements } from './hooks/useEntitlements'
 
 function AppContent() {
   const { properties, selectedId, setSelectedId, updateProperty, addProperty, addPropertyOpen, setAddPropertyOpen } = useAppState()
+  const { canAddProperty } = useEntitlements()
+  const [upgradeReason, setUpgradeReason] = useState<UpgradeReason | null>(null)
   const activeProp = properties.find((p) => p.id === selectedId)
   const showContacts = selectedId === 'contacts'
   const showPortfolio = !showContacts && (selectedId === 'portfolio' || !activeProp)
@@ -26,6 +31,11 @@ function AppContent() {
     }
   }, [selectedId, activeProp, setSelectedId])
 
+  function handleOpenAddProperty() {
+    if (!canAddProperty) { setUpgradeReason('property-limit'); return }
+    setAddPropertyOpen(true)
+  }
+
   return (
     <>
       <AuthHeader />
@@ -33,12 +43,19 @@ function AppContent() {
         {showContacts ? (
           <ContactsPage />
         ) : showPortfolio ? (
-          <PortfolioPage properties={properties} onSelectProperty={setSelectedId} />
+          <PortfolioPage
+            properties={properties}
+            onSelectProperty={setSelectedId}
+            onAddProperty={handleOpenAddProperty}
+          />
         ) : (
           <PropertyPage key={activeProp!.id} prop={activeProp!} onUpdateProp={(fn) => updateProperty(activeProp!.id, fn)} />
         )}
         {addPropertyOpen && (
           <AddPropertyModal onSave={addProperty} onClose={() => setAddPropertyOpen(false)} />
+        )}
+        {upgradeReason && (
+          <UpgradeModal reason={upgradeReason} onClose={() => setUpgradeReason(null)} />
         )}
       </div>
     </>

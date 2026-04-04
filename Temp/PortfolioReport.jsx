@@ -142,12 +142,13 @@ function Waterfall({ gpi, vacLoss, opex, taxes, netCF }) {
 const AI_TEXT_KEY = "portfolio-ai-report-text";
 
 // ─── AI narrative ─────────────────────────────────────────────────────────────
-function useAISection(properties, agg, currencyLabel="USD") {
+function useAISection(properties, agg, currencyLabel="USD", onPaywall) {
   const [text, setText]       = useState(() => localStorage.getItem(AI_TEXT_KEY) || null);
   const [loading, setLoading] = useState(false);
   const [err, setErr]         = useState(null);
 
   async function generate() {
+    if (onPaywall && onPaywall()) return;  // returns true = blocked
     setLoading(true); setErr(null);
     try {
       const snapshot = properties.map(p=>({
@@ -287,7 +288,7 @@ function AISection({ text, loading, err, generate }) {
 }
 
 // ─── MAIN EXPORT ─────────────────────────────────────────────────────────────
-export default function PortfolioReport({ properties: rawProps = [], year, displayCurrency, onBack }) {
+export default function PortfolioReport({ properties: rawProps = [], year, displayCurrency, onBack, onPaywall }) {
   const printRef = useRef();
   const props = rawProps.map(norm);
 
@@ -321,7 +322,7 @@ export default function PortfolioReport({ properties: rawProps = [], year, displ
   const owners = [...new Set(props.map(p => p.owner).filter(Boolean))].sort();
   const currencyLabel = displayCurrency || "USD";
 
-  const { text, loading, err, generate } = useAISection(props, agg, currencyLabel);
+  const { text, loading, err, generate } = useAISection(props, agg, currencyLabel, onPaywall);
 
   const [detailTableCopied, setDetailTableCopied] = useState(false);
 

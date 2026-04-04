@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { firestore } from '../lib/firebase'
-import { collection, getDocs } from 'firebase/firestore'
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore'
+import { PLANS, DEFAULT_PLAN, getEffectiveLimits } from '../lib/planConfig'
+import type { PlanId } from '../lib/planConfig'
 
 type UserRow = {
   uid: string
@@ -12,6 +14,8 @@ type UserRow = {
   aiGenerations: number | null
   isAdmin: boolean
   lastVisit: Date | null
+  plan: PlanId
+  grants: { extraProperties?: number; extraAiGenerations?: number }
 }
 
 function adminEmailSet() {
@@ -27,25 +31,22 @@ function fmtDate(d: Date | null) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-type SortKey = 'email' | 'uid' | 'isAdmin' | 'propertyCount' | 'visits' | 'aiGenerations' | 'lastVisit'
+type SortKey = 'email' | 'uid' | 'isAdmin' | 'plan' | 'propertyCount' | 'visits' | 'aiGenerations' | 'lastVisit'
 type SortDir = 'asc' | 'desc'
 type AdminFilter = 'all' | 'admin' | 'non-admin'
 
-const ALL_COLS = ['email', 'uid', 'isAdmin', 'propertyCount', 'visits', 'aiGenerations', 'lastVisit'] as const
+const ALL_COLS = ['email', 'uid', 'isAdmin', 'plan', 'propertyCount', 'visits', 'aiGenerations', 'lastVisit'] as const
 type ColKey = typeof ALL_COLS[number]
 const COL_LABELS: Record<ColKey, string> = {
-  email: 'Email',
-  uid: 'User ID',
-  isAdmin: 'Admin',
-  propertyCount: 'Properties',
-  visits: 'Visits',
-  aiGenerations: 'AI Gen',
-  lastVisit: 'Last Visit',
+  email: 'Email', uid: 'User ID', isAdmin: 'Admin', plan: 'Plan',
+  propertyCount: 'Properties', visits: 'Visits', aiGenerations: 'AI Gen', lastVisit: 'Last Visit',
 }
 const COL_ALIGN: Record<ColKey, 'left' | 'right' | 'center'> = {
-  email: 'left', uid: 'left', isAdmin: 'center', propertyCount: 'right',
-  visits: 'right', aiGenerations: 'right', lastVisit: 'right',
+  email: 'left', uid: 'left', isAdmin: 'center', plan: 'left',
+  propertyCount: 'right', visits: 'right', aiGenerations: 'right', lastVisit: 'right',
 }
+
+const PLAN_IDS = Object.keys(PLANS) as PlanId[]
 
 const IconSearch = () => (
   <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -65,6 +66,155 @@ const IconEye = ({ visible }: { visible: boolean }) => visible ? (
 ) : (
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M7.58 7.58a2.003 2.003 0 002.84 2.84M13.36 13.36C12.12 14.27 10.62 14.78 9 14.75c-5.25 0-7.5-5.25-7.5-5.25a13.16 13.16 0 013.64-4.11m2.91-1.16A5.7 5.7 0 019 4c5.25 0 7.5 5.25 7.5 5.25a13.24 13.24 0 01-1.47 2.15M1.5 1.5l15 15" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
 )
+const IconChevron = ({ open }: { open: boolean }) => (
+  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+    <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
+function UsageCell({ used, limit }: { used: number | null; limit: number }) {
+  const u = used ?? 0
+  const isUnlimited = limit === Infinity
+  const pct = isUnlimited ? 0 : Math.min(u / limit, 1)
+  const remaining = isUnlimited ? null : limit - u
+  const color = isUnlimited ? '#8b5cf6' : pct >= 1 ? '#ef4444' : pct >= 0.8 ? '#f59e0b' : '#22c55e'
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap' }}>
+        {u}
+        <span style={{ fontWeight: 400, color: 'var(--text3)' }}>
+          {isUnlimited ? ' / ∞' : ` / ${limit}`}
+        </span>
+      </div>
+      {!isUnlimited && (
+        <div style={{ width: 64, height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{ width: `${pct * 100}%`, height: '100%', background: color, borderRadius: 2, transition: 'width 0.2s' }} />
+        </div>
+      )}
+      {!isUnlimited && (
+        <div style={{ fontSize: 11, color: remaining === 0 ? '#ef4444' : 'var(--text3)', whiteSpace: 'nowrap' }}>
+          {remaining === 0 ? 'At limit' : `${remaining} left`}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PlanBadge({ planId }: { planId: PlanId }) {
+  const plan = PLANS[planId] ?? PLANS[DEFAULT_PLAN]
+  return (
+    <span style={{
+      display: 'inline-block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+      letterSpacing: '0.5px', color: plan.badgeColor,
+      background: `${plan.badgeColor}18`, borderRadius: 6, padding: '2px 8px', whiteSpace: 'nowrap',
+    }}>
+      {plan.label}
+    </span>
+  )
+}
+
+function GrantsTag({ grants }: { grants: UserRow['grants'] }) {
+  const parts: string[] = []
+  if (grants.extraProperties) parts.push(`+${grants.extraProperties} props`)
+  if (grants.extraAiGenerations) parts.push(`+${grants.extraAiGenerations} AI`)
+  if (!parts.length) return <span style={{ color: 'var(--text3)' }}>—</span>
+  return (
+    <span style={{ fontSize: 12, color: 'var(--text2)' }}>{parts.join(', ')}</span>
+  )
+}
+
+type OverrideState = {
+  plan: PlanId
+  extraProperties: string
+  extraAiGenerations: string
+}
+
+function OverrideRow({ u, colSpan, onSaved }: { u: UserRow; colSpan: number; onSaved: (uid: string, plan: PlanId, grants: UserRow['grants']) => void }) {
+  const [state, setState] = useState<OverrideState>({
+    plan: u.plan,
+    extraProperties: String(u.grants.extraProperties ?? 0),
+    extraAiGenerations: String(u.grants.extraAiGenerations ?? 0),
+  })
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  async function save() {
+    if (!firestore) return
+    setSaving(true)
+    const grants = {
+      extraProperties: parseInt(state.extraProperties) || 0,
+      extraAiGenerations: parseInt(state.extraAiGenerations) || 0,
+    }
+    await updateDoc(doc(firestore, 'users', u.uid), {
+      plan: state.plan,
+      'grants.extraProperties': grants.extraProperties,
+      'grants.extraAiGenerations': grants.extraAiGenerations,
+    })
+    setSaving(false)
+    setSaved(true)
+    onSaved(u.uid, state.plan, grants)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const inputStyle = {
+    width: 70, padding: '5px 8px', fontSize: 13, background: 'var(--surface2)',
+    border: '1px solid var(--border)', borderRadius: 8, fontFamily: 'inherit', textAlign: 'center' as const,
+  }
+
+  return (
+    <tr style={{ background: 'var(--surface2)' }}>
+      <td colSpan={colSpan} style={{ padding: '12px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap', paddingLeft: 45 }}>
+          {/* Plan selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Plan</span>
+            <select
+              value={state.plan}
+              onChange={e => setState(s => ({ ...s, plan: e.target.value as PlanId }))}
+              style={{ ...inputStyle, width: 'auto', textAlign: 'left', padding: '5px 10px', cursor: 'pointer' }}
+            >
+              {PLAN_IDS.map(id => (
+                <option key={id} value={id}>{PLANS[id].label}</option>
+              ))}
+            </select>
+          </div>
+          {/* Extra properties */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Extra props</span>
+            <input
+              type="number" min={0} max={999}
+              value={state.extraProperties}
+              onChange={e => setState(s => ({ ...s, extraProperties: e.target.value }))}
+              style={inputStyle}
+            />
+          </div>
+          {/* Extra AI */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Extra AI gen</span>
+            <input
+              type="number" min={0} max={999}
+              value={state.extraAiGenerations}
+              onChange={e => setState(s => ({ ...s, extraAiGenerations: e.target.value }))}
+              style={inputStyle}
+            />
+          </div>
+          <button
+            onClick={save}
+            disabled={saving}
+            style={{
+              fontSize: 12, fontWeight: 600, padding: '6px 16px', borderRadius: 8,
+              background: saved ? '#22c55e' : 'var(--accent-bg)', color: '#fff',
+              border: 'none', cursor: saving ? 'default' : 'pointer', transition: 'background 0.2s',
+            }}
+          >
+            {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+}
 
 export default function AdminPage() {
   const auth = useAuth() as unknown as { user: any; isAdmin: boolean } | null
@@ -77,14 +227,14 @@ export default function AdminPage() {
   const [adminFilter, setAdminFilter] = useState<AdminFilter>('all')
   const [filterOpen, setFilterOpen] = useState(false)
   const [colMenuOpen, setColMenuOpen] = useState(false)
+  const [expandedUid, setExpandedUid] = useState<string | null>(null)
   const [colVis, setColVis] = useState<Record<ColKey, boolean>>({
-    email: true, uid: true, isAdmin: true, propertyCount: true,
-    visits: true, aiGenerations: true, lastVisit: true,
+    email: true, uid: true, isAdmin: true, plan: true,
+    propertyCount: true, visits: true, aiGenerations: true, lastVisit: true,
   })
   const filterRef = useRef<HTMLDivElement>(null)
   const colMenuRef = useRef<HTMLDivElement>(null)
 
-  // Close dropdowns on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false)
@@ -115,6 +265,8 @@ export default function AdminPage() {
               aiGenerations: data.usage?.aiGenerations ?? null,
               isAdmin: data.role?.toLowerCase() === 'admin' || adminEmailSet().has(email),
               lastVisit: data.lastLoginAt?.toDate?.() ?? null,
+              plan: (data.plan as PlanId) ?? DEFAULT_PLAN,
+              grants: data.grants ?? {},
             }
           })
         )
@@ -134,6 +286,7 @@ export default function AdminPage() {
         case 'email': return mul * (a.email ?? '').localeCompare(b.email ?? '')
         case 'uid': return mul * a.uid.localeCompare(b.uid)
         case 'isAdmin': return mul * (Number(a.isAdmin) - Number(b.isAdmin))
+        case 'plan': return mul * a.plan.localeCompare(b.plan)
         case 'propertyCount': return mul * (a.propertyCount - b.propertyCount)
         case 'visits': return mul * ((a.visits ?? -1) - (b.visits ?? -1))
         case 'aiGenerations': return mul * ((a.aiGenerations ?? -1) - (b.aiGenerations ?? -1))
@@ -167,8 +320,12 @@ export default function AdminPage() {
   }
 
   function toggleCol(key: ColKey) {
-    if (key === 'email') return // always visible
+    if (key === 'email') return
     setColVis(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  function handleOverrideSaved(uid: string, plan: PlanId, grants: UserRow['grants']) {
+    setUsers(prev => prev.map(u => u.uid === uid ? { ...u, plan, grants } : u))
   }
 
   function SortArrow({ col }: { col: SortKey }) {
@@ -177,6 +334,7 @@ export default function AdminPage() {
   }
 
   const visibleCols = ALL_COLS.filter(k => colVis[k])
+  const totalCols = visibleCols.length + 1 // +1 for the expand chevron column
   const totalProperties = users.reduce((sum, u) => sum + u.propertyCount, 0)
   const filterActive = adminFilter !== 'all'
 
@@ -211,7 +369,6 @@ export default function AdminPage() {
       {/* Filter bar */}
       <div className="filter-bar mb24">
         <div className="filter-bar-top">
-          {/* Filter button */}
           <div ref={filterRef} style={{ position: 'relative' }}>
             <button
               className={`filter-bar-icon-btn filter-bar-filter-btn${filterActive ? ' active' : ''}`}
@@ -227,26 +384,13 @@ export default function AdminPage() {
                 boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 180,
                 animation: 'selectSlideIn 0.15s ease-out',
               }}>
-                <div style={{ padding: '8px 12px 6px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                  Role
-                </div>
+                <div style={{ padding: '8px 12px 6px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Role</div>
                 {(['all', 'admin', 'non-admin'] as AdminFilter[]).map(opt => (
-                  <button
-                    key={opt}
-                    className="ghost"
-                    onClick={() => { setAdminFilter(opt); setFilterOpen(false) }}
-                    style={{
-                      width: '100%', textAlign: 'left', padding: '8px 14px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      fontSize: 13, borderRadius: 0,
-                      color: adminFilter === opt ? 'var(--accent-bg)' : 'var(--text)',
-                      fontWeight: adminFilter === opt ? 600 : 400,
-                    }}
+                  <button key={opt} className="ghost" onClick={() => { setAdminFilter(opt); setFilterOpen(false) }}
+                    style={{ width: '100%', textAlign: 'left', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, borderRadius: 0, color: adminFilter === opt ? 'var(--accent-bg)' : 'var(--text)', fontWeight: adminFilter === opt ? 600 : 400 }}
                   >
                     {{ all: 'All users', admin: 'Admins only', 'non-admin': 'Non-admins' }[opt]}
-                    {adminFilter === opt && (
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--accent-bg)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 7l3 3 6-6"/></svg>
-                    )}
+                    {adminFilter === opt && <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--accent-bg)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 7l3 3 6-6"/></svg>}
                   </button>
                 ))}
                 <div style={{ height: 6 }} />
@@ -254,26 +398,14 @@ export default function AdminPage() {
             )}
           </div>
 
-          {/* Search */}
           <div className="filter-bar-search">
             <IconSearch />
-            <input
-              type="text"
-              placeholder="Search by name or email…"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
+            <input type="text" placeholder="Search by name or email…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
           </div>
 
-          {/* Column visibility */}
           <div className="filter-bar-actions">
             <div ref={colMenuRef} style={{ position: 'relative' }}>
-              <button
-                type="button"
-                className={`filter-bar-icon-btn${colMenuOpen ? ' active' : ''}`}
-                title="Column visibility"
-                onClick={() => setColMenuOpen(v => !v)}
-              >
+              <button type="button" className={`filter-bar-icon-btn${colMenuOpen ? ' active' : ''}`} title="Column visibility" onClick={() => setColMenuOpen(v => !v)}>
                 <IconColumns />
               </button>
               {colMenuOpen && (
@@ -283,30 +415,15 @@ export default function AdminPage() {
                   boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 200,
                   animation: 'selectSlideIn 0.15s ease-out',
                 }}>
-                  <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>
-                    Column visibility
-                  </div>
+                  <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>Column visibility</div>
                   {ALL_COLS.map(key => {
                     const on = colVis[key]
                     const locked = key === 'email'
                     return (
-                      <div
-                        key={key}
-                        style={{ display: 'flex', alignItems: 'center', padding: '9px 14px', gap: 10 }}
-                      >
-                        <span style={{ flex: 1, fontSize: 13, color: locked ? 'var(--text3)' : 'var(--text)', fontWeight: locked ? 400 : 500 }}>
-                          {COL_LABELS[key]}
-                        </span>
-                        {locked ? (
-                          <span style={{ fontSize: 11, color: 'var(--text3)' }}>Always on</span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="ghost"
-                            style={{ padding: 4, lineHeight: 0 }}
-                            title={on ? 'Hide column' : 'Show column'}
-                            onClick={() => toggleCol(key)}
-                          >
+                      <div key={key} style={{ display: 'flex', alignItems: 'center', padding: '9px 14px', gap: 10 }}>
+                        <span style={{ flex: 1, fontSize: 13, color: locked ? 'var(--text3)' : 'var(--text)', fontWeight: locked ? 400 : 500 }}>{COL_LABELS[key]}</span>
+                        {locked ? <span style={{ fontSize: 11, color: 'var(--text3)' }}>Always on</span> : (
+                          <button type="button" className="ghost" style={{ padding: 4, lineHeight: 0 }} title={on ? 'Hide' : 'Show'} onClick={() => toggleCol(key)}>
                             <IconEye visible={on} />
                           </button>
                         )}
@@ -323,15 +440,15 @@ export default function AdminPage() {
 
       {/* User table */}
       <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', minWidth: 500, borderCollapse: 'collapse', fontSize: 14 }}>
+        <div className="prop-table-scroll">
+          <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface2)' }}>
+                {/* Expand chevron column — sticky */}
+                <th style={{ width: 36, padding: '12px 8px 12px 16px', position: 'sticky', left: 0, zIndex: 3, background: 'var(--surface2)' }} />
                 {visibleCols.map(key => (
-                  <th
-                    key={key}
-                    onClick={() => handleSort(key as SortKey)}
-                    style={{ padding: '12px 20px', textAlign: COL_ALIGN[key], fontSize: 11, fontWeight: 600, color: sortKey === key ? 'var(--text2)' : 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.7px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                  <th key={key} onClick={() => handleSort(key as SortKey)}
+                    style={{ padding: '12px 20px', textAlign: COL_ALIGN[key], fontSize: 11, fontWeight: 600, color: sortKey === key ? 'var(--text2)' : 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.7px', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', ...(key === 'email' ? { position: 'sticky', left: 36, zIndex: 3, background: 'var(--surface2)', boxShadow: '4px 0 8px -2px rgba(0,0,0,0.06)' } : {}) }}
                   >
                     {COL_LABELS[key]}<SortArrow col={key as SortKey} />
                   </th>
@@ -340,62 +457,81 @@ export default function AdminPage() {
             </thead>
             <tbody>
               {fetching ? (
-                <tr>
-                  <td colSpan={visibleCols.length} style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text3)' }}>Loading…</td>
-                </tr>
+                <tr><td colSpan={totalCols} style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text3)' }}>Loading…</td></tr>
               ) : filteredUsers.length === 0 ? (
-                <tr>
-                  <td colSpan={visibleCols.length} style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text3)' }}>No users match your filters.</td>
-                </tr>
-              ) : filteredUsers.map((u, i) => (
-                <tr
-                  key={u.uid}
-                  style={{ borderBottom: i < filteredUsers.length - 1 ? '1px solid var(--border)' : 'none' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface2)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = '')}
-                >
-                  {visibleCols.includes('email') && (
-                    <td style={{ padding: '14px 20px' }}>
-                      <div style={{ fontWeight: 500, color: 'var(--text)' }}>{u.email ?? '—'}</div>
-                      {u.displayName && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{u.displayName}</div>}
+                <tr><td colSpan={totalCols} style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text3)' }}>No users match your filters.</td></tr>
+              ) : filteredUsers.flatMap((u, i) => {
+                const expanded = expandedUid === u.uid
+                const isLast = i === filteredUsers.length - 1
+                const rows = [
+                  <tr
+                    key={u.uid}
+                    style={{ borderBottom: (!expanded && !isLast) ? '1px solid var(--border)' : expanded ? 'none' : 'none', cursor: 'pointer' }}
+                    onClick={() => setExpandedUid(expanded ? null : u.uid)}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface2)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = '')}
+                  >
+                    <td
+                      style={{ padding: '14px 8px 14px 16px', color: 'var(--text3)', position: 'sticky', left: 0, zIndex: 2, background: 'var(--surface)' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface2)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface)')}
+                    >
+                      <IconChevron open={expanded} />
                     </td>
-                  )}
-                  {visibleCols.includes('uid') && (
-                    <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontSize: 11, color: 'var(--text3)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {u.uid}
-                    </td>
-                  )}
-                  {visibleCols.includes('isAdmin') && (
-                    <td style={{ padding: '14px 20px', textAlign: 'center' }}>
-                      {u.isAdmin ? (
-                        <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 600, color: 'var(--accent-hover, #2563eb)', background: 'var(--accent-subtle-bg, rgba(59,130,246,0.1))', borderRadius: 6, padding: '2px 8px', letterSpacing: '0.4px', textTransform: 'uppercase' }}>
-                          Admin
-                        </span>
-                      ) : '—'}
-                    </td>
-                  )}
-                  {visibleCols.includes('propertyCount') && (
-                    <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 600, color: 'var(--text)' }}>
-                      {u.propertyCount}
-                    </td>
-                  )}
-                  {visibleCols.includes('visits') && (
-                    <td style={{ padding: '14px 20px', textAlign: 'right', color: 'var(--text2)' }}>
-                      {u.visits ?? '—'}
-                    </td>
-                  )}
-                  {visibleCols.includes('aiGenerations') && (
-                    <td style={{ padding: '14px 20px', textAlign: 'right', color: 'var(--text2)' }}>
-                      {u.aiGenerations ?? '—'}
-                    </td>
-                  )}
-                  {visibleCols.includes('lastVisit') && (
-                    <td style={{ padding: '14px 20px', textAlign: 'right', color: 'var(--text2)', whiteSpace: 'nowrap' }}>
-                      {fmtDate(u.lastVisit)}
-                    </td>
-                  )}
-                </tr>
-              ))}
+                    {visibleCols.includes('email') && (
+                      <td
+                        style={{ padding: '14px 20px', position: 'sticky', left: 36, zIndex: 2, background: 'var(--surface)', boxShadow: '4px 0 8px -2px rgba(0,0,0,0.06)' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface2)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface)')}
+                      >
+                        <div style={{ fontWeight: 500, color: 'var(--text)' }}>{u.email ?? '—'}</div>
+                        {u.displayName && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{u.displayName}</div>}
+                      </td>
+                    )}
+                    {visibleCols.includes('uid') && (
+                      <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontSize: 11, color: 'var(--text3)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.uid}</td>
+                    )}
+                    {visibleCols.includes('isAdmin') && (
+                      <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                        {u.isAdmin ? (
+                          <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 600, color: 'var(--accent-hover, #2563eb)', background: 'var(--accent-subtle-bg, rgba(59,130,246,0.1))', borderRadius: 6, padding: '2px 8px', letterSpacing: '0.4px', textTransform: 'uppercase' }}>Admin</span>
+                        ) : '—'}
+                      </td>
+                    )}
+                    {visibleCols.includes('plan') && (
+                      <td style={{ padding: '14px 20px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <PlanBadge planId={u.plan} />
+                          {(u.grants.extraProperties || u.grants.extraAiGenerations) ? <GrantsTag grants={u.grants} /> : null}
+                        </div>
+                      </td>
+                    )}
+                    {visibleCols.includes('propertyCount') && (() => {
+                      const { propertyLimit } = getEffectiveLimits(u.plan, u.grants)
+                      return <td style={{ padding: '14px 20px', textAlign: 'right' }}><UsageCell used={u.propertyCount} limit={propertyLimit} /></td>
+                    })()}
+                    {visibleCols.includes('visits') && (
+                      <td style={{ padding: '14px 20px', textAlign: 'right', color: 'var(--text2)' }}>{u.visits ?? '—'}</td>
+                    )}
+                    {visibleCols.includes('aiGenerations') && (() => {
+                      const { aiLimit } = getEffectiveLimits(u.plan, u.grants)
+                      return <td style={{ padding: '14px 20px', textAlign: 'right' }}><UsageCell used={u.aiGenerations} limit={aiLimit} /></td>
+                    })()}
+                    {visibleCols.includes('lastVisit') && (
+                      <td style={{ padding: '14px 20px', textAlign: 'right', color: 'var(--text2)', whiteSpace: 'nowrap' }}>{fmtDate(u.lastVisit)}</td>
+                    )}
+                  </tr>,
+                ]
+                if (expanded) {
+                  rows.push(
+                    <OverrideRow key={`${u.uid}-override`} u={u} colSpan={totalCols} onSaved={handleOverrideSaved} />
+                  )
+                  if (!isLast) {
+                    rows.push(<tr key={`${u.uid}-sep`}><td colSpan={totalCols} style={{ padding: 0, borderBottom: '1px solid var(--border)' }} /></tr>)
+                  }
+                }
+                return rows
+              })}
             </tbody>
           </table>
         </div>

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import Map, { Marker } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { FactSheet, Property, PropertyContact, MortgageInfo } from '../../lib/types'
@@ -7,6 +7,8 @@ import { COUNTRIES } from '../../lib/countries'
 import { uploadPropertyPhoto, deletePropertyPhoto, uploadPropertyDocument, deletePropertyDocument } from '../../lib/photoStorage'
 import { PROPERTY_TYPES, getSpatialFields } from '../../lib/constants'
 import { ContactPickerModal } from '../modals/ContactPickerModal'
+import { useAppState } from '../../context/useAppState'
+import { useEntitlements } from '../../hooks/useEntitlements'
 
 const CARTO_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
 
@@ -72,6 +74,11 @@ function ReadOnlyField({ label, value }: { label: string; value: string | number
 }
 
 export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }: Props) {
+  const { properties } = useAppState()
+  const { canUploadOnProperty } = useEntitlements()
+  const propertyIndex = useMemo(() => properties.findIndex(p => p.id === prop.id), [properties, prop.id])
+  const uploadsAllowed = canUploadOnProperty(propertyIndex)
+
   const fs = prop.factSheet ?? EMPTY
   const [editingChars, setEditingChars] = useState(false)
   const [editingLocation, setEditingLocation] = useState(false)
@@ -218,7 +225,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
   const fileRef = useRef<HTMLInputElement>(null)
 
   const addPhotos = async (files: FileList | null) => {
-    if (!files) return
+    if (!files || !uploadsAllowed) return
     setUploading(true)
     try {
       for (const file of Array.from(files)) {
@@ -293,7 +300,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
   }, [])
 
   const addDocuments = async (files: FileList | null) => {
-    if (!files) return
+    if (!files || !uploadsAllowed) return
     setUploadingDoc(true)
     try {
       for (const file of Array.from(files)) {
@@ -367,8 +374,8 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
                 <a className="fs-photo-dl" href={photos[activePhoto] ?? photos[0]} download={`photo-${activePhoto + 1}.jpg`} title="Download photo">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 </a>
-                <button type="button" className="fs-photo-add" onClick={() => fileRef.current?.click()} disabled={uploading}>
-                  {uploading ? 'Uploading…' : '+ Add photo'}
+                <button type="button" className="fs-photo-add" onClick={() => uploadsAllowed && fileRef.current?.click()} disabled={uploading || !uploadsAllowed} title={!uploadsAllowed ? 'Upgrade to upload photos on this property' : undefined}>
+                  {uploading ? 'Uploading…' : !uploadsAllowed ? '🔒 Upgrade to upload' : '+ Add photo'}
                 </button>
               </div>
               <div className="fs-photo-strip">
@@ -383,20 +390,31 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
                     <div className="fs-thumb-shimmer" />
                   </div>
                 )}
-                <button type="button" className="fs-thumb-add" onClick={() => fileRef.current?.click()}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
-                </button>
+                {uploadsAllowed && (
+                  <button type="button" className="fs-thumb-add" onClick={() => fileRef.current?.click()}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                  </button>
+                )}
               </div>
             </>
           ) : (
-            <div className="fs-photo-empty" onClick={() => !uploading && fileRef.current?.click()}>
+            <div className="fs-photo-empty" onClick={() => uploadsAllowed && !uploading && fileRef.current?.click()} style={{ cursor: uploadsAllowed ? 'pointer' : 'default' }}>
               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#c4c9d4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2"/>
                 <circle cx="8.5" cy="8.5" r="1.5"/>
                 <path d="M21 15l-5-5L5 21"/>
               </svg>
-              <div style={{ fontSize: 14, color: '#6b7280', marginTop: 8 }}>Upload main photo</div>
-              <div style={{ fontSize: 12, color: '#9ca3af' }}>JPEG or PNG</div>
+              {uploadsAllowed ? (
+                <>
+                  <div style={{ fontSize: 14, color: '#6b7280', marginTop: 8 }}>Upload main photo</div>
+                  <div style={{ fontSize: 12, color: '#9ca3af' }}>JPEG or PNG</div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 14, color: '#9ca3af', marginTop: 8 }}>Photo uploads locked</div>
+                  <div style={{ fontSize: 12, color: '#d1d5db' }}>Upgrade your plan to upload photos</div>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -848,21 +866,32 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
                     <div className="fs-thumb-shimmer" />
                   </div>
                 )}
-                <button type="button" className="fs-thumb-add" onClick={() => docFileRef.current?.click()}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
-                </button>
+                {uploadsAllowed && (
+                  <button type="button" className="fs-thumb-add" onClick={() => docFileRef.current?.click()}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                  </button>
+                )}
               </div>
             </>
           ) : (
-            <div className="fs-doc-empty" onClick={() => !uploadingDoc && docFileRef.current?.click()}>
+            <div className="fs-doc-empty" onClick={() => uploadsAllowed && !uploadingDoc && docFileRef.current?.click()} style={{ cursor: uploadsAllowed ? 'pointer' : 'default' }}>
               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#c4c9d4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
                 <polyline points="14 2 14 8 20 8"/>
                 <line x1="16" y1="13" x2="8" y2="13"/>
                 <line x1="16" y1="17" x2="8" y2="17"/>
               </svg>
-              <div style={{ fontSize: 14, color: '#6b7280', marginTop: 8 }}>Upload documents</div>
-              <div style={{ fontSize: 12, color: '#9ca3af' }}>Floor plans, maps, blueprints — JPEG, PNG or PDF</div>
+              {uploadsAllowed ? (
+                <>
+                  <div style={{ fontSize: 14, color: '#6b7280', marginTop: 8 }}>Upload documents</div>
+                  <div style={{ fontSize: 12, color: '#9ca3af' }}>Floor plans, maps, blueprints — JPEG, PNG or PDF</div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 14, color: '#9ca3af', marginTop: 8 }}>Document uploads locked</div>
+                  <div style={{ fontSize: 12, color: '#d1d5db' }}>Upgrade your plan to upload documents</div>
+                </>
+              )}
             </div>
           )}
         </div>
