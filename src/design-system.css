@@ -2287,6 +2287,14 @@
   }
 
   /* ── Contacts page ── */
+  .contacts-page {
+    padding: 28px;
+    flex: 1;
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+    box-sizing: border-box;
+  }
   .contacts-filter-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .filter-search-wrap { position: relative; display: flex; align-items: center; min-width: 220px; }
   .filter-search-input {
@@ -2304,6 +2312,7 @@
   .contacts-filter-select:focus { border-color: var(--accent-bg); }
 
   @media (max-width: 768px) {
+    .contacts-page { padding: 16px; }
     .contacts-filter-bar { flex-direction: column; align-items: stretch; }
     .filter-search-wrap { min-width: 0; }
     .col-bank, .col-acct { display: none; }

@@ -74,15 +74,6 @@ export default function AuthHeader() {
             <path d="M78.001 30.3232H65.623C65.5666 22.9727 59.5914 17.0313 52.2275 17.0312C44.8636 17.0312 38.8884 22.9726 38.832 30.3232H24.332V7H78.001V30.3232Z" fill="#6D2F20"/>
           </svg>
         </a>
-        {user && appState && (
-          <button
-            type="button"
-            className={`header-nav-link${appState.selectedId === 'contacts' ? ' active' : ''}`}
-            onClick={() => appState.setSelectedId('contacts')}
-          >
-            Contacts
-          </button>
-        )}
       </div>
       {user && (
         <div className="header-right" ref={menuRef}>
@@ -90,6 +81,15 @@ export default function AuthHeader() {
             <Link to="/admin" className="admin-header-link" title="Admin console">
               Admin
             </Link>
+          )}
+          {appState && (
+            <button
+              type="button"
+              className={`header-nav-link${appState.selectedId === 'contacts' ? ' active' : ''}`}
+              onClick={() => appState.setSelectedId('contacts')}
+            >
+              Contacts
+            </button>
           )}
           <div className="header-account-wrap">
             <button

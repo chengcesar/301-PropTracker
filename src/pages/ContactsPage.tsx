@@ -6,12 +6,131 @@ const CONTACT_ROLES = ['Owner', 'Property Manager', 'Building Manager', 'Broker'
 
 type FlatContact = PropertyContact & { propertyId: number; propertyName: string }
 
+type ContactAssignment = {
+  propertyId: number
+  propertyName: string
+  sourceContactId: number
+  role: string
+  phone: string
+  email: string
+  bankInstitution?: string
+  accountDetails?: string
+  name: string
+}
+
+type MergedContact = {
+  mergeKey: string
+  displayName: string
+  roles: string[]
+  assignments: ContactAssignment[]
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase()
+}
+
+function digitsOnly(s: string): string {
+  return s.replace(/\D/g, '')
+}
+
+function normalizeToken(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/** Same person across properties: email, else phone digits, else name+role (weak). */
+function mergeKeyFor(row: FlatContact): string {
+  const em = row.email?.trim()
+  if (em) return `e:${normalizeEmail(em)}`
+  const ph = digitsOnly(row.phone || '')
+  if (ph.length > 0) return `p:${ph}`
+  return `n:${normalizeToken(row.name)}|r:${normalizeToken(row.role)}`
+}
+
+function toAssignment(row: FlatContact): ContactAssignment {
+  return {
+    propertyId: row.propertyId,
+    propertyName: row.propertyName,
+    sourceContactId: row.id,
+    role: row.role,
+    phone: row.phone,
+    email: row.email,
+    bankInstitution: row.bankInstitution,
+    accountDetails: row.accountDetails,
+    name: row.name,
+  }
+}
+
+function mergeContacts(flat: FlatContact[]): MergedContact[] {
+  const map = new Map<string, MergedContact>()
+  for (const row of flat) {
+    const key = mergeKeyFor(row)
+    const assignment = toAssignment(row)
+    const existing = map.get(key)
+    if (!existing) {
+      map.set(key, {
+        mergeKey: key,
+        displayName: row.name.trim(),
+        roles: [],
+        assignments: [assignment],
+      })
+    } else {
+      existing.assignments.push(assignment)
+      const t = row.name.trim()
+      if (t.length > existing.displayName.length) existing.displayName = t
+    }
+  }
+  const list = [...map.values()]
+  for (const m of list) {
+    m.assignments.sort((a, b) => a.propertyName.localeCompare(b.propertyName, undefined, { sensitivity: 'base' }))
+    m.roles = [...new Set(m.assignments.map((a) => a.role))].sort()
+  }
+  list.sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' }))
+  return list
+}
+
+function distinctNonEmpty(values: (string | undefined)[]): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const v of values) {
+    const t = (v ?? '').trim()
+    if (!t || seen.has(t)) continue
+    seen.add(t)
+    out.push(t)
+  }
+  return out
+}
+
+function formatMergedField(values: (string | undefined)[]): string {
+  const d = distinctNonEmpty(values)
+  if (d.length === 0) return '—'
+  if (d.length === 1) return d[0]!
+  return `${d[0]!} (+${d.length - 1})`
+}
+
+function mergedMatchesFilters(m: MergedContact, query: string, roleFilter: string, propFilter: string): boolean {
+  if (roleFilter !== 'All' && !m.assignments.some((a) => a.role === roleFilter)) return false
+  if (propFilter !== 'All' && !m.assignments.some((a) => a.propertyName === propFilter)) return false
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  if (m.displayName.toLowerCase().includes(q)) return true
+  if (m.roles.some((r) => r.toLowerCase().includes(q))) return true
+  return m.assignments.some((a) =>
+    a.propertyName.toLowerCase().includes(q) ||
+    a.name.toLowerCase().includes(q) ||
+    a.role.toLowerCase().includes(q) ||
+    a.email.toLowerCase().includes(q) ||
+    (a.phone && a.phone.toLowerCase().includes(q)) ||
+    (a.bankInstitution && a.bankInstitution.toLowerCase().includes(q)) ||
+    (a.accountDetails && a.accountDetails.toLowerCase().includes(q))
+  )
+}
+
 export function ContactsPage() {
   const { properties, setSelectedId } = useAppState()
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState('All')
   const [propFilter, setPropFilter] = useState('All')
-  const [previewContact, setPreviewContact] = useState<FlatContact | null>(null)
+  const [previewContact, setPreviewContact] = useState<MergedContact | null>(null)
 
   const allContacts = useMemo<FlatContact[]>(() =>
     properties.flatMap((prop) =>
@@ -24,43 +143,42 @@ export function ContactsPage() {
     [properties]
   )
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return allContacts.filter((row) => {
-      if (roleFilter !== 'All' && row.role !== roleFilter) return false
-      if (propFilter !== 'All' && row.propertyName !== propFilter) return false
-      if (!q) return true
-      return (
-        row.name.toLowerCase().includes(q) ||
-        row.role.toLowerCase().includes(q) ||
-        row.email.toLowerCase().includes(q) ||
-        row.propertyName.toLowerCase().includes(q) ||
-        (row.phone && row.phone.toLowerCase().includes(q))
-      )
-    })
-  }, [allContacts, query, roleFilter, propFilter])
+  const mergedContacts = useMemo(() => mergeContacts(allContacts), [allContacts])
 
-  const uniqueProperties = useMemo(() =>
-    Array.from(new Set(allContacts.map((c) => c.propertyName))).sort(),
+  const filtered = useMemo(
+    () => mergedContacts.filter((m) => mergedMatchesFilters(m, query, roleFilter, propFilter)),
+    [mergedContacts, query, roleFilter, propFilter]
+  )
+
+  const uniqueProperties = useMemo(
+    () => Array.from(new Set(allContacts.map((c) => c.propertyName))).sort(),
     [allContacts]
   )
 
   const roleCounts = useMemo(() => {
     const counts: Record<string, number> = {}
     for (const r of CONTACT_ROLES) counts[r] = 0
-    for (const c of allContacts) {
-      if (c.role in counts) counts[c.role]++
+    for (const m of mergedContacts) {
+      for (const r of CONTACT_ROLES) {
+        if (m.assignments.some((a) => a.role === r)) counts[r]++
+      }
     }
     return counts
-  }, [allContacts])
+  }, [mergedContacts])
+
+  const totalLinks = allContacts.length
 
   return (
-    <div className="main">
+    <div className="main contacts-page">
       <div className="page-header mb24">
         <div>
           <div className="page-title">Contacts</div>
           <div className="fs12 text3 mt4">
-            {allContacts.length} contact{allContacts.length !== 1 ? 's' : ''} across {properties.length} propert{properties.length !== 1 ? 'ies' : 'y'}
+            {mergedContacts.length} contact{mergedContacts.length !== 1 ? 's' : ''}
+            {totalLinks !== mergedContacts.length && (
+              <> · {totalLinks} property link{totalLinks !== 1 ? 's' : ''}</>
+            )}
+            {' '}across {properties.length} propert{properties.length !== 1 ? 'ies' : 'y'}
           </div>
         </div>
       </div>
@@ -85,7 +203,7 @@ export function ContactsPage() {
           onChange={(e) => setRoleFilter(e.target.value)}
           className="contacts-filter-select"
         >
-          <option value="All">All roles ({allContacts.length})</option>
+          <option value="All">All roles ({mergedContacts.length})</option>
           {CONTACT_ROLES.map((r) => <option key={r} value={r}>{r} ({roleCounts[r] ?? 0})</option>)}
         </select>
         <select
@@ -118,7 +236,7 @@ export function ContactsPage() {
                 <th style={{ textAlign: 'left' }}>Email</th>
                 <th className="col-bank" style={{ textAlign: 'left' }}>Bank Institution</th>
                 <th className="col-acct" style={{ textAlign: 'left' }}>Account Details</th>
-                <th style={{ textAlign: 'left' }}>Property</th>
+                <th style={{ textAlign: 'left' }}>Properties</th>
               </tr>
             </thead>
             <tbody>
@@ -130,27 +248,38 @@ export function ContactsPage() {
                 </tr>
               ) : filtered.map((row) => (
                 <tr
-                  key={`${row.propertyId}-${row.id}`}
+                  key={row.mergeKey}
                   style={{ cursor: 'pointer' }}
                   onClick={() => setPreviewContact(row)}
                 >
-                  <td style={{ textAlign: 'left', fontWeight: 500 }}>{row.name}</td>
+                  <td style={{ textAlign: 'left', fontWeight: 500 }}>{row.displayName}</td>
                   <td style={{ textAlign: 'left' }}>
-                    <span className="badge rented">{row.role}</span>
+                    {row.roles.length === 1 ? (
+                      <span className="badge rented">{row.roles[0]}</span>
+                    ) : (
+                      <span className="badge rented" title={row.roles.join(', ')}>
+                        Multiple roles ({row.roles.length})
+                      </span>
+                    )}
                   </td>
-                  <td style={{ textAlign: 'left', fontSize: 13 }}>{row.phone || '—'}</td>
-                  <td style={{ textAlign: 'left', fontSize: 13 }}>{row.email || '—'}</td>
-                  <td className="col-bank" style={{ textAlign: 'left', fontSize: 13 }}>{row.bankInstitution || '—'}</td>
-                  <td className="col-acct" style={{ textAlign: 'left', fontSize: 13 }}>{row.accountDetails || '—'}</td>
+                  <td style={{ textAlign: 'left', fontSize: 13 }}>{formatMergedField(row.assignments.map((a) => a.phone))}</td>
+                  <td style={{ textAlign: 'left', fontSize: 13 }}>{formatMergedField(row.assignments.map((a) => a.email))}</td>
+                  <td className="col-bank" style={{ textAlign: 'left', fontSize: 13 }}>{formatMergedField(row.assignments.map((a) => a.bankInstitution))}</td>
+                  <td className="col-acct" style={{ textAlign: 'left', fontSize: 13 }}>{formatMergedField(row.assignments.map((a) => a.accountDetails))}</td>
                   <td style={{ textAlign: 'left' }}>
-                    <button
-                      type="button"
-                      className="ghost"
-                      style={{ fontSize: 12, padding: '3px 10px' }}
-                      onClick={(e) => { e.stopPropagation(); setSelectedId(row.propertyId) }}
-                    >
-                      {row.propertyName}
-                    </button>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {row.assignments.map((a) => (
+                        <button
+                          key={`${a.propertyId}-${a.sourceContactId}`}
+                          type="button"
+                          className="ghost"
+                          style={{ fontSize: 12, padding: '3px 10px' }}
+                          onClick={(e) => { e.stopPropagation(); setSelectedId(a.propertyId) }}
+                        >
+                          {a.propertyName}
+                        </button>
+                      ))}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -160,37 +289,120 @@ export function ContactsPage() {
       )}
 
       {previewContact && (
-        <ContactPreviewModal contact={previewContact} onClose={() => setPreviewContact(null)} onGoToProperty={() => { setSelectedId(previewContact.propertyId); setPreviewContact(null) }} />
+        <ContactPreviewModal
+          contact={previewContact}
+          onClose={() => setPreviewContact(null)}
+          onOpenProperty={(id) => { setSelectedId(id); setPreviewContact(null) }}
+        />
       )}
     </div>
   )
 }
 
-function ContactPreviewModal({ contact, onClose, onGoToProperty }: { contact: FlatContact; onClose: () => void; onGoToProperty: () => void }) {
+function ContactPreviewModal({
+  contact,
+  onClose,
+  onOpenProperty,
+}: {
+  contact: MergedContact
+  onClose: () => void
+  onOpenProperty: (propertyId: number) => void
+}) {
+  const phones = distinctNonEmpty(contact.assignments.map((a) => a.phone))
+  const emails = distinctNonEmpty(contact.assignments.map((a) => a.email))
+  const banks = distinctNonEmpty(contact.assignments.map((a) => a.bankInstitution))
+  const accts = distinctNonEmpty(contact.assignments.map((a) => a.accountDetails))
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-sm" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
         <div className="modal-header">
           <div>
-            <div className="modal-title">{contact.name}</div>
-            <div className="modal-sub">{contact.propertyName}</div>
+            <div className="modal-title">{contact.displayName}</div>
+            <div className="modal-sub">
+              {contact.assignments.length} propert{contact.assignments.length !== 1 ? 'ies' : 'y'}
+            </div>
           </div>
           <button type="button" className="ghost" style={{ padding: '4px 8px', fontSize: 16 }} onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div className="flex gap8 align-center">
-              <span className="badge rented">{contact.role}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className="flex gap8 align-center flex-wrap">
+              {contact.roles.map((r) => (
+                <span key={r} className="badge rented">{r}</span>
+              ))}
             </div>
-            {contact.phone && <PreviewRow label="Phone" value={contact.phone} />}
-            {contact.email && <PreviewRow label="Email" value={contact.email} />}
-            {contact.bankInstitution && <PreviewRow label="Bank Institution" value={contact.bankInstitution} />}
-            {contact.accountDetails && <PreviewRow label="Account Details" value={contact.accountDetails} />}
+
+            {phones.length <= 1 && phones[0] && <PreviewRow label="Phone" value={phones[0]} />}
+            {phones.length > 1 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#6b7280' }}>Phone (varies by property)</span>
+                {contact.assignments.filter((a) => a.phone?.trim()).map((a) => (
+                  <div key={`${a.propertyId}-ph`} style={{ fontSize: 13, color: '#1a1d23' }}>
+                    <span style={{ color: '#6b7280' }}>{a.propertyName}:</span> {a.phone}
+                  </div>
+                ))}
+              </div>
+            )}
+            {phones.length === 0 && <PreviewRow label="Phone" value="—" />}
+
+            {emails.length <= 1 && emails[0] && <PreviewRow label="Email" value={emails[0]} />}
+            {emails.length > 1 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#6b7280' }}>Email (varies by property)</span>
+                {contact.assignments.filter((a) => a.email?.trim()).map((a) => (
+                  <div key={`${a.propertyId}-em`} style={{ fontSize: 13, color: '#1a1d23' }}>
+                    <span style={{ color: '#6b7280' }}>{a.propertyName}:</span> {a.email}
+                  </div>
+                ))}
+              </div>
+            )}
+            {emails.length === 0 && <PreviewRow label="Email" value="—" />}
+
+            {banks.length === 1 && <PreviewRow label="Bank Institution" value={banks[0]!} />}
+            {banks.length > 1 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#6b7280' }}>Bank (varies by property)</span>
+                {contact.assignments.filter((a) => a.bankInstitution?.trim()).map((a) => (
+                  <div key={`${a.propertyId}-bk`} style={{ fontSize: 13, color: '#1a1d23' }}>
+                    <span style={{ color: '#6b7280' }}>{a.propertyName}:</span> {a.bankInstitution}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {accts.length === 1 && <PreviewRow label="Account Details" value={accts[0]!} />}
+            {accts.length > 1 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#6b7280' }}>Account details (varies by property)</span>
+                {contact.assignments.filter((a) => a.accountDetails?.trim()).map((a) => (
+                  <div key={`${a.propertyId}-ac`} style={{ fontSize: 13, color: '#1a1d23' }}>
+                    <span style={{ color: '#6b7280' }}>{a.propertyName}:</span> {a.accountDetails}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#6b7280' }}>Open property</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                {contact.assignments.map((a) => (
+                  <button
+                    key={`${a.propertyId}-${a.sourceContactId}`}
+                    type="button"
+                    className="ghost"
+                    style={{ fontSize: 13, justifyContent: 'flex-start', textAlign: 'left' }}
+                    onClick={() => onOpenProperty(a.propertyId)}
+                  >
+                    {a.propertyName} →
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
         <div className="modal-footer">
           <button type="button" className="ghost" style={{ fontSize: 13 }} onClick={onClose}>Close</button>
-          <button type="button" className="primary" style={{ fontSize: 13 }} onClick={onGoToProperty}>Go to property →</button>
         </div>
       </div>
     </div>
