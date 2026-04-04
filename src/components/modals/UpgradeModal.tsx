@@ -108,7 +108,7 @@ export function UpgradeModal({ reason, onClose }: Props) {
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {UPGRADE_PLANS.map(([id, def]) => (
-              <PlanCard key={id} planId={id} def={def} />
+              <PlanCard key={id} def={def} />
             ))}
           </div>
         </div>

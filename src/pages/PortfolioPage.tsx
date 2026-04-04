@@ -172,7 +172,7 @@ function AIAnalysisToolContent({ allProperties, initialFilters, year, displayCur
   onStep: (s: 'ai' | 'sample') => void
   onBack: () => void
   onMaximize: () => void
-  onPaywall: () => void
+  onPaywall: () => boolean
 }) {
   const [modalFilters, setModalFilters] = useState<Record<string, string[]>>(() => {
     const out: Record<string, string[]> = {}
