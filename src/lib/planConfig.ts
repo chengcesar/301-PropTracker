@@ -40,6 +40,20 @@ export type PlanDefinition = {
   badgeColor: string
   /** Whether this plan is publicly selectable (false = internal/hidden) */
   public: boolean
+  /**
+   * Placeholder pricing shown in the upgrade modal.
+   * Wire to Stripe when payments are integrated.
+   */
+  pricing?: {
+    /** Monthly price in USD. null = contact sales */
+    monthly: number | null
+    /** Crossed-out original monthly price (for discount display) */
+    monthlyOriginal?: number
+    /** Annual total price in USD */
+    annual?: number
+    /** Label shown next to $0 price, e.g. "forever" */
+    freeLabel?: string
+  }
 }
 
 export const PLANS = {
@@ -70,6 +84,7 @@ export const PLANS = {
     uploadLimit: 5,         // ← only first 5 properties get image uploads
     badgeColor: '#6b7280',  // gray
     public: true,
+    pricing: { monthly: 0, freeLabel: 'forever' },
   },
 
   /**
@@ -83,6 +98,7 @@ export const PLANS = {
     uploadLimit: null,      // all properties
     badgeColor: '#3b82f6',  // blue
     public: true,
+    pricing: { monthly: 6.7, monthlyOriginal: 7.99, annual: 79.99 },
   },
 
   /**
@@ -97,6 +113,7 @@ export const PLANS = {
     uploadLimit: null,      // all properties
     badgeColor: '#0539FF',  // brand blue
     public: true,
+    pricing: { monthly: null },
   },
 } as const satisfies Record<string, PlanDefinition>
 

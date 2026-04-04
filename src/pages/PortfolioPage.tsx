@@ -721,7 +721,7 @@ const BUILT_IN_PRESETS: { id: string; label: string; cols: ColKey[] }[] = [
   {
     id: 'financial',
     label: 'Financial',
-    cols: ['owner', 'country', 'gpi', 'egi', 'egiPerM2', 'vacancyMoRate', 'opex', 'noi', 'noiPerM2', 'valuePerM2', 'capRate', 'capex', 'yieldOnCapex', 'payback', 'taxes', 'netCf', 'margin'],
+    cols: ['owner', 'country', 'gpi', 'egi', 'vacancyMoRate', 'opex', 'noi', 'capRate', 'capex', 'netCf'],
   },
   { id: 'details', label: 'Details', cols: ['owner', 'country', 'status', 'nonLeaseOcc', 'endDate', 'taxStatus', ...DETAIL_COLS] },
   { id: 'all', label: 'All', cols: [...COL_KEYS] },

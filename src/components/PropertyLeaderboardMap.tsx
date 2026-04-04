@@ -22,7 +22,16 @@ import { ACCENT_THEME_CHANGE_EVENT } from '../lib/accentTheme'
 import { getThemeAccentHoverRgb, getThemeAccentRgb } from '../lib/cssAccent'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
-type MetricKey = 'area' | 'rent' | 'monthlyIncome' | 'noi' | 'netCf' | 'estValue'
+type MetricKey =
+  | 'area'
+  | 'rent'
+  | 'monthlyIncome'
+  | 'noi'
+  | 'netCf'
+  | 'estValue'
+  | 'egiPerM2'
+  | 'noiPerM2'
+  | 'margin'
 
 interface MetricOption {
   key: MetricKey
@@ -36,6 +45,9 @@ const METRIC_OPTIONS: MetricOption[] = [
   { key: 'monthlyIncome', label: 'Monthly Income' },
   { key: 'noi', label: 'NOI' },
   { key: 'netCf', label: 'Net CF' },
+  { key: 'egiPerM2', label: '$/m²' },
+  { key: 'noiPerM2', label: 'NOI/m²' },
+  { key: 'margin', label: 'Margin' },
 ]
 
 const CARTO_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
@@ -53,6 +65,12 @@ interface PropertyWithMetrics {
   noi: number
   netCf: number
   estValue: number
+  /** EGI ÷ area (matches portfolio $/m²). */
+  egiPerM2: number
+  /** NOI ÷ area. */
+  noiPerM2: number
+  /** Net CF ÷ GPI × 100 (same as portfolio margin column). */
+  margin: number
   annual: AnnualResult
   monthsLeft: number | null
   vacant: boolean
@@ -89,6 +107,7 @@ function monthsUntil(dateStr: string): number {
 
 function formatMetricValue(key: MetricKey, value: number, displayCurrency: CurrencyCode): string {
   if (key === 'area') return `${value.toLocaleString()} m²`
+  if (key === 'margin') return `${Math.round(value)}%`
   return fmtCurrencyM(value, displayCurrency)
 }
 
@@ -214,6 +233,11 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
         const ac = activeContract(p)
         const rentNative = contract?.monthlyRent ?? 0
         const estNative = estimatedPropertyValueAtYear(p, new Date().getFullYear()).value ?? 0
+        const areaM2 = p.area || 0
+        const gpiAnnual = annual?.gpi ?? 0
+        const egiAnnual = annual?.egi ?? 0
+        const noiAnnual = annual?.noi ?? 0
+        const netCfAnnual = annual?.netCf ?? 0
         return {
           id: p.id,
           name: p.name,
@@ -221,12 +245,15 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
           address: p.address,
           latitude: p.latitude!,
           longitude: p.longitude!,
-          area: p.area || 0,
+          area: areaM2,
           rent: convert(rentNative, p.currency, displayCurrency, fxRates),
-          monthlyIncome: (annual?.egi ?? 0) / 12,
-          noi: annual?.noi ?? 0,
-          netCf: annual?.netCf ?? 0,
+          monthlyIncome: egiAnnual / 12,
+          noi: noiAnnual,
+          netCf: netCfAnnual,
           estValue: convert(estNative, p.currency, displayCurrency, fxRates),
+          egiPerM2: areaM2 > 0 ? egiAnnual / areaM2 : 0,
+          noiPerM2: areaM2 > 0 && Number.isFinite(noiAnnual) ? noiAnnual / areaM2 : 0,
+          margin: gpiAnnual > 0 ? (netCfAnnual / gpiAnnual) * 100 : 0,
           annual: annual ?? { gpi: 0, vacancy: 0, egi: 0, totalOpex: 0, noi: 0, totalCapex: 0, taxes: 0, netCf: 0 },
           monthsLeft: ac?.endDate ? monthsUntil(ac.endDate) : null,
           vacant: !ac,

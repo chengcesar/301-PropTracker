@@ -2317,3 +2317,7 @@
     .filter-search-wrap { min-width: 0; }
     .col-bank, .col-acct { display: none; }
   }
+
+  @media (max-width: 768px) {
+    .upgrade-plans-grid { grid-template-columns: 1fr !important; }
+  }
