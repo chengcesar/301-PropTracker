@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Property } from '../lib/types'
 import { AppStateContext, type Selection } from './app-state-context'
-import { subscribeProperties, saveProperty, removePropertyDoc } from '../services/propertyService'
+import {
+  subscribeProperties,
+  saveProperty,
+  removePropertyDoc,
+  getPortfolioPrefs,
+  setPortfolioSkipAutoSeed,
+} from '../services/propertyService'
 import { createSeedProperties } from '../lib/seedProperties'
 
 function selectionFromHash(): Selection {
@@ -30,25 +36,43 @@ export function AppStateProvider({ uid, children }: { uid: string; children: Rea
     window.history.pushState(null, '', hashFromSelection(id))
   }, [])
 
-  // Subscribe to Firestore real-time updates; seed sample data for new users
+  // Subscribe to Firestore; seed sample data only for brand-new accounts (not after user clears all properties).
   const seeded = useRef(false)
+  const skipAutoSeedRef = useRef(false)
   useEffect(() => {
     snapshotLoaded.current = false
     seeded.current = false
+    skipAutoSeedRef.current = false
     setLoading(true)
-    const unsub = subscribeProperties(uid, (props) => {
-      if (props.length === 0 && !seeded.current) {
-        seeded.current = true
-        const samples = createSeedProperties()
-        samples.forEach((p) => saveProperty(uid, p))
-        // Firestore listener will fire again with the saved data
-        return
+    let unsub: (() => void) | undefined
+    let cancelled = false
+
+    ;(async () => {
+      try {
+        const prefs = await getPortfolioPrefs(uid)
+        if (cancelled) return
+        skipAutoSeedRef.current = prefs.skipAutoSeed
+      } catch {
+        /* getPortfolioPrefs already defaults; keep ref false */
       }
-      setProperties(props)
-      snapshotLoaded.current = true
-      setLoading(false)
-    })
-    return unsub
+      if (cancelled) return
+      unsub = subscribeProperties(uid, (props) => {
+        if (props.length === 0 && !seeded.current && !skipAutoSeedRef.current) {
+          seeded.current = true
+          const samples = createSeedProperties()
+          samples.forEach((p) => saveProperty(uid, p))
+          return
+        }
+        setProperties(props)
+        snapshotLoaded.current = true
+        setLoading(false)
+      })
+    })()
+
+    return () => {
+      cancelled = true
+      unsub?.()
+    }
   }, [uid])
 
   // Hash-based navigation
@@ -76,13 +100,22 @@ export function AppStateProvider({ uid, children }: { uid: string; children: Rea
   }, [uid])
 
   const addProperty = useCallback((p: Property) => {
+    skipAutoSeedRef.current = false
+    void setPortfolioSkipAutoSeed(uid, false)
     setProperties((ps) => [...ps, p])
     setSelectedId(p.id)
     saveProperty(uid, p)
   }, [uid, setSelectedId])
 
   const removeProperty = useCallback((id: number) => {
-    setProperties((ps) => ps.filter((p) => p.id !== id))
+    setProperties((ps) => {
+      const next = ps.filter((p) => p.id !== id)
+      if (next.length === 0) {
+        skipAutoSeedRef.current = true
+        void setPortfolioSkipAutoSeed(uid, true)
+      }
+      return next
+    })
     setSelectedIdRaw((cur) => (cur === id ? 'portfolio' : cur))
     removePropertyDoc(uid, id)
   }, [uid])

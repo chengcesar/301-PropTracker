@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   setDoc,
   deleteDoc,
@@ -15,6 +16,27 @@ function propertiesCol(uid: string) {
 
 function propertyDoc(uid: string, propertyId: number) {
   return doc(firestore!, 'users', uid, 'properties', String(propertyId))
+}
+
+/** Preferences for portfolio bootstrap (same user doc tree as properties). */
+function portfolioPrefsDoc(uid: string) {
+  return doc(firestore!, 'users', uid, 'settings', 'portfolioPrefs')
+}
+
+export async function getPortfolioPrefs(uid: string): Promise<{ skipAutoSeed: boolean }> {
+  try {
+    const snap = await getDoc(portfolioPrefsDoc(uid))
+    if (!snap.exists()) return { skipAutoSeed: false }
+    const d = snap.data() as { skipAutoSeed?: boolean }
+    return { skipAutoSeed: d.skipAutoSeed === true }
+  } catch {
+    return { skipAutoSeed: false }
+  }
+}
+
+/** When true, empty Firestore will not receive automatic sample properties (e.g. user cleared the portfolio). */
+export async function setPortfolioSkipAutoSeed(uid: string, skip: boolean): Promise<void> {
+  await setDoc(portfolioPrefsDoc(uid), { skipAutoSeed: skip }, { merge: true })
 }
 
 /**

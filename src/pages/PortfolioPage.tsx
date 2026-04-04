@@ -3194,6 +3194,37 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                 </tr>
               </thead>
               <tbody>
+                {properties.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={1 + colOrder.filter(k => colVis[k]).length + 1}
+                      style={{ verticalAlign: 'middle', borderBottom: 'none' }}
+                    >
+                      <div className="empty-state" style={{ padding: '32px 24px' }}>
+                        <div className="empty-title">Add your first property</div>
+                        <p style={{ fontSize: 13, margin: '8px 0 16px', color: 'var(--text3)' }}>
+                          Your portfolio is empty. Create a property to see it in this table.
+                        </p>
+                        <button type="button" className="primary" onClick={() => setAddPropertyOpen(true)}>
+                          <span className="hide-mobile">+ Add Property</span>
+                          <span className="show-mobile">+ Add</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : sortedProperties.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={1 + colOrder.filter(k => colVis[k]).length + 1}
+                      style={{ verticalAlign: 'middle', borderBottom: 'none' }}
+                    >
+                      <div className="empty-state" style={{ padding: '32px 24px' }}>
+                        <div className="empty-title">No properties match your search or filters.</div>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                <>
                 {sortedProperties.map((p) => {
                   const a = convertAnnual(calcAnnual(withYear(p)), p.currency, displayCurrency, fxRates)
                   const gpiRow = convert(projectedGpiAnnual(withYear(p)), p.currency, displayCurrency, fxRates)
@@ -3475,6 +3506,8 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
                     </tr>
                   )
                 })()}
+                </>
+                )}
               </tbody>
             </table>
           </div>
@@ -3499,7 +3532,19 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
               </div>
               <div className="todo-feed-list">
                 {sortedProperties.length === 0 ? (
-                  <div className="todo-feed-empty">No properties match your filters.</div>
+                  <div className="todo-feed-empty">
+                    {properties.length === 0 ? (
+                      <>
+                        <div className="empty-title" style={{ marginBottom: 8 }}>Add your first property</div>
+                        <button type="button" className="primary" onClick={() => setAddPropertyOpen(true)}>
+                          <span className="hide-mobile">+ Add Property</span>
+                          <span className="show-mobile">+ Add</span>
+                        </button>
+                      </>
+                    ) : (
+                      'No properties match your search or filters.'
+                    )}
+                  </div>
                 ) : sortedProperties.map((p) => {
                   const ac = activeContract(p)
                   return (
@@ -3715,7 +3760,17 @@ export function PortfolioPage({ properties, onSelectProperty }: Props) {
           <div className="portfolio-props-grid" role="list" aria-label="Properties">
             {sortedProperties.length === 0 ? (
               <div className="portfolio-props-grid-empty">
-                No properties match your search or filters.
+                {properties.length === 0 ? (
+                  <>
+                    <div className="empty-title" style={{ marginBottom: 8 }}>Add your first property</div>
+                    <button type="button" className="primary" onClick={() => setAddPropertyOpen(true)}>
+                      <span className="hide-mobile">+ Add Property</span>
+                      <span className="show-mobile">+ Add</span>
+                    </button>
+                  </>
+                ) : (
+                  'No properties match your search or filters.'
+                )}
               </div>
             ) : (
               sortedProperties.map((p) => (
