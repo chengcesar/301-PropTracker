@@ -32,7 +32,7 @@ const UPGRADE_PLANS = (Object.entries(PLANS) as [PlanId, typeof PLANS[PlanId]][]
     return aL - bL
   })
 
-function PlanCard({ planId, def }: { planId: PlanId; def: typeof PLANS[PlanId] }) {
+function PlanCard({ def }: { def: typeof PLANS[PlanId] }) {
   const propLabel = def.propertyLimit === null ? 'Unlimited' : `${def.propertyLimit} properties`
   const aiLabel = def.aiLimit === null ? 'Unlimited AI reports' : `${def.aiLimit} AI reports`
   const uploadLabel = def.uploadLimit === null ? 'Uploads on all properties' : `Uploads on first ${def.uploadLimit} properties`

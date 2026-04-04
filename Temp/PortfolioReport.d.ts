@@ -6,6 +6,7 @@ export interface PortfolioReportProps {
   year?: number
   displayCurrency?: string
   onBack?: () => void
+  onPaywall?: () => boolean
 }
 
 declare const PortfolioReport: FC<PortfolioReportProps>
