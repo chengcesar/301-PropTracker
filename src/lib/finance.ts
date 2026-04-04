@@ -141,6 +141,63 @@ export function contractForMonth(
   return found ?? null
 }
 
+/**
+ * The lease that covers `ref`’s calendar day (start ≤ ref ≤ end), non-draft.
+ * If several overlap (e.g. old row still spans today after a renewal), prefers
+ * `status === 'active'` so the progress / months-left strip matches the real tenancy.
+ */
+export function contractCoveringDate(contracts: Contract[], ref: Date): Contract | null {
+  const probe = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate(), 12, 0, 0, 0)
+  const covering: Contract[] = []
+  for (const c of contracts) {
+    if (c.status === 'draft') continue
+    const start = new Date(`${c.startDate}T12:00:00`)
+    const end = new Date(`${c.endDate}T12:00:00`)
+    if (probe >= start && probe <= end) covering.push(c)
+  }
+  if (covering.length === 0) return null
+  const active = covering.find((c) => c.status === 'active')
+  return active ?? covering[0]
+}
+
+/**
+ * Earliest non-draft lease that starts strictly after `current` ends (renewal signed but
+ * still Archived until go-live does not need Reactivate for portfolio UI to see it).
+ */
+export function negotiatedFollowOnAfterContract(contracts: Contract[], current: Contract): Contract | null {
+  const currentEnd = new Date(`${current.endDate}T12:00:00`)
+  let best: Contract | null = null
+  let bestStart = Infinity
+  for (const c of contracts) {
+    if (c.status === 'draft') continue
+    if (c.id === current.id) continue
+    const start = new Date(`${c.startDate}T12:00:00`)
+    if (start.getTime() <= currentEnd.getTime()) continue
+    if (start.getTime() < bestStart) {
+      bestStart = start.getTime()
+      best = c
+    }
+  }
+  return best
+}
+
+/** Earliest non-draft lease whose start is still after `ref`’s calendar day (gap / pre-move-in). */
+export function nextNegotiatedLeaseNotYetStarted(contracts: Contract[], ref: Date): Contract | null {
+  const probe = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate(), 12, 0, 0, 0)
+  let best: Contract | null = null
+  let bestStart = Infinity
+  for (const c of contracts) {
+    if (c.status === 'draft') continue
+    const start = new Date(`${c.startDate}T12:00:00`)
+    if (start.getTime() <= probe.getTime()) continue
+    if (start.getTime() < bestStart) {
+      bestStart = start.getTime()
+      best = c
+    }
+  }
+  return best
+}
+
 /** Fact Sheet value for GPI gap months; 0 if unset or invalid. */
 export function potentialMonthlyRentFromProp(prop: Property): number {
   const r = prop.factSheet?.potentialMonthlyRent

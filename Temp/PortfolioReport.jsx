@@ -11,6 +11,8 @@
 
 import { useState, useRef } from "react";
 import Anthropic from "@anthropic-ai/sdk";
+import { doc, updateDoc, increment } from "firebase/firestore";
+import { auth, firestore } from "../src/lib/firebase";
 
 // ─── normalise one property object ───────────────────────────────────────────
 function norm(p) {
@@ -57,6 +59,15 @@ const $   = (v, d=0) => v == null || isNaN(v) ? "—" : `$${Math.abs(v).toLocale
 const pct = (v, d=1) => v == null || isNaN(v) ? "—" : `${Number(v).toFixed(d)}%`;
 const n2  = (v, d=1) => v == null || isNaN(v) ? "—" : Number(v).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
 const clr = (v) => (v == null || isNaN(v)) ? "#6b7280" : v >= 0 ? "#0d9488" : "#b91c1c";
+
+/** ≥8% → High yield (8–10% band); 6–8% → Balanced; 4–6% → Stable; <4% → Low yield */
+const capRateYieldLabel = (cap) => {
+  if (cap == null || isNaN(cap)) return "—";
+  if (cap >= 8) return "High yield";
+  if (cap >= 6) return "Balanced";
+  if (cap >= 4) return "Stable";
+  return "Low yield";
+};
 
 const COLORS = ["#3b82f6","#1BC5BD","#f59e0b","#8b5cf6","#ec4899","#10b981","#f97316","#6366f1"];
 
@@ -206,6 +217,11 @@ Tone: direct, confident, professional. Think like a fund manager writing to a so
       const rawText = message.content.find(b => b.type === "text")?.text || "";
       localStorage.setItem(AI_TEXT_KEY, rawText);
       setText(rawText);
+      if (auth?.currentUser && firestore) {
+        updateDoc(doc(firestore, "users", auth.currentUser.uid), {
+          "usage.aiGenerations": increment(1),
+        }).catch(() => {});
+      }
     } catch { setErr("Could not load analysis. Please try again."); }
     setLoading(false);
   }
@@ -540,25 +556,38 @@ export default function PortfolioReport({ properties: rawProps = [], year, displ
         <div className="rpt-2col" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20}}>
           <div style={{background:"#f7f9fc",borderRadius:12,padding:15,border:"1px solid #e8ecf2"}}>
             <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.7px",color:"#9ca3af",marginBottom:10}}>Rent / m² Ranking</div>
-            {[...props].sort((a,b)=>b.rentM2-a.rentM2).map(p=>(
-              <div key={p.name} style={{marginBottom:8}}>
-                <div style={{display:"flex",justifyContent:"space-between",fontSize:10.5}}>
-                  <span style={{color:"#374151"}}>{p.name}</span>
-                  <span style={{fontWeight:700}}>${n2(p.rentM2)}/m²</span>
-                </div>
-                <HBar value={p.rentM2} max={Math.max(...props.map(p=>p.rentM2))} color={COLORS[props.indexOf(p)%COLORS.length]}/>
-              </div>
-            ))}
+            <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) max-content",columnGap:10,rowGap:3,alignItems:"baseline"}}>
+              {[...props].sort((a,b)=>b.rentM2-a.rentM2).flatMap(p=>(
+                [
+                  <span key={`${p.name}-lbl`} style={{fontSize:10.5,color:"#374151",minWidth:0}}>{p.name}</span>,
+                  <span key={`${p.name}-val`} style={{fontSize:10.5,fontWeight:700,whiteSpace:"nowrap",textAlign:"right",fontVariantNumeric:"tabular-nums"}}>
+                    ${n2(p.rentM2)}/m²/yr – ${n2(p.rentM2 / 12)}/m²/mth
+                  </span>,
+                  <div key={`${p.name}-bar`} style={{gridColumn:"1 / -1",marginBottom:8}}>
+                    <HBar value={p.rentM2} max={Math.max(...props.map(x=>x.rentM2))} color={COLORS[props.indexOf(p)%COLORS.length]}/>
+                  </div>,
+                ]
+              ))}
+            </div>
           </div>
           <div style={{background:"#f7f9fc",borderRadius:12,padding:15,border:"1px solid #e8ecf2"}}>
             <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.7px",color:"#9ca3af",marginBottom:10}}>Cap Rate Ranking</div>
-            {[...props].filter(p=>p.capRate!=null).sort((a,b)=>b.capRate-a.capRate).map((p,rank)=>(
-              <div key={p.name} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"1px solid #e8ecf2"}}>
-                <span style={{fontSize:10,fontWeight:700,color:rank===0?"#b45309":"#9ca3af",width:14}}>#{rank+1}</span>
-                <span style={{flex:1,fontSize:11,color:"#374151"}}>{p.name}</span>
-                <span style={{fontSize:12,fontWeight:700,color:clr(p.capRate)}}>{pct(p.capRate)}</span>
-              </div>
-            ))}
+            {(() => {
+              const capRows = [...props].filter(p=>p.capRate!=null).sort((a,b)=>b.capRate-a.capRate);
+              const lastIdx = capRows.length - 1;
+              const rowPad = { paddingTop: 5, paddingBottom: 5 };
+              const rowBorder = (rank) => (rank < lastIdx ? { borderBottom: "1px solid #e8ecf2" } : {});
+              return (
+                <div style={{display:"grid",gridTemplateColumns:"max-content minmax(0,1fr) max-content max-content",columnGap:10,alignItems:"center"}}>
+                  {capRows.flatMap((p,rank) => ([
+                    <span key={`${p.name}-rk`} style={{fontSize:10,fontWeight:700,color:rank===0?"#b45309":"#9ca3af",fontVariantNumeric:"tabular-nums",...rowPad,...rowBorder(rank)}}>#{rank+1}</span>,
+                    <span key={`${p.name}-nm`} style={{fontSize:11,color:"#374151",minWidth:0,...rowPad,...rowBorder(rank)}}>{p.name}</span>,
+                    <span key={`${p.name}-pct`} style={{fontSize:12,fontWeight:700,color:clr(p.capRate),textAlign:"right",whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",...rowPad,...rowBorder(rank)}}>{pct(p.capRate)}</span>,
+                    <span key={`${p.name}-yl`} style={{fontSize:10,fontWeight:600,color:"#6b7280",textAlign:"right",whiteSpace:"nowrap",...rowPad,...rowBorder(rank)}}>{capRateYieldLabel(p.capRate)}</span>,
+                  ]))}
+                </div>
+              );
+            })()}
           </div>
         </div>
 

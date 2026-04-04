@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import type { CapexItem, CapexStatus, Contract, Property } from '../lib/types'
-import { activeContract, calcAnnual, calcIrr, calcPortfolioAssetKpis, calcPortfolioProjectedGpiIn, calcPortfolioTotalsIn, contractForMonth, convertAnnual, estimatedPropertyValueAtYear, hasNonLeaseOccupant, nonLeaseOccupancyExportValue, nonLeaseOccupancyLabel, occupancyFilterBucket, projectedGpiAnnual, vacancyLossMonthCount } from '../lib/finance'
+import { activeContract, calcAnnual, calcIrr, calcPortfolioAssetKpis, calcPortfolioProjectedGpiIn, calcPortfolioTotalsIn, contractCoveringDate, contractForMonth, convertAnnual, estimatedPropertyValueAtYear, hasNonLeaseOccupant, negotiatedFollowOnAfterContract, nextNegotiatedLeaseNotYetStarted, nonLeaseOccupancyExportValue, nonLeaseOccupancyLabel, occupancyFilterBucket, projectedGpiAnnual, vacancyLossMonthCount } from '../lib/finance'
 import { fmtCurrencyM } from '../lib/format'
 import { type CurrencyCode, type FxRates, CURRENCIES, CURRENCY_LIST, convert, loadFxRates, saveFxRates, flagUrl } from '../lib/currency'
 import { useAppState } from '../context/useAppState'
@@ -487,23 +487,59 @@ function IconBuildingPlaceholder() {
   )
 }
 
-/** Elapsed share of active lease (0–1) + label aligned with portfolio table “months left”. */
-function gridCardContractProgress(p: Property): { pct: number; monthsLeftLabel: string } | null {
-  const ac = activeContract(p)
-  if (!ac) return null
-  const start = new Date(`${ac.startDate}T12:00:00`)
-  const end = new Date(`${ac.endDate}T12:00:00`)
+type GridCardLeaseStrip =
+  | { kind: 'current'; pct: number; monthsLeftLabel: string; hasNegotiatedFollowOn: boolean }
+  | { kind: 'upcoming'; startDate: string }
+
+/** Months-left copy for grid card: avoids “Expired” when end is later in the same calendar month. */
+function gridCardMonthsLeftLabel(end: Date, now: Date): string {
+  const endT = end.getTime()
+  const nowT = now.getTime()
+  if (endT < nowT) return 'Expired'
+  let months = (end.getFullYear() - now.getFullYear()) * 12 + end.getMonth() - now.getMonth()
+  if (end.getDate() < now.getDate()) months -= 1
+  if (months <= 0) return '1 month left'
+  return months === 1 ? '1 month left' : `${months} months left`
+}
+
+/** Lease strip for grid card: in-effect term, or future-dated active lease (“upcoming”). */
+function gridCardContractProgress(p: Property): GridCardLeaseStrip | null {
   const now = new Date()
-  const totalMs = end.getTime() - start.getTime()
-  if (totalMs <= 0) {
-    const months = (end.getFullYear() - now.getFullYear()) * 12 + end.getMonth() - now.getMonth()
-    return { pct: 1, monthsLeftLabel: months <= 0 ? 'Expired' : `${months} month${months === 1 ? '' : 's'} left` }
+  const ac = contractCoveringDate(p.contracts, now)
+  if (ac) {
+    const followOn = negotiatedFollowOnAfterContract(p.contracts, ac)
+    const start = new Date(`${ac.startDate}T12:00:00`)
+    const end = new Date(`${ac.endDate}T12:00:00`)
+    const totalMs = end.getTime() - start.getTime()
+    if (totalMs <= 0) {
+      return {
+        kind: 'current',
+        pct: 1,
+        monthsLeftLabel: gridCardMonthsLeftLabel(end, now),
+        hasNegotiatedFollowOn: followOn != null,
+      }
+    }
+    let pct = (now.getTime() - start.getTime()) / totalMs
+    pct = Math.max(0, Math.min(1, pct))
+    return {
+      kind: 'current',
+      pct,
+      monthsLeftLabel: gridCardMonthsLeftLabel(end, now),
+      hasNegotiatedFollowOn: followOn != null,
+    }
   }
-  let pct = (now.getTime() - start.getTime()) / totalMs
-  pct = Math.max(0, Math.min(1, pct))
-  const months = (end.getFullYear() - now.getFullYear()) * 12 + end.getMonth() - now.getMonth()
-  const monthsLeftLabel = months <= 0 ? 'Expired' : months === 1 ? '1 month left' : `${months} months left`
-  return { pct, monthsLeftLabel }
+  const next = nextNegotiatedLeaseNotYetStarted(p.contracts, now)
+  if (next) return { kind: 'upcoming', startDate: next.startDate }
+  return null
+}
+
+function gridCardLeasePrimaryLabel(leaseProgress: GridCardLeaseStrip | null): string {
+  if (!leaseProgress) return 'No active contract'
+  if (leaseProgress.kind === 'upcoming') {
+    return `Upcoming contract · starts ${formatOwnedSinceCell(leaseProgress.startDate)}`
+  }
+  const prefix = leaseProgress.hasNegotiatedFollowOn ? 'Upcoming contract' : 'No contract negotiated'
+  return `${prefix} · ${leaseProgress.monthsLeftLabel}`
 }
 
 const IconDeltaDown = () => (
@@ -1145,11 +1181,14 @@ function PortfolioPropertyGridCard({
   activeCardMetrics: ColKey[]
   onOpen: (id: number) => void
 }) {
-  const rented = activeContract(p) != null
   const rawPhoto = p.factSheet?.photos?.[0]?.trim()
   const [imgFailed, setImgFailed] = useState(false)
   const showImg = Boolean(rawPhoto && !imgFailed)
   const leaseProgress = gridCardContractProgress(p)
+  const badgeClass =
+    leaseProgress?.kind === 'current' ? 'active-c' : leaseProgress?.kind === 'upcoming' ? 'upcoming-c' : 'vacant'
+  const badgeLabel =
+    leaseProgress?.kind === 'current' ? 'Rented' : leaseProgress?.kind === 'upcoming' ? 'Upcoming' : 'Vacant'
   const metricCtx = { year, displayCurrency, fxRates, fm }
   const mainKeys: (ColKey | undefined)[] = [0, 1, 2].map(i => activeCardMetrics[i])
   const detailKeys: (ColKey | undefined)[] = [3, 4].map(i => activeCardMetrics[i])
@@ -1178,8 +1217,8 @@ function PortfolioPropertyGridCard({
             <span className="portfolio-prop-card-no-cover-text">No cover</span>
           </div>
         )}
-        <span className={`badge portfolio-prop-card-badge ${rented ? 'active-c' : 'vacant'}`}>
-          {rented ? 'Rented' : 'Vacant'}
+        <span className={`badge portfolio-prop-card-badge ${badgeClass}`}>
+          {badgeLabel}
         </span>
       </div>
       <div className="portfolio-prop-card-body">
@@ -1187,25 +1226,37 @@ function PortfolioPropertyGridCard({
         <p className="portfolio-prop-card-address">{p.address?.trim() ? p.address : '—'}</p>
         <div
           className={`portfolio-prop-card-contract${leaseProgress ? '' : ' portfolio-prop-card-contract--placeholder'}`}
-          aria-label={leaseProgress ? 'Lease progress' : 'No active contract'}
+          aria-label={gridCardLeasePrimaryLabel(leaseProgress)}
         >
           <div className="portfolio-prop-card-contract-meta">
             <span className="portfolio-prop-card-contract-label">
-              {leaseProgress ? leaseProgress.monthsLeftLabel : 'No active contract'}
+              {gridCardLeasePrimaryLabel(leaseProgress)}
             </span>
-            {leaseProgress ? <span className="portfolio-prop-card-contract-pct">{Math.round(leaseProgress.pct * 100)}%</span> : null}
+            {leaseProgress?.kind === 'current' ? (
+              <span className="portfolio-prop-card-contract-pct">{Math.round(leaseProgress.pct * 100)}%</span>
+            ) : null}
           </div>
           <div
             className="portfolio-prop-card-contract-track"
             role="progressbar"
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-valuenow={leaseProgress ? Math.round(leaseProgress.pct * 100) : 0}
-            aria-valuetext={leaseProgress ? `${Math.round(leaseProgress.pct * 100)}% complete` : 'No active contract'}
+            aria-valuenow={leaseProgress?.kind === 'current' ? Math.round(leaseProgress.pct * 100) : 0}
+            aria-valuetext={
+              leaseProgress?.kind === 'current'
+                ? `${gridCardLeasePrimaryLabel(leaseProgress)}, ${Math.round(leaseProgress.pct * 100)}% complete`
+                : leaseProgress
+                  ? gridCardLeasePrimaryLabel(leaseProgress)
+                  : 'No active contract'
+            }
           >
             <div
-              className={`portfolio-prop-card-contract-fill${leaseProgress ? '' : ' portfolio-prop-card-contract-fill--inactive'}`}
-              style={{ width: leaseProgress ? `${leaseProgress.pct * 100}%` : '0%' }}
+              className={`portfolio-prop-card-contract-fill${
+                leaseProgress?.kind === 'current' ? '' : ' portfolio-prop-card-contract-fill--inactive'
+              }`}
+              style={{
+                width: leaseProgress?.kind === 'current' ? `${leaseProgress.pct * 100}%` : '0%',
+              }}
             />
           </div>
         </div>

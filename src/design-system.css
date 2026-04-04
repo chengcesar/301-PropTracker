@@ -259,7 +259,7 @@
     background: color-mix(in srgb, var(--accent-bg) 8%, transparent);
     border-color: var(--accent-bg);
   }
-  /* View toggle: two-button segmented control */
+  /* View toggle: segmented control (list / grid / todo) */
   .view-toggle-group {
     display: inline-flex;
     border: 1px solid #e5e7eb;
@@ -274,9 +274,19 @@
     padding: 6px 9px;
     background: transparent;
     border: none;
+    border-radius: 0;
     cursor: pointer;
     transition: background 0.15s ease;
     color: var(--text2);
+  }
+  .view-toggle-btn:first-child:not(:last-child) {
+    border-radius: 8px 0 0 8px;
+  }
+  .view-toggle-btn:last-child:not(:first-child) {
+    border-radius: 0 8px 8px 0;
+  }
+  .view-toggle-btn:first-child:last-child {
+    border-radius: 8px;
   }
   .view-toggle-btn:not(:last-child) {
     border-right: 1px solid #e5e7eb;
@@ -402,6 +412,7 @@
   .badge.pending { background: var(--amber-bg); color: #d97706; }
   .badge.auto { background: var(--green-bg); color: var(--green); }
   .badge.active-c { background: var(--green-bg); color: var(--green); }
+  .badge.upcoming-c { background: var(--accent-subtle-bg); color: var(--accent-bg); }
   .badge.draft-c { background: var(--surface2); color: var(--text3); border: 1px solid var(--border); }
   .badge.archived-c { background: var(--surface2); color: var(--text3); }
   .wf-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -658,7 +669,7 @@
     font-weight: 500;
     letter-spacing: 0.02em;
   }
-  /* Same token colors as wf-table status (.badge.active-c / .badge.vacant); only layout overrides */
+  /* Same token colors as wf-table status (.badge.active-c / .upcoming-c / .vacant); only layout overrides */
   .portfolio-prop-card-badge.badge {
     position: absolute;
     top: 10px;
@@ -714,6 +725,8 @@
     font-weight: 500;
     color: rgba(0, 0, 0, 0.45);
     line-height: 1.25;
+    flex: 1;
+    min-width: 0;
   }
   .portfolio-prop-card-contract-pct {
     font-size: 12px;
@@ -1332,7 +1345,21 @@
     .fs-duo { grid-template-columns: 1fr; }
     .filter-bar-search { max-width: none; }
     .filter-bar-top { flex-wrap: wrap; }
-    .filter-bar-actions { order: -1; width: 100%; margin-left: 0; }
+    .filter-bar-actions {
+      order: -1;
+      width: 100%;
+      margin-left: 0;
+      flex-wrap: nowrap;
+      justify-content: flex-start;
+    }
+    /* CSV stays left; list/grid/todo + column settings cluster on the right with gap between */
+    .filter-bar-actions > .filter-bar-icon-btn:first-of-type {
+      margin-right: auto;
+    }
+    .filter-bar-actions .view-toggle-group,
+    .filter-bar-actions > div:not(.view-toggle-group) {
+      flex-shrink: 0;
+    }
     .year-btn:not(.active) { display: none; }
     .hide-mobile { display: none; }
     .show-mobile { display: inline; }
@@ -2113,6 +2140,16 @@
   }
   .todo-detail-col {
     background: var(--surface2);
+  }
+
+  @media (max-width: 768px) {
+    /* Inline gridTemplateColumns from JS uses repeat(n, 1fr); force one column so panels and list cards read full-width, one per row. */
+    .todo-view-layout {
+      grid-template-columns: 1fr !important;
+    }
+    .todo-payments-scorecards {
+      grid-template-columns: 1fr;
+    }
   }
 
   @keyframes toastSlideUp {
