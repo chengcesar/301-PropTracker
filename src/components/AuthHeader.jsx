@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthConfirmDialog } from './AuthConfirmDialog';
+import { ChangePasswordModal } from './ChangePasswordModal';
 import { ACCENT_PRESETS, ACCENT_HEX_BY_PRESET } from '../lib/accentTheme';
 import { useContext } from 'react';
 import { AppStateContext } from '../context/app-state-context';
@@ -22,13 +23,30 @@ function getDisplayName(user) {
 }
 
 export default function AuthHeader() {
-  const { user, isAdmin, logout, deleteAccount, accent, updateAccentPreset } = useAuth();
+  const {
+    user,
+    isAdmin,
+    logout,
+    deleteAccount,
+    accent,
+    updateAccentPreset,
+    changePassword,
+    resendVerificationEmail,
+  } = useAuth();
   const appState = useContext(AppStateContext);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [changePwOpen, setChangePwOpen] = useState(false);
+  const [verifyMsg, setVerifyMsg] = useState('');
+  const [verifyErr, setVerifyErr] = useState('');
+  const [verifySending, setVerifySending] = useState(false);
   const menuRef = useRef(null);
+
+  const hasPasswordProvider = Boolean(
+    user?.providerData?.some((p) => p.providerId === 'password'),
+  );
 
   useEffect(() => {
     const handler = (e) => {
@@ -44,6 +62,20 @@ export default function AuthHeader() {
     setDeleteError('');
     setMenuOpen(false);
     setDeleteModalOpen(true);
+  }
+
+  async function handleResendVerification() {
+    setVerifyMsg('');
+    setVerifyErr('');
+    setVerifySending(true);
+    try {
+      await resendVerificationEmail();
+      setVerifyMsg('Verification email sent.');
+    } catch (err) {
+      setVerifyErr(err?.message?.replace(/^Firebase:\s*/i, '') || 'Could not send email.');
+    } finally {
+      setVerifySending(false);
+    }
   }
 
   async function handleDeleteAccount() {
@@ -108,6 +140,21 @@ export default function AuthHeader() {
             {menuOpen && (
               <div className="header-user-menu" role="menu">
               <div className="header-user-menu-title">Account settings</div>
+              {user.email && !user.emailVerified && (
+                <div className="header-email-verify-banner">
+                  <span>Verify your email to secure your account.</span>
+                  <button
+                    type="button"
+                    className="header-email-verify-btn"
+                    onClick={handleResendVerification}
+                    disabled={verifySending}
+                  >
+                    {verifySending ? 'Sending\u2026' : 'Resend link'}
+                  </button>
+                  {verifyMsg && <div className="header-email-verify-note header-email-verify-ok">{verifyMsg}</div>}
+                  {verifyErr && <div className="header-email-verify-note header-email-verify-bad">{verifyErr}</div>}
+                </div>
+              )}
               <div className="header-user-menu-row">
                 <span className="header-user-menu-label">Name</span>
                 <span className="header-user-menu-value">{getDisplayName(user)}</span>
@@ -132,6 +179,11 @@ export default function AuthHeader() {
                 </div>
               </div>
               <div className="header-user-menu-actions">
+                {hasPasswordProvider && (
+                  <button type="button" className="header-user-menu-btn" onClick={() => { setMenuOpen(false); setChangePwOpen(true); }}>
+                    Change password
+                  </button>
+                )}
                 <button type="button" className="header-user-menu-btn header-user-menu-btn-danger" onClick={openDeleteModal}>
                   Delete account
                 </button>
@@ -148,6 +200,11 @@ export default function AuthHeader() {
           </button>
         </div>
       )}
+      <ChangePasswordModal
+        open={changePwOpen}
+        onClose={() => setChangePwOpen(false)}
+        changePassword={changePassword}
+      />
       <AuthConfirmDialog
         open={deleteModalOpen}
         title="Delete account"

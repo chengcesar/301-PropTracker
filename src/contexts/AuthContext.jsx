@@ -4,8 +4,13 @@ import {
   onAuthStateChanged,
   signInWithPopup,
   GoogleAuthProvider,
+  EmailAuthProvider,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  sendEmailVerification,
+  reauthenticateWithCredential,
+  updatePassword,
   signOut,
   deleteUser,
 } from 'firebase/auth';
@@ -117,9 +122,37 @@ export function AuthProvider({ children }) {
     if (!auth) throw new Error('Firebase not configured');
     return signInWithEmailAndPassword(auth, email, pw);
   };
-  const signupWithEmail = (email, pw) => {
+  const signupWithEmail = async (email, pw) => {
     if (!auth) throw new Error('Firebase not configured');
-    return createUserWithEmailAndPassword(auth, email, pw);
+    const cred = await createUserWithEmailAndPassword(auth, email, pw);
+    try {
+      await sendEmailVerification(cred.user);
+    } catch {
+      /* non-fatal — user can resend from account menu */
+    }
+    return cred;
+  };
+
+  const sendPasswordReset = async (email) => {
+    if (!auth) throw new Error('Firebase not configured');
+    await sendPasswordResetEmail(auth, email.trim());
+  };
+
+  const changePassword = async (currentPassword, newPassword) => {
+    if (!auth?.currentUser) throw new Error('Not signed in');
+    const u = auth.currentUser;
+    const email = u.email;
+    if (!email) throw new Error('No email on account');
+    const credential = EmailAuthProvider.credential(email, currentPassword);
+    await reauthenticateWithCredential(u, credential);
+    await updatePassword(u, newPassword);
+  };
+
+  const resendVerificationEmail = async () => {
+    if (!auth?.currentUser) throw new Error('Not signed in');
+    const u = auth.currentUser;
+    if (u.emailVerified) return;
+    await sendEmailVerification(u);
   };
   const logout = () => {
     if (!auth) return;
@@ -142,7 +175,25 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAdmin, loading, isConfigured, loginWithGoogle, loginWithEmail, signupWithEmail, logout, deleteAccount, accent, updateAccentPreset, plan, grants, aiGenerations }}>
+    <AuthContext.Provider value={{
+      user,
+      isAdmin,
+      loading,
+      isConfigured,
+      loginWithGoogle,
+      loginWithEmail,
+      signupWithEmail,
+      sendPasswordReset,
+      changePassword,
+      resendVerificationEmail,
+      logout,
+      deleteAccount,
+      accent,
+      updateAccentPreset,
+      plan,
+      grants,
+      aiGenerations,
+    }}>
       {children}
     </AuthContext.Provider>
   );

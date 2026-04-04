@@ -1,29 +1,88 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
-const EMAIL_AUTH_DISABLED_MESSAGE =
-  'Free trials are only available with Google login.';
+function formatAuthError(err) {
+  const code = err?.code ?? '';
+  const msg = err?.message?.replace(/^Firebase:\s*\(?|\)\.?$/gi, '').trim() ?? 'Something went wrong.';
+  const map = {
+    'auth/invalid-email': 'Enter a valid email address.',
+    'auth/user-disabled': 'This account has been disabled.',
+    'auth/user-not-found': 'No account found for this email.',
+    'auth/wrong-password': 'Incorrect password.',
+    'auth/invalid-credential': 'Incorrect email or password.',
+    'auth/email-already-in-use': 'An account already exists with this email.',
+    'auth/weak-password': 'Password should be at least 6 characters.',
+    'auth/too-many-requests': 'Too many attempts. Try again later.',
+    'auth/operation-not-allowed': 'Email sign-in is not enabled in Firebase (enable Email/Password in the console).',
+  };
+  return map[code] || msg;
+}
 
 export default function LoginPage() {
-  const { loginWithGoogle } = useAuth();
+  const {
+    loginWithGoogle,
+    loginWithEmail,
+    signupWithEmail,
+    sendPasswordReset,
+  } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignup, setIsSignup] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [resetSending, setResetSending] = useState(false);
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    setError(EMAIL_AUTH_DISABLED_MESSAGE);
+    setError('');
+    setSuccess('');
+    setSubmitting(true);
+    try {
+      if (isSignup) {
+        await signupWithEmail(email.trim(), password);
+        setSuccess('Account created. Check your email for a verification link (you can still sign in).');
+        setPassword('');
+      } else {
+        await loginWithEmail(email.trim(), password);
+      }
+    } catch (err) {
+      if (err.code !== 'auth/popup-closed-by-user') {
+        setError(formatAuthError(err));
+      }
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function handleGoogle() {
     setError('');
+    setSuccess('');
     try {
       await loginWithGoogle();
     } catch (err) {
       if (err.code !== 'auth/popup-closed-by-user') {
-        setError(err.message.replace('Firebase: ', ''));
+        setError(formatAuthError(err));
       }
+    }
+  }
+
+  async function handleForgotPassword() {
+    setError('');
+    setSuccess('');
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setError('Enter your email above, then click Forgot password.');
+      return;
+    }
+    setResetSending(true);
+    try {
+      await sendPasswordReset(trimmed);
+      setSuccess('If an account exists for that email, we sent a link to reset your password.');
+    } catch (err) {
+      setError(formatAuthError(err));
+    } finally {
+      setResetSending(false);
     }
   }
 
@@ -52,21 +111,27 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit}>
           <div className="login-field">
             <label>Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required autoComplete="email" />
           </div>
           <div className="login-field">
             <label>Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters" required minLength={6} />
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters" required minLength={6} autoComplete={isSignup ? 'new-password' : 'current-password'} />
+            {!isSignup && (
+              <button type="button" className="login-forgot-link" onClick={handleForgotPassword} disabled={resetSending}>
+                {resetSending ? 'Sending\u2026' : 'Forgot password?'}
+              </button>
+            )}
           </div>
           {error && <div className="login-error">{error}</div>}
-          <button className="login-submit" type="submit">
-            {isSignup ? 'Create Account' : 'Sign In'}
+          {success && <div className="login-success">{success}</div>}
+          <button className="login-submit" type="submit" disabled={submitting}>
+            {submitting ? 'Please wait\u2026' : (isSignup ? 'Create Account' : 'Sign In')}
           </button>
         </form>
 
         <p className="login-toggle">
           {isSignup ? 'Already have an account?' : "Don't have an account?"}
-          <button type="button" onClick={() => { setIsSignup(!isSignup); setError(''); }}>
+          <button type="button" onClick={() => { setIsSignup(!isSignup); setError(''); setSuccess(''); }}>
             {isSignup ? 'Sign in' : 'Create one'}
           </button>
         </p>

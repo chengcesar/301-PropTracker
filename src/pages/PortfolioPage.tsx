@@ -756,6 +756,22 @@ function loadColActivePreset(slots: (CustomPreset | null)[]): string | number | 
   return BUILT_IN_PRESETS[0].id
 }
 
+/** When active preset was cleared (null) but columns still match a built-in, show that tab selected. */
+function inferBuiltInPresetFromColVis(vis: Record<ColKey, boolean>): string | null {
+  for (const bp of BUILT_IN_PRESETS) {
+    const on = new Set(bp.cols)
+    const ok = COL_KEYS.every(k => vis[k] === on.has(k))
+    if (ok) return bp.id
+  }
+  return null
+}
+
+function loadInitialActivePreset(slots: (CustomPreset | null)[], vis: Record<ColKey, boolean>): string | number | null {
+  const loaded = loadColActivePreset(slots)
+  if (loaded !== null) return loaded
+  return inferBuiltInPresetFromColVis(vis)
+}
+
 function saveColActivePreset(preset: string | number | null) {
   localStorage.setItem(COL_ACTIVE_PRESET_KEY, JSON.stringify(preset))
 }
@@ -776,8 +792,8 @@ function loadColOrder(): ColKey[] {
 }
 const COL_STORAGE_KEY = 'col-visibility'
 function loadColVisibility(): Record<ColKey, boolean> {
-  const view1 = new Set<ColKey>(BUILT_IN_PRESETS[0].cols)
-  const defaults = Object.fromEntries(COL_KEYS.map(k => [k, view1.has(k)])) as Record<ColKey, boolean>
+  const financialCols = new Set<ColKey>(BUILT_IN_PRESETS[0].cols)
+  const defaults = Object.fromEntries(COL_KEYS.map(k => [k, financialCols.has(k)])) as Record<ColKey, boolean>
   try {
     const raw = localStorage.getItem(COL_STORAGE_KEY)
     if (raw) return { ...defaults, ...JSON.parse(raw) }
@@ -1603,8 +1619,10 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
     return v === 'grid' || v === 'todo' ? v : 'list'
   })
   const [customPresets, setCustomPresets] = useState(loadCustomPresets)
-  // activePreset: built-in id string ('financial'|'details'|'all') — UI labels View 1–3 — or custom slot index (0|1|2) or null
-  const [activePreset, setActivePreset] = useState<string | number | null>(() => loadColActivePreset(loadCustomPresets()))
+  // activePreset: built-in id ('financial'|…) or custom slot index, or null if columns are a custom mix
+  const [activePreset, setActivePreset] = useState<string | number | null>(() =>
+    loadInitialActivePreset(loadCustomPresets(), loadColVisibility()),
+  )
   const [renamingSlot, setRenamingSlot] = useState<number | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [dragCol, setDragCol] = useState<ColKey | null>(null)

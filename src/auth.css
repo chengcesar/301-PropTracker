@@ -68,6 +68,35 @@
 .header-user-menu-btn-danger { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
 .header-user-menu-btn-danger:hover:not(:disabled) { background: #fee2e2; border-color: #f87171; }
 .header-user-menu-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+
+.header-email-verify-banner {
+  font-size: 12px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  line-height: 1.45;
+}
+.header-email-verify-banner span { display: block; margin-bottom: 8px; }
+.header-email-verify-btn {
+  background: #fff;
+  border: 1px solid #f59e0b;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #b45309;
+  cursor: pointer;
+  font-family: inherit;
+}
+.header-email-verify-btn:hover:not(:disabled) { background: #fff7ed; }
+.header-email-verify-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+.header-email-verify-note { margin-top: 8px; font-size: 11px; }
+.header-email-verify-ok { color: #15803d; }
+.header-email-verify-bad { color: #b91c1c; }
+
 .accent-picker { display: flex; gap: 8px; margin-top: 4px; }
 .accent-swatch {
   width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid transparent;
@@ -138,6 +167,8 @@
   font-size: 14px; color: #374151; line-height: 1.5; margin-bottom: 0;
 }
 .confirm-dialog .auth-modal-actions { margin-top: 20px; }
+.auth-modal-form .auth-modal-actions { margin-top: 16px; }
+.auth-modal-form .auth-modal-error { margin-top: 0; margin-bottom: 0; }
 
 /* ── Landing page ── */
 .landing-page {
@@ -385,6 +416,19 @@
   background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
   padding: 10px 14px; color: #b91c1c; font-size: 12px; margin-bottom: 16px;
 }
+.login-success {
+  background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px;
+  padding: 10px 14px; color: #047857; font-size: 12px; margin-bottom: 16px; line-height: 1.45;
+}
+.login-forgot-link {
+  align-self: flex-end;
+  margin-top: 4px;
+  background: none; border: none;
+  color: var(--accent-bg); font-size: 12px; font-weight: 600;
+  font-family: inherit; cursor: pointer; padding: 0;
+}
+.login-forgot-link:hover:not(:disabled) { text-decoration: underline; }
+.login-forgot-link:disabled { opacity: 0.7; cursor: not-allowed; }
 
 .login-submit {
   width: 100%; background: var(--accent-bg); color: var(--accent-text); border: none; border-radius: 8px;
