@@ -15,6 +15,13 @@ import { AssetValueAppreciationCard } from '../components/AssetValueAppreciation
 import PortfolioReport from '../../Temp/PortfolioReport'
 import { UpgradeModal } from '../components/modals/UpgradeModal'
 import { useEntitlements } from '../hooks/useEntitlements'
+import {
+  evaluatePropertyAlerts,
+  loadAlertRuleConfig,
+  type AlertPropertyMetrics,
+  type AlertSeverity,
+  type EvaluatedAlertMatch,
+} from '../lib/alertRuleConfig'
 
 type Props = {
   properties: Property[]
@@ -78,6 +85,48 @@ const IconWindowRestore = () => (
 const IconSpreadsheet = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M.52 0A.525.525 0 000 .525v13.347c0 .29.235.525.52.525h14.96a.525.525 0 00.52-.525V.525A.525.525 0 0015.48 0H.52zm.53 1.05h4.55v2.287H1.05V1.05zm5.6 0h8.3v2.287h-8.3V1.05zM1.05 4.387h4.55V6.675H1.05V4.387zm5.6 0h8.3V6.675h-8.3V4.387zM1.05 7.724h4.55v2.286H1.05V7.724zm5.6 0h8.3v2.286h-8.3V7.724zM1.05 11.062h4.55v2.286H1.05v-2.286zm5.6 0h8.3v2.286h-8.3v-2.286z" fill="#4B5563"/></svg>
 )
+
+/** Upcoming lease starts in Feed use the same horizon as the longest default “contract ending” info rule (6 mo). */
+const FEED_CONTRACT_START_WINDOW_MO = 6
+
+const ALERT_SEV_ORDER: Record<AlertSeverity, number> = { critical: 0, warning: 1, info: 2 }
+
+function monthsUntilCalendarMonth(dateStr: string): number {
+  const end = new Date(dateStr)
+  const now = new Date()
+  return (end.getFullYear() - now.getFullYear()) * 12 + (end.getMonth() - now.getMonth())
+}
+
+function alertMetricsForProperty(p: Property): AlertPropertyMetrics {
+  const ac = activeContract(p)
+  const pending = (p.taxes?.items ?? []).filter(t => t.status === 'pending')
+  let taxDaysLeft: number | null = null
+  if (pending.length > 0) {
+    const nearest = pending.reduce((a, b) => (a.dueDate < b.dueDate ? a : b))
+    taxDaysLeft = Math.ceil((new Date(nearest.dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+  }
+  return {
+    monthsLeft: ac?.endDate ? monthsUntilCalendarMonth(ac.endDate) : null,
+    vacant: !ac,
+    taxPending: pending.length > 0,
+    taxDaysLeft,
+  }
+}
+
+function formatLeaseStartFeedDesc(contract: Contract, monthsUntilStart: number): string {
+  const d = new Date(`${contract.startDate}T12:00:00`)
+  const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  if (monthsUntilStart <= 0) return `Lease starts ${dateStr}`
+  return `Starts ${dateStr} · in ${monthsUntilStart} month${monthsUntilStart === 1 ? '' : 's'}`
+}
+
+function sortTodoFeedAlertMatches<T extends { property: Property; match: EvaluatedAlertMatch }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const d = ALERT_SEV_ORDER[a.match.severity] - ALERT_SEV_ORDER[b.match.severity]
+    if (d !== 0) return d
+    return a.property.name.localeCompare(b.property.name)
+  })
+}
 
 const SAMPLE_PROPERTIES = [
   { name: 'Apto 101', status: 'Rented', type: 'Apartment', area: 72,  gpi: 14400, egi: 14400, opex: 2800, noi: 11600, netCF: 10200, capex: 0,     taxes: 1400, value: 185000, debt: 95000,  capRate: 6.27, yoy: 4.2, monthsLeft: 8,    taxStatus: 'Paid' },
@@ -1634,6 +1683,11 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
   const [cardMetricMax5Hint, setCardMetricMax5Hint] = useState(false)
   const colMenuRef = useRef<HTMLDivElement>(null)
   const [todoPanelVis, setTodoPanelVis] = useState(loadTodoPanelVis)
+  const [todoFeedAlertConfig, setTodoFeedAlertConfig] = useState(loadAlertRuleConfig)
+
+  useEffect(() => {
+    if (propertiesLayoutView === 'todo') setTodoFeedAlertConfig(loadAlertRuleConfig())
+  }, [propertiesLayoutView])
 
   function handleToggleRentReceived(propertyId: number, calYear: number, calMonth: number, current: boolean) {
     updateProperty(propertyId, (p) => {
@@ -1877,6 +1931,41 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
     return sorted
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredProperties, sortKey, sortDir, displayCurrency, fxRates, selectedYear])
+
+  const todoFeedBuckets = useMemo(() => {
+    const config = todoFeedAlertConfig
+    const contractStarting: { property: Property; contract: Contract; monthsUntilStart: number }[] = []
+    const contractEnding: { property: Property; match: EvaluatedAlertMatch }[] = []
+    const taxSeason: { property: Property; match: EvaluatedAlertMatch }[] = []
+    const vacantProps: { property: Property; match: EvaluatedAlertMatch }[] = []
+    const now = new Date()
+    for (const p of sortedProperties) {
+      const metrics = alertMetricsForProperty(p)
+      for (const m of evaluatePropertyAlerts(config, metrics)) {
+        const rule = config.rules.find(r => r.id === m.userRuleId)
+        const kind = rule?.trigger.kind
+        if (kind === 'vacant') vacantProps.push({ property: p, match: m })
+        else if (kind === 'monthsLeft') contractEnding.push({ property: p, match: m })
+        else if (kind === 'taxDaysLeft') taxSeason.push({ property: p, match: m })
+      }
+      const next = nextNegotiatedLeaseNotYetStarted(p.contracts, now)
+      if (next) {
+        const monthsUntilStart = monthsUntilCalendarMonth(next.startDate)
+        if (monthsUntilStart >= 0 && monthsUntilStart <= FEED_CONTRACT_START_WINDOW_MO) {
+          contractStarting.push({ property: p, contract: next, monthsUntilStart })
+        }
+      }
+    }
+    contractStarting.sort(
+      (a, b) => new Date(a.contract.startDate).getTime() - new Date(b.contract.startDate).getTime(),
+    )
+    return {
+      contractStarting,
+      contractEnding: sortTodoFeedAlertMatches(contractEnding),
+      taxSeason: sortTodoFeedAlertMatches(taxSeason),
+      vacantProps: sortTodoFeedAlertMatches(vacantProps),
+    }
+  }, [sortedProperties, todoFeedAlertConfig])
 
   // Payments panel — always uses real calendar month, not selectedYear
   const thisMonthPayments = useMemo(() => {
@@ -3538,6 +3627,10 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
           </div>
           ) : propertiesLayoutView === 'todo' ? (() => {
             const visiblePanelCount = TODO_PANELS.filter(p => todoPanelVis[p.key]).length
+            const feedRuleAlertCount =
+              todoFeedBuckets.contractEnding.length +
+              todoFeedBuckets.taxSeason.length +
+              todoFeedBuckets.vacantProps.length
             return (
           <div className="todo-view-layout" style={{ gridTemplateColumns: `repeat(${visiblePanelCount}, 1fr)` }}>
             <div className="todo-feed-col">
@@ -3546,13 +3639,13 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                 <span className="todo-feed-count">{sortedProperties.length} {sortedProperties.length === 1 ? 'property' : 'properties'}</span>
               </div>
               <div className="todo-payments-scorecards">
-                <div className="todo-scorecard">
-                  <span className="todo-scorecard-label">—</span>
-                  <span className="todo-scorecard-value">—</span>
+                <div className="todo-scorecard todo-scorecard--pending">
+                  <span className="todo-scorecard-label">Alerts</span>
+                  <span className="todo-scorecard-value">{feedRuleAlertCount}</span>
                 </div>
-                <div className="todo-scorecard">
-                  <span className="todo-scorecard-label">—</span>
-                  <span className="todo-scorecard-value">—</span>
+                <div className="todo-scorecard todo-scorecard--received">
+                  <span className="todo-scorecard-label">Starting</span>
+                  <span className="todo-scorecard-value">{todoFeedBuckets.contractStarting.length}</span>
                 </div>
               </div>
               <div className="todo-feed-list">
@@ -3570,38 +3663,103 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                       'No properties match your search or filters.'
                     )}
                   </div>
-                ) : sortedProperties.map((p) => {
-                  const ac = activeContract(p)
-                  return (
-                    <div
-                      key={p.id}
-                      className="todo-feed-card"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => onSelectProperty(p.id)}
-                      onKeyDown={e => e.key === 'Enter' && onSelectProperty(p.id)}
-                    >
-                      <div className="todo-feed-card-left">
-                        <div className="todo-feed-card-initial" aria-hidden>
-                          {p.name.charAt(0).toUpperCase()}
-                        </div>
+                ) : (
+                  <>
+                    <div className="todo-section-label">Contract starting · {todoFeedBuckets.contractStarting.length}</div>
+                    {todoFeedBuckets.contractStarting.length === 0 ? (
+                      <div className="todo-feed-empty" style={{ padding: '10px 0 14px' }}>
+                        No negotiated lease starting in the next {FEED_CONTRACT_START_WINDOW_MO} months.
                       </div>
-                      <div className="todo-feed-card-body">
-                        <div className="todo-feed-card-top">
-                          <span className="todo-feed-card-name">{p.name}</span>
-                          <span className={`badge ${ac ? 'active-c' : 'vacant'}`}>{ac ? 'Rented' : 'Vacant'}</span>
+                    ) : (
+                      todoFeedBuckets.contractStarting.map(({ property: p, contract: c, monthsUntilStart }) => (
+                        <div
+                          key={`feed-start-${p.id}-${c.id}`}
+                          className="lb-alert-item lb-alert-info"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => onSelectProperty(p.id)}
+                          onKeyDown={e => e.key === 'Enter' && onSelectProperty(p.id)}
+                        >
+                          <div className="lb-alert-severity-bar" />
+                          <div className="lb-alert-content">
+                            <div className="lb-alert-name">{p.name}</div>
+                            <div className="lb-alert-desc">{formatLeaseStartFeedDesc(c, monthsUntilStart)}</div>
+                          </div>
+                          <span className="lb-alert-badge lb-alert-badge-info">Starting</span>
                         </div>
-                        <div className="todo-feed-card-sub">
-                          {[p.city, p.country].filter(Boolean).join(' · ')}
+                      ))
+                    )}
+                    <div className="todo-section-divider" />
+                    <div className="todo-section-label">Contract ending · {todoFeedBuckets.contractEnding.length}</div>
+                    {todoFeedBuckets.contractEnding.length === 0 ? (
+                      <div className="todo-feed-empty" style={{ padding: '10px 0 14px' }}>No contract expiry alerts.</div>
+                    ) : (
+                      todoFeedBuckets.contractEnding.map(({ property: p, match: m }) => (
+                        <div
+                          key={`feed-end-${p.id}-${m.userRuleId}`}
+                          className={`lb-alert-item lb-alert-${m.severity}`}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => onSelectProperty(p.id)}
+                          onKeyDown={e => e.key === 'Enter' && onSelectProperty(p.id)}
+                        >
+                          <div className="lb-alert-severity-bar" />
+                          <div className="lb-alert-content">
+                            <div className="lb-alert-name">{p.name}</div>
+                            <div className="lb-alert-desc">{m.describe}</div>
+                          </div>
+                          <span className={`lb-alert-badge lb-alert-badge-${m.severity}`}>{m.label}</span>
                         </div>
-                        <div className="todo-feed-card-placeholder">
-                          <div className="todo-feed-placeholder-line" style={{ width: '72%' }} />
-                          <div className="todo-feed-placeholder-line" style={{ width: '48%' }} />
+                      ))
+                    )}
+                    <div className="todo-section-divider" />
+                    <div className="todo-section-label">Tax season · {todoFeedBuckets.taxSeason.length}</div>
+                    {todoFeedBuckets.taxSeason.length === 0 ? (
+                      <div className="todo-feed-empty" style={{ padding: '10px 0 14px' }}>No property tax alerts.</div>
+                    ) : (
+                      todoFeedBuckets.taxSeason.map(({ property: p, match: m }) => (
+                        <div
+                          key={`feed-tax-${p.id}-${m.userRuleId}`}
+                          className={`lb-alert-item lb-alert-${m.severity}`}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => onSelectProperty(p.id)}
+                          onKeyDown={e => e.key === 'Enter' && onSelectProperty(p.id)}
+                        >
+                          <div className="lb-alert-severity-bar" />
+                          <div className="lb-alert-content">
+                            <div className="lb-alert-name">{p.name}</div>
+                            <div className="lb-alert-desc">{m.describe}</div>
+                          </div>
+                          <span className={`lb-alert-badge lb-alert-badge-${m.severity}`}>{m.label}</span>
                         </div>
-                      </div>
-                    </div>
-                  )
-                })}
+                      ))
+                    )}
+                    <div className="todo-section-divider" />
+                    <div className="todo-section-label">Vacant properties · {todoFeedBuckets.vacantProps.length}</div>
+                    {todoFeedBuckets.vacantProps.length === 0 ? (
+                      <div className="todo-feed-empty" style={{ padding: '10px 0 14px' }}>No vacant property alerts.</div>
+                    ) : (
+                      todoFeedBuckets.vacantProps.map(({ property: p, match: m }) => (
+                        <div
+                          key={`feed-vac-${p.id}-${m.userRuleId}`}
+                          className={`lb-alert-item lb-alert-${m.severity}`}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => onSelectProperty(p.id)}
+                          onKeyDown={e => e.key === 'Enter' && onSelectProperty(p.id)}
+                        >
+                          <div className="lb-alert-severity-bar" />
+                          <div className="lb-alert-content">
+                            <div className="lb-alert-name">{p.name}</div>
+                            <div className="lb-alert-desc">{m.describe}</div>
+                          </div>
+                          <span className={`lb-alert-badge lb-alert-badge-${m.severity}`}>{m.label}</span>
+                        </div>
+                      ))
+                    )}
+                  </>
+                )}
               </div>
             </div>
             {todoPanelVis.payments && (() => {
