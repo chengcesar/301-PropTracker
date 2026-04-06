@@ -3323,7 +3323,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                   {colOrder.filter(k => colVis[k]).map(key => (
                     <SortTh key={key} col={key} className={key === 'country' ? 'wf-align-left' : undefined}>{COL_LABELS[key]}</SortTh>
                   ))}
-                  <th style={{ width: 52, textAlign: 'center', padding: '8px 12px 8px 0' }}>
+                  <th className="wf-table-actions-col" style={{ width: 52, textAlign: 'center', padding: '8px 12px 8px 0' }}>
                     <button
                       className="ghost"
                       style={{ padding: 0, border: 'none', background: 'transparent', margin: '0 auto', display: 'block' }}
@@ -3557,7 +3557,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                         <div className="fs11 text3 wf-truncate" title={p.address}>{p.address}</div>
                       </td>
                       {colOrder.filter(k => colVis[k]).map(key => cellMap[key])}
-                      <td onClick={(e) => e.stopPropagation()} style={{ width: 52, padding: '8px 12px 8px 0', verticalAlign: 'middle' }}>
+                      <td className="wf-table-actions-col" onClick={(e) => e.stopPropagation()} style={{ width: 52, padding: '8px 12px 8px 0', verticalAlign: 'middle' }}>
                         <div style={{ display: 'flex', justifyContent: 'center' }}>
                           <RowMenu
                             onEdit={() => onSelectProperty(p.id)}
@@ -3644,7 +3644,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                     <tr className="total-row">
                       <td>Total</td>
                       {colOrder.filter(k => colVis[k]).map(key => totalMap[key] || <td key={key} />)}
-                      <td style={{ width: 52, padding: '8px 0' }} />
+                      <td className="wf-table-actions-col" style={{ width: 52, padding: '8px 0' }} />
                     </tr>
                   )
                 })()}
