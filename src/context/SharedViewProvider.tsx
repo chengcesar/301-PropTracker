@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useMemo, useCallback, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getShare } from '../services/sharesService'
@@ -6,7 +6,12 @@ import { subscribeProperties } from '../services/propertyService'
 import { applyShareFilters } from '../lib/shareFilters'
 import { AppStateContext, type Selection } from './app-state-context'
 import { ReadOnlyContext } from './ReadOnlyContext'
-import type { Share } from '../lib/types'
+import type { Share, Property } from '../lib/types'
+
+const ShareInfoContext = createContext<Share | null>(null)
+export function useShareInfo(): Share | null {
+  return useContext(ShareInfoContext)
+}
 
 type Props = {
   shareId: string
@@ -18,7 +23,7 @@ export function SharedViewProvider({ shareId, children }: Props) {
   const navigate = useNavigate()
   const [share, setShare] = useState<Share | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [properties, setProperties] = useState<any[]>([])
+  const [properties, setProperties] = useState<Property[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedIdRaw] = useState<Selection>('portfolio')
 
@@ -77,7 +82,9 @@ export function SharedViewProvider({ shareId, children }: Props) {
   return (
     <ReadOnlyContext.Provider value={true}>
       <AppStateContext.Provider value={contextValue}>
-        {children}
+        <ShareInfoContext.Provider value={share}>
+          {children}
+        </ShareInfoContext.Provider>
       </AppStateContext.Provider>
     </ReadOnlyContext.Provider>
   )

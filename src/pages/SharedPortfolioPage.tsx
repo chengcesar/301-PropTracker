@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { SharedViewProvider } from '../context/SharedViewProvider'
+import { SharedViewProvider, useShareInfo } from '../context/SharedViewProvider'
 import { PortfolioPage } from './PortfolioPage'
 import { PropertyPage } from './PropertyPage'
 import AuthHeader from '../components/AuthHeader'
@@ -10,6 +10,7 @@ import { useAppState } from '../context/useAppState'
 function SharedContent() {
   const { properties, selectedId, setSelectedId } = useAppState()
   const navigate = useNavigate()
+  const shareInfo = useShareInfo()
   const activeProp = typeof selectedId === 'number' ? properties.find((p) => p.id === selectedId) : undefined
 
   useEffect(() => {
@@ -21,6 +22,9 @@ function SharedContent() {
       <AuthHeader />
       <div className="shared-view-banner">
         <span className="shared-view-badge">👁 View only</span>
+        {shareInfo && (
+          <span className="shared-view-label">{shareInfo.ownerPortfolioName}</span>
+        )}
         <button className="shared-view-back" onClick={() => navigate('/')}>← Back to my portfolio</button>
       </div>
       <div className="app-body">
@@ -43,12 +47,12 @@ function SharedContent() {
 
 export function SharedPortfolioPage() {
   const { shareId } = useParams<{ shareId: string }>()
-  const { user } = useAuth() as unknown as { user: any }
-  const navigate = useNavigate()
+  const { user, loading: authLoading } = useAuth() as unknown as { user: any; loading: boolean }
+
+  if (authLoading) return null
 
   if (!user) {
-    navigate(`/login?redirect=/shared/${shareId}`)
-    return null
+    return <Navigate to={`/login?redirect=/shared/${shareId}`} replace />
   }
 
   return (
