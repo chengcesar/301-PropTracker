@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vite:*)",
+      "Bash(curl -sI \"https://basemaps.cartocdn.com/gl/positron-gl-style/style.json\")",
+      "Bash(grep -n \"USD\\\\|footer\\\\|note\\\\|footnote\\\\|\\\\\\\\\\\\$\" \"c:\\\\Users\\\\cheng\\\\Documents\\\\Github\\\\301-PropTracker\\\\Temp\\\\PortfolioReport.jsx\")",
+      "Bash(grep -n \"USD\\\\|\\\\\\\\\\\\$\\\\|footer\\\\|note\\\\|Note\\\\|annual\\\\|figures\" \"c:\\\\Users\\\\cheng\\\\Documents\\\\Github\\\\301-PropTracker\\\\Temp\\\\PortfolioReport.jsx\")",
+      "Bash(xargs grep:*)"
+    ]
+  }
+}
