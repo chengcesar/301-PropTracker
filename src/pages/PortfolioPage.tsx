@@ -1152,10 +1152,12 @@ function CapexTodoCard({
   item,
   onStatusChange,
   onOpen,
+  readOnly = false,
 }: {
   item: CapexItem & { propertyName: string }
   onStatusChange: (next: CapexStatus) => void
   onOpen: () => void
+  readOnly?: boolean
 }) {
   const status = item.status ?? 'To do'
   const catColor = CAT_COLORS[item.cat] ?? '#6b7280'
@@ -1203,42 +1205,44 @@ function CapexTodoCard({
             {item.amount > 0 ? `−${item.amount.toLocaleString()}` : '—'}
           </span>
         </div>
-        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-          {nextStatus && (
-            <button
-              type="button"
-              className="ghost"
-              onClick={e => { e.stopPropagation(); onStatusChange(nextStatus) }}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                padding: '3px 9px', borderRadius: 6,
-                border: '1px solid var(--border)',
-                background: 'var(--surface2)',
-                fontSize: 12, fontWeight: 500, color: 'var(--text2)',
-                cursor: 'pointer',
-              }}
-            >
-              {nextStatus === 'Ongoing'   ? '▶ Start'  : '✓ Complete'}
-            </button>
-          )}
-          {prevStatus && (
-            <button
-              type="button"
-              className="ghost"
-              onClick={e => { e.stopPropagation(); onStatusChange(prevStatus) }}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                padding: '3px 9px', borderRadius: 6,
-                border: '1px solid var(--border)',
-                background: 'transparent',
-                fontSize: 12, fontWeight: 500, color: 'var(--text3)',
-                cursor: 'pointer',
-              }}
-            >
-              ↩ Undo
-            </button>
-          )}
-        </div>
+        {!readOnly && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            {nextStatus && (
+              <button
+                type="button"
+                className="ghost"
+                onClick={e => { e.stopPropagation(); onStatusChange(nextStatus) }}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '3px 9px', borderRadius: 6,
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface2)',
+                  fontSize: 12, fontWeight: 500, color: 'var(--text2)',
+                  cursor: 'pointer',
+                }}
+              >
+                {nextStatus === 'Ongoing'   ? '▶ Start'  : '✓ Complete'}
+              </button>
+            )}
+            {prevStatus && (
+              <button
+                type="button"
+                className="ghost"
+                onClick={e => { e.stopPropagation(); onStatusChange(prevStatus) }}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '3px 9px', borderRadius: 6,
+                  border: '1px solid var(--border)',
+                  background: 'transparent',
+                  fontSize: 12, fontWeight: 500, color: 'var(--text3)',
+                  cursor: 'pointer',
+                }}
+              >
+                ↩ Undo
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -3891,7 +3895,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                           rentInDisplay={p.currency !== displayCurrency ? fm(convert(rent, p.currency, displayCurrency, fxRates)) : null}
                           displayCurrency={displayCurrency}
                           received={received}
-                          onToggle={() => handleToggleRentReceived(p.id, calYear, calMonth, received)}
+                          onToggle={readOnly ? undefined : () => handleToggleRentReceived(p.id, calYear, calMonth, received)}
                           onOpen={() => onSelectProperty(p.id)}
                         />
                       ))}
@@ -3910,7 +3914,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                           rentInDisplay={p.currency !== displayCurrency ? fm(convert(rent, p.currency, displayCurrency, fxRates)) : null}
                           displayCurrency={displayCurrency}
                           received={received}
-                          onToggle={() => handleToggleRentReceived(p.id, calYear, calMonth, received)}
+                          onToggle={readOnly ? undefined : () => handleToggleRentReceived(p.id, calYear, calMonth, received)}
                           onOpen={() => onSelectProperty(p.id)}
                         />
                       ))}
@@ -3991,6 +3995,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                       item={c}
                       onStatusChange={next => handleCapexStatus(c.propertyId, c.id, next)}
                       onOpen={() => onSelectProperty(c.propertyId)}
+                      readOnly={readOnly}
                     />
                   ))}
                   <div className="todo-section-divider" />
@@ -4003,6 +4008,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                       item={c}
                       onStatusChange={next => handleCapexStatus(c.propertyId, c.id, next)}
                       onOpen={() => onSelectProperty(c.propertyId)}
+                      readOnly={readOnly}
                     />
                   ))}
                   <div className="todo-section-divider" />
@@ -4015,6 +4021,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                       item={c}
                       onStatusChange={next => handleCapexStatus(c.propertyId, c.id, next)}
                       onOpen={() => onSelectProperty(c.propertyId)}
+                      readOnly={readOnly}
                     />
                   ))}
                 </div>

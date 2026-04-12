@@ -3,14 +3,14 @@ import {
   doc,
   addDoc,
   updateDoc,
+  setDoc,
+  deleteDoc,
   onSnapshot,
   query,
   where,
   getDoc,
   getDocs,
   serverTimestamp,
-  arrayUnion,
-  arrayRemove,
   type Unsubscribe,
 } from 'firebase/firestore'
 import { firestore } from '../lib/firebase'
@@ -113,7 +113,7 @@ export async function getShareByToken(token: string): Promise<Share | null> {
   return toShare(d.id, d.data())
 }
 
-/** Accept a pending invite — sets granteeUid and marks active. Also adds viewer to owner's viewers array for security rules. */
+/** Accept a pending invite — sets granteeUid and marks active. Creates viewer doc in owner's viewers subcollection for security rules. */
 export async function acceptShare(shareId: string, granteeUid: string): Promise<void> {
   const share = await getShare(shareId)
   if (!share) return
@@ -123,9 +123,7 @@ export async function acceptShare(shareId: string, granteeUid: string): Promise<
       status: 'active',
       acceptedAt: serverTimestamp(),
     }),
-    updateDoc(doc(firestore!, 'users', share.ownerUid), {
-      viewers: arrayUnion(granteeUid),
-    }),
+    setDoc(doc(firestore!, 'users', share.ownerUid, 'viewers', granteeUid), { active: true }),
   ])
 }
 
@@ -146,9 +144,7 @@ export async function revokeShare(shareId: string): Promise<void> {
     const otherActive = otherSnap.docs.filter((d) => d.id !== shareId)
     if (otherActive.length === 0) {
       ops.push(
-        updateDoc(doc(firestore!, 'users', share.ownerUid), {
-          viewers: arrayRemove(share.granteeUid),
-        }),
+        deleteDoc(doc(firestore!, 'users', share.ownerUid, 'viewers', share.granteeUid)),
       )
     }
   }

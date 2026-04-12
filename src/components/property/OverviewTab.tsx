@@ -352,10 +352,12 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
             <div className="card-inner">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <div className="fw6" style={{ fontSize: '14px' }}>Occupant</div>
-                <div className="flex gap4">
-                  <button type="button" className="ghost fs12" onClick={() => setOccModal(true)}>Edit</button>
-                  <button type="button" className="ghost danger fs12" onClick={removeOccupant}>Remove</button>
-                </div>
+                {!readOnly && (
+                  <div className="flex gap4">
+                    <button type="button" className="ghost fs12" onClick={() => setOccModal(true)}>Edit</button>
+                    <button type="button" className="ghost danger fs12" onClick={removeOccupant}>Remove</button>
+                  </div>
+                )}
               </div>
               <table className="contract-detail-table">
                 <tbody>
@@ -387,11 +389,13 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
           <div className="card">
             <div className="card-inner">
               <div className="warn-box" style={{ marginBottom: 12 }}>No active contract — all months show as vacant.</div>
-              <div className="flex gap8">
-                <button type="button" className="ghost fs12" style={{ color: 'var(--accent-bg)' }} onClick={() => setOccModal(true)}>
-                  + Add occupant
-                </button>
-              </div>
+              {!readOnly && (
+                <div className="flex gap8">
+                  <button type="button" className="ghost fs12" style={{ color: 'var(--accent-bg)' }} onClick={() => setOccModal(true)}>
+                    + Add occupant
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -639,7 +643,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
             {months.map((m) => {
               if (!m.contract) {
                 return (
-                  <div key={m.i} className="month-tile no-contract" onClick={() => setMonthModal(m.i)} style={{ cursor: 'pointer' }}>
+                  <div key={m.i} className="month-tile no-contract" onClick={readOnly ? undefined : () => setMonthModal(m.i)} style={{ cursor: readOnly ? 'default' : 'pointer' }}>
                     <div className="mt-header">
                       <span className="mt-month">{m.name}</span>
                       <span className="badge archived-c">No contract</span>
@@ -666,7 +670,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                 .join(' ')
               const showPaidToggle = m.status !== 'vacant'
               return (
-                <div key={m.i} className={cls} onClick={() => setMonthModal(m.i)}>
+                <div key={m.i} className={cls} onClick={readOnly ? undefined : () => setMonthModal(m.i)} style={{ cursor: readOnly ? 'default' : undefined }}>
                   <div className="mt-header">
                     <span className="mt-month">{m.name}</span>
                     <span
@@ -697,12 +701,13 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                           id={`rent-received-${m.i}`}
                           type="checkbox"
                           checked={m.rentReceived}
+                          disabled={readOnly}
                           onChange={(e) => {
                             e.stopPropagation()
-                            setRentReceived(m.i, e.target.checked)
+                            if (!readOnly) setRentReceived(m.i, e.target.checked)
                           }}
                           onClick={(e) => e.stopPropagation()}
-                          style={{ width: 16, height: 16, flexShrink: 0, cursor: 'pointer' }}
+                          style={{ width: 16, height: 16, flexShrink: 0, cursor: readOnly ? 'default' : 'pointer' }}
                         />
                         <label
                           htmlFor={`rent-received-${m.i}`}
@@ -908,8 +913,8 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                   {MONTHS.map((name, i) => (
                     <th
                       key={i}
-                      onClick={() => setMonthModal(i)}
-                      style={{ textAlign: 'right', padding: '12px 14px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', cursor: 'pointer', whiteSpace: 'nowrap', minWidth: 100 }}
+                      onClick={readOnly ? undefined : () => setMonthModal(i)}
+                      style={{ textAlign: 'right', padding: '12px 14px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', cursor: readOnly ? 'default' : 'pointer', whiteSpace: 'nowrap', minWidth: 100 }}
                     >
                       {name}
                     </th>
