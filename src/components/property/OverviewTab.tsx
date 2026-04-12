@@ -55,6 +55,10 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
   const incomeInputRef = useRef<HTMLInputElement>(null)
   const [occModal, setOccModal] = useState(false)
   const active = activeContract(prop)
+  const [editingOwner, setEditingOwner] = useState(false)
+  const [ownerDraft, setOwnerDraft] = useState('')
+  const [editingGroup, setEditingGroup] = useState(false)
+  const [groupDraft, setGroupDraft] = useState('')
 
   const saveMonth = (mIdx: number, data: MonthData) => {
     onUpdateProp((p) => {
@@ -470,6 +474,92 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="card mb24">
+        <div className="card-inner">
+          <div className="fw6 mb12" style={{ fontSize: '14px' }}>Property details</div>
+          <table className="contract-detail-table">
+            <tbody>
+              <tr>
+                <td className="cdt-label">Owner</td>
+                <td className="cdt-value">
+                  {editingOwner ? (
+                    <div className="flex align-center gap8">
+                      <input
+                        autoFocus
+                        type="text"
+                        value={ownerDraft}
+                        onChange={(e) => setOwnerDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            onUpdateProp((p) => ({ ...p, owner: ownerDraft.trim() }))
+                            setEditingOwner(false)
+                          }
+                          if (e.key === 'Escape') setEditingOwner(false)
+                        }}
+                        style={{ fontSize: 13, padding: '3px 8px', borderRadius: 6, border: '1px solid #e8ecf2', background: '#f7f9fc', width: 180 }}
+                      />
+                      <button type="button" className="primary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => { onUpdateProp((p) => ({ ...p, owner: ownerDraft.trim() })); setEditingOwner(false) }}>Save</button>
+                      <button type="button" className="ghost" style={{ fontSize: 12 }} onClick={() => setEditingOwner(false)}>Cancel</button>
+                    </div>
+                  ) : (
+                    <div className="flex align-center gap8">
+                      <span>{prop.owner || '—'}</span>
+                      <button
+                        type="button"
+                        className="ghost"
+                        style={{ padding: '1px 5px', fontSize: 12, color: 'var(--text3)' }}
+                        onClick={() => { setOwnerDraft(prop.owner || ''); setEditingOwner(true) }}
+                        title="Edit owner"
+                      >
+                        ✎
+                      </button>
+                    </div>
+                  )}
+                </td>
+              </tr>
+              <tr>
+                <td className="cdt-label">Group</td>
+                <td className="cdt-value">
+                  {editingGroup ? (
+                    <div className="flex align-center gap8">
+                      <input
+                        autoFocus
+                        type="text"
+                        value={groupDraft}
+                        onChange={(e) => setGroupDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            onUpdateProp((p) => ({ ...p, group: groupDraft.trim() || undefined }))
+                            setEditingGroup(false)
+                          }
+                          if (e.key === 'Escape') setEditingGroup(false)
+                        }}
+                        style={{ fontSize: 13, padding: '3px 8px', borderRadius: 6, border: '1px solid #e8ecf2', background: '#f7f9fc', width: 180 }}
+                      />
+                      <button type="button" className="primary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => { onUpdateProp((p) => ({ ...p, group: groupDraft.trim() || undefined })); setEditingGroup(false) }}>Save</button>
+                      <button type="button" className="ghost" style={{ fontSize: 12 }} onClick={() => setEditingGroup(false)}>Cancel</button>
+                    </div>
+                  ) : (
+                    <div className="flex align-center gap8">
+                      <span>{prop.group || '—'}</span>
+                      <button
+                        type="button"
+                        className="ghost"
+                        style={{ padding: '1px 5px', fontSize: 12, color: 'var(--text3)' }}
+                        onClick={() => { setGroupDraft(prop.group || ''); setEditingGroup(true) }}
+                        title="Edit group"
+                      >
+                        ✎
+                      </button>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
