@@ -184,6 +184,14 @@ export default function AuthHeader() {
                     Change password
                   </button>
                 )}
+                <Link
+                  to="/settings/sharing"
+                  className="header-user-menu-btn"
+                  style={{ textDecoration: 'none', display: 'block', textAlign: 'left' }}
+                  onClick={() => setMenuOpen(false)}
+                >
+                  🔗 Sharing &amp; Access
+                </Link>
                 <button type="button" className="header-user-menu-btn header-user-menu-btn-danger" onClick={openDeleteModal}>
                   Delete account
                 </button>

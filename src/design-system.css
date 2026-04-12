@@ -2582,3 +2582,150 @@
     color: #6b7280;
     margin-top: 4px;
   }
+
+/* ===================== SHARING UI ===================== */
+
+/* Shared view banner */
+.shared-view-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f0f7ff;
+  border-bottom: 1px solid #bfdbfe;
+  padding: 10px 24px;
+  font-size: 13px;
+  position: sticky;
+  top: 56px;
+  z-index: 10;
+}
+.shared-view-label {
+  color: #374151;
+  flex: 1;
+}
+.shared-view-back {
+  background: none;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #1d4ed8;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.shared-view-back:hover { background: #dbeafe; }
+
+/* Sharing settings page */
+.sharing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sharing-row {
+  background: #fff;
+  border: 1px solid #e8ecf2;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sharing-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #dbeafe;
+  color: #1d4ed8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.sharing-email {
+  font-weight: 600;
+  color: #1a1d23;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sharing-scope {
+  color: #6b7280;
+  font-size: 12px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sharing-btn-danger {
+  background: none;
+  border: 1px solid #e8ecf2;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ef4444;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sharing-btn-danger:hover { border-color: #ef4444; background: #fef2f2; }
+.sharing-btn-secondary {
+  background: none;
+  border: 1px solid #e8ecf2;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sharing-btn-secondary:hover { background: #f7f9fc; }
+
+/* Invite modal filter builder */
+.filter-builder-row {
+  background: #f7f9fc;
+  border: 1px solid #e8ecf2;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+}
+.invite-preview-banner {
+  background: #f0f7ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: #1e40af;
+}
+.invite-link-box {
+  background: #f7f9fc;
+  border: 1px solid #e8ecf2;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #6b7280;
+  font-family: monospace;
+  word-break: break-all;
+  margin-bottom: 12px;
+}
+
+/* modal-container (used by InviteModal and InviteLinkScreen) */
+.modal-container {
+  background: #fff;
+  border-radius: 18px;
+  padding: 28px;
+  max-width: 370px;
+  width: 100%;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.16);
+  position: relative;
+  animation: toastSlideUp 0.2s ease-out;
+}
+
+@media (max-width: 768px) {
+  .shared-view-banner { flex-wrap: wrap; gap: 8px; }
+  .sharing-row { flex-wrap: wrap; }
+  .modal-container { max-width: calc(100vw - 48px); padding: 20px; }
+}
