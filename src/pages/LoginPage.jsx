@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 function formatAuthError(err) {
@@ -25,6 +26,7 @@ export default function LoginPage() {
     signupWithEmail,
     sendPasswordReset,
   } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignup, setIsSignup] = useState(false);
@@ -32,6 +34,12 @@ export default function LoginPage() {
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [resetSending, setResetSending] = useState(false);
+
+  function getRedirectPath() {
+    const params = new URLSearchParams(window.location.search);
+    const redirectTo = params.get('redirect');
+    return redirectTo || '/';
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -45,6 +53,7 @@ export default function LoginPage() {
         setPassword('');
       } else {
         await loginWithEmail(email.trim(), password);
+        navigate(getRedirectPath());
       }
     } catch (err) {
       if (err.code !== 'auth/popup-closed-by-user') {
@@ -60,6 +69,7 @@ export default function LoginPage() {
     setSuccess('');
     try {
       await loginWithGoogle();
+      navigate(getRedirectPath());
     } catch (err) {
       if (err.code !== 'auth/popup-closed-by-user') {
         setError(formatAuthError(err));

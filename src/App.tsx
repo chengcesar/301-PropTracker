@@ -17,6 +17,7 @@ import { UpgradeModal } from './components/modals/UpgradeModal'
 import type { UpgradeReason } from './components/modals/UpgradeModal'
 import { useEntitlements } from './hooks/useEntitlements'
 import { SharedPortfolioPage } from './pages/SharedPortfolioPage'
+import { InvitePage } from './pages/InvitePage'
 
 function AppContent() {
   const { properties, selectedId, setSelectedId, updateProperty, addProperty, addPropertyOpen, setAddPropertyOpen } = useAppState()
@@ -84,6 +85,7 @@ function AppRoutes() {
         <Route index element={<AdminPage />} />
         <Route path="design-system" element={<AdminDesignSystemPage />} />
       </Route>
+      <Route path="/invite/:token" element={<InvitePage />} />
       <Route path="/shared/:shareId" element={<SharedPortfolioPage />} />
       <Route
         path="/"
