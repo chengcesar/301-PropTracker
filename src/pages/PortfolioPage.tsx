@@ -1662,7 +1662,13 @@ function SharedWithMeSection() {
               <span className="shared-view-badge">view only</span>
             </div>
             <div className="shared-with-me-meta">
-              {s.scope === 'portfolio' ? 'Full portfolio access' : s.filters.map((f) => `${f.field} = ${f.values.join(', ')}`).join(' · ')}
+              {s.scope === 'portfolio'
+                ? 'Full portfolio access'
+                : s.scope === 'properties'
+                  ? `${s.propertyIds.length} propert${s.propertyIds.length === 1 ? 'y' : 'ies'}`
+                  : s.filters.length > 0
+                    ? s.filters.map((f) => `${f.field} = ${f.values.join(', ')}`).join(' · ')
+                    : 'Filtered view'}
             </div>
             <div style={{ color: '#3b82f6', fontSize: 12, fontWeight: 600, marginTop: 8 }}>Open →</div>
           </button>

@@ -7,6 +7,7 @@ import { fmt, fmtCurrency, fmtCurrencyM } from '../../lib/format'
 import { MonthModal } from '../modals/MonthModal'
 import { OccupantModal } from '../modals/OccupantModal'
 import { KpiInfoIcon } from '../KpiInfoIcon'
+import { useReadOnly } from '../../context/ReadOnlyContext'
 
 type Props = {
   prop: Property
@@ -29,6 +30,7 @@ function formatIncrement(c: { increment: string; ipcExtra: number }): string {
 }
 
 export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency }: Props) {
+  const readOnly = useReadOnly()
   const dc = displayCurrency ?? prop.currency
   const ann = calcAnnual(prop)
   const gpiDisplay = projectedGpiAnnual(prop)
@@ -507,15 +509,17 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                   ) : (
                     <div className="flex align-center gap8">
                       <span>{prop.owner || '—'}</span>
-                      <button
-                        type="button"
-                        className="ghost"
-                        style={{ padding: '1px 5px', fontSize: 12, color: 'var(--text3)' }}
-                        onClick={() => { setOwnerDraft(prop.owner || ''); setEditingOwner(true) }}
-                        title="Edit owner"
-                      >
-                        ✎
-                      </button>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          className="ghost"
+                          style={{ padding: '1px 5px', fontSize: 12, color: 'var(--text3)' }}
+                          onClick={() => { setOwnerDraft(prop.owner || ''); setEditingOwner(true) }}
+                          title="Edit owner"
+                        >
+                          ✎
+                        </button>
+                      )}
                     </div>
                   )}
                 </td>
@@ -545,15 +549,17 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                   ) : (
                     <div className="flex align-center gap8">
                       <span>{prop.group || '—'}</span>
-                      <button
-                        type="button"
-                        className="ghost"
-                        style={{ padding: '1px 5px', fontSize: 12, color: 'var(--text3)' }}
-                        onClick={() => { setGroupDraft(prop.group || ''); setEditingGroup(true) }}
-                        title="Edit group"
-                      >
-                        ✎
-                      </button>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          className="ghost"
+                          style={{ padding: '1px 5px', fontSize: 12, color: 'var(--text3)' }}
+                          onClick={() => { setGroupDraft(prop.group || ''); setEditingGroup(true) }}
+                          title="Edit group"
+                        >
+                          ✎
+                        </button>
+                      )}
                     </div>
                   )}
                 </td>
