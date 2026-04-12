@@ -86,7 +86,11 @@ function AppRoutes() {
         <Route index element={<AdminPage />} />
         <Route path="design-system" element={<AdminDesignSystemPage />} />
       </Route>
-      <Route path="/settings/sharing" element={user ? <SharingSettingsPage /> : <Navigate to="/login" />} />
+      <Route path="/settings/sharing" element={user ? (
+        <AppStateProvider uid={user.uid}>
+          <SharingSettingsPage />
+        </AppStateProvider>
+      ) : <Navigate to="/login" />} />
       <Route path="/invite/:token" element={<InvitePage />} />
       <Route path="/shared/:shareId" element={<SharedPortfolioPage />} />
       <Route

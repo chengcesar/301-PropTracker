@@ -4,6 +4,7 @@ import { subscribeOwnerShares, revokeShare, cancelShare } from '../services/shar
 import type { Share } from '../lib/types'
 import AuthHeader from '../components/AuthHeader'
 import { InviteModal } from '../components/sharing/InviteModal'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 function StatusBadge({ status }: { status: 'pending' | 'active' }) {
   const styles: Record<string, React.CSSProperties> = {
@@ -34,21 +35,25 @@ export function SharingSettingsPage() {
   const { user } = useAuth() as unknown as { user: any }
   const [shares, setShares] = useState<Share[]>([])
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [confirmAction, setConfirmAction] = useState<{ type: 'revoke' | 'cancel'; shareId: string; email: string } | null>(null)
 
   useEffect(() => {
     if (!user) return
-    return subscribeOwnerShares(user.uid, setShares)
+    return subscribeOwnerShares(user.uid, (s) => {
+      setShares(s)
+      setLoading(false)
+    })
   }, [user])
 
   const activeShares = shares.filter((s) => s.status === 'active')
   const pendingShares = shares.filter((s) => s.status === 'pending')
 
-  async function handleRevoke(shareId: string) {
-    await revokeShare(shareId)
-  }
-
-  async function handleCancel(shareId: string) {
-    await cancelShare(shareId)
+  async function handleConfirm() {
+    if (!confirmAction) return
+    if (confirmAction.type === 'revoke') await revokeShare(confirmAction.shareId)
+    else await cancelShare(confirmAction.shareId)
+    setConfirmAction(null)
   }
 
   return (
@@ -75,7 +80,7 @@ export function SharingSettingsPage() {
                     <div className="sharing-scope">{shareLabel(s)}</div>
                   </div>
                   <StatusBadge status="active" />
-                  <button className="sharing-btn-danger" onClick={() => handleRevoke(s.id)}>Revoke</button>
+                  <button className="sharing-btn-danger" onClick={() => setConfirmAction({ type: 'revoke', shareId: s.id, email: s.granteeEmail })}>Revoke</button>
                 </div>
               ))}
             </div>
@@ -100,14 +105,14 @@ export function SharingSettingsPage() {
                   >
                     Copy link
                   </button>
-                  <button className="sharing-btn-danger" onClick={() => handleCancel(s.id)}>Cancel</button>
+                  <button className="sharing-btn-danger" onClick={() => setConfirmAction({ type: 'cancel', shareId: s.id, email: s.granteeEmail })}>Cancel</button>
                 </div>
               ))}
             </div>
           </section>
         )}
 
-        {shares.length === 0 && (
+        {!loading && shares.length === 0 && (
           <div style={{ textAlign: 'center', padding: '48px 0', color: '#6b7280', fontSize: 14 }}>
             No active shares. Click "Invite viewer" to share your portfolio.
           </div>
@@ -116,6 +121,19 @@ export function SharingSettingsPage() {
 
       {inviteOpen && (
         <InviteModal onClose={() => setInviteOpen(false)} />
+      )}
+
+      {confirmAction && (
+        <ConfirmDialog
+          title={confirmAction.type === 'revoke' ? 'Revoke access' : 'Cancel invite'}
+          message={confirmAction.type === 'revoke'
+            ? `Revoke access for ${confirmAction.email}? They will immediately lose access to this portfolio.`
+            : `Cancel the invite for ${confirmAction.email}? The invite link will stop working.`
+          }
+          confirmLabel={confirmAction.type === 'revoke' ? 'Revoke' : 'Cancel invite'}
+          onConfirm={handleConfirm}
+          onCancel={() => setConfirmAction(null)}
+        />
       )}
     </>
   )

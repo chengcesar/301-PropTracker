@@ -27,6 +27,7 @@ export function InviteModal({ onClose }: Props) {
   const [filters, setFilters] = useState<ShareFilter[]>([{ field: 'owner', values: [] }])
   const [saving, setSaving] = useState(false)
   const [inviteToken, setInviteToken] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const previewCount = useMemo(() => {
     return applyShareFilters(properties, scope, filters, []).length
@@ -61,6 +62,7 @@ export function InviteModal({ onClose }: Props) {
   async function handleSubmit() {
     if (!email.trim() || !user) return
     setSaving(true)
+    setError(null)
     try {
       const { inviteToken: token } = await createShare({
         ownerUid: user.uid,
@@ -72,6 +74,8 @@ export function InviteModal({ onClose }: Props) {
         propertyIds: [],
       })
       setInviteToken(token)
+    } catch (e) {
+      setError('Failed to create invite. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -172,6 +176,10 @@ export function InviteModal({ onClose }: Props) {
           <div className="invite-preview-banner">
             Viewer will see <strong>{previewCount} propert{previewCount === 1 ? 'y' : 'ies'}</strong> matching current filters
           </div>
+        )}
+
+        {error && (
+          <p style={{ color: '#ef4444', fontSize: 13, margin: '8px 0 0' }}>{error}</p>
         )}
 
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
