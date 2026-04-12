@@ -129,7 +129,7 @@ export async function acceptShare(shareId: string, granteeUid: string): Promise<
   ])
 }
 
-/** Owner revokes an active share. Also removes viewer from owner's viewers array. */
+/** Owner revokes an active share. Only removes viewer from owner's viewers array if no other active share remains for them. */
 export async function revokeShare(shareId: string): Promise<void> {
   const share = await getShare(shareId)
   if (!share) return
@@ -137,11 +137,20 @@ export async function revokeShare(shareId: string): Promise<void> {
     updateDoc(shareDoc(shareId), { status: 'revoked' }),
   ]
   if (share.granteeUid) {
-    ops.push(
-      updateDoc(doc(firestore!, 'users', share.ownerUid), {
-        viewers: arrayRemove(share.granteeUid),
-      }),
-    )
+    const otherSnap = await getDocs(query(
+      sharesCol(),
+      where('ownerUid', '==', share.ownerUid),
+      where('granteeUid', '==', share.granteeUid),
+      where('status', '==', 'active'),
+    ))
+    const otherActive = otherSnap.docs.filter((d) => d.id !== shareId)
+    if (otherActive.length === 0) {
+      ops.push(
+        updateDoc(doc(firestore!, 'users', share.ownerUid), {
+          viewers: arrayRemove(share.granteeUid),
+        }),
+      )
+    }
   }
   await Promise.all(ops)
 }
