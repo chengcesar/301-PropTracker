@@ -8,9 +8,6 @@ type Props = {
 
 export function InviteLinkScreen({ inviteToken, granteeEmail, onClose }: Props) {
   const link = `${window.location.origin}/invite/${inviteToken}`
-  const subject = encodeURIComponent('You have been invited to view a portfolio on PropTracker')
-  const body = encodeURIComponent(`Hi,\n\nYou have been invited to view a portfolio on PropTracker. Click the link below to accept:\n\n${link}\n\nThis link is personal — please do not share it.`)
-  const mailtoHref = `mailto:${granteeEmail}?subject=${subject}&body=${body}`
   const [copied, setCopied] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
