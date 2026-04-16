@@ -103,13 +103,12 @@ export function InviteModal({ onClose }: Props) {
 
         <div className="field" style={{ marginBottom: 14 }}>
           <label className="field-label">ACCESS SCOPE</label>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
             {(['filtered', 'portfolio'] as ShareScope[]).map((s) => (
               <button
                 key={s}
                 type="button"
-                className={scope === s ? 'add-btn' : 'filter-bar-btn'}
-                style={{ fontSize: 12, padding: '5px 12px' }}
+                className={`filter-bar-btn scope-btn${scope === s ? ' active' : ''}`}
                 onClick={() => setScope(s)}
               >
                 {s === 'filtered' ? 'Filtered view' : 'Full portfolio'}

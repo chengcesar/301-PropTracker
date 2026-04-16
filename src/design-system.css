@@ -2684,6 +2684,20 @@
 }
 .sharing-btn-secondary:hover { background: #f7f9fc; }
 
+/* Invite modal scope selector */
+.scope-btn {
+  flex: 1;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 500;
+}
+.scope-btn.active {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #3b82f6;
+  font-weight: 600;
+}
+
 /* Invite modal filter builder */
 .filter-builder-row {
   background: #f7f9fc;
