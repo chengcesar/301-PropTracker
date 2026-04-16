@@ -2,9 +2,17 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function isAdmin() {
+      return request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     // ── Users ────────────────────────────────────────────────────────────────
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
+      // Admins can read any user doc (for the admin dashboard)
+      allow read, write: if isAdmin();
 
       // Properties: owner has full access; active viewers can read
       match /properties/{propertyId} {
@@ -12,6 +20,8 @@ service cloud.firestore {
 
         allow read: if request.auth != null
           && exists(/databases/$(database)/documents/users/$(uid)/viewers/$(request.auth.uid));
+        // Admins can read any user's properties
+        allow read: if isAdmin();
       }
 
       // Viewers subcollection: owner has full control; grantee can create their own viewer doc on invite acceptance
@@ -24,6 +34,20 @@ service cloud.firestore {
       match /settings/{docId} {
         allow read, write: if request.auth != null && request.auth.uid == uid;
       }
+    }
+
+    // ── Invite token index ───────────────────────────────────────────────────
+    // Any authenticated user can read a token doc by exact path (no collection query).
+    // This avoids Firestore rejecting queries where rules reference resource.data fields.
+    match /inviteTokens/{token} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if false;
+    }
+
+    // ── Mail (Firebase Trigger Email extension) ──────────────────────────────
+    match /mail/{docId} {
+      allow create: if request.auth != null;
     }
 
     // ── Shares ────────────────────────────────────────────────────────────────

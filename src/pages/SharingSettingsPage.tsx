@@ -59,7 +59,7 @@ export function SharingSettingsPage() {
   return (
     <>
       <AuthHeader />
-      <div className="main">
+      <div className="content">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1d23', margin: 0 }}>Sharing &amp; Access</h1>
@@ -78,8 +78,19 @@ export function SharingSettingsPage() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="sharing-email">{s.granteeEmail}</div>
                     <div className="sharing-scope">{shareLabel(s)}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                      <span style={{ fontSize: 12, color: '#9ca3af', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}>
+                        {`${window.location.origin}/invite/${s.inviteToken}`}
+                      </span>
+                    </div>
                   </div>
                   <StatusBadge status="active" />
+                  <button
+                    className="sharing-btn-secondary"
+                    onClick={() => navigator.clipboard.writeText(`${window.location.origin}/invite/${s.inviteToken}`)}
+                  >
+                    Copy link
+                  </button>
                   <button className="sharing-btn-danger" onClick={() => setConfirmAction({ type: 'revoke', shareId: s.id, email: s.granteeEmail })}>Revoke</button>
                 </div>
               ))}
@@ -97,6 +108,11 @@ export function SharingSettingsPage() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="sharing-email">{s.granteeEmail}</div>
                     <div className="sharing-scope">{shareLabel(s)} · Invite not yet accepted</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                      <span style={{ fontSize: 12, color: '#9ca3af', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}>
+                        {`${window.location.origin}/invite/${s.inviteToken}`}
+                      </span>
+                    </div>
                   </div>
                   <StatusBadge status="pending" />
                   <button

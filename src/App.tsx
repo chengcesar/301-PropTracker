@@ -19,6 +19,7 @@ import { useEntitlements } from './hooks/useEntitlements'
 import { SharedPortfolioPage } from './pages/SharedPortfolioPage'
 import { InvitePage } from './pages/InvitePage'
 import { SharingSettingsPage } from './pages/SharingSettingsPage'
+import { SharedWithMePage } from './pages/SharedWithMePage'
 
 function AppContent() {
   const { properties, selectedId, setSelectedId, updateProperty, addProperty, addPropertyOpen, setAddPropertyOpen } = useAppState()
@@ -91,6 +92,7 @@ function AppRoutes() {
           <SharingSettingsPage />
         </AppStateProvider>
       ) : <Navigate to="/login" />} />
+      <Route path="/shared-with-me" element={user ? <SharedWithMePage /> : <Navigate to="/login" />} />
       <Route path="/invite/:token" element={<InvitePage />} />
       <Route path="/shared/:shareId" element={<SharedPortfolioPage />} />
       <Route

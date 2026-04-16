@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getShareByToken, acceptShare } from '../services/sharesService'
 
-type State = 'loading' | 'accepting' | 'success' | 'already-active' | 'revoked' | 'not-found' | 'wrong-email'
+type State = 'loading' | 'accepting' | 'success' | 'already-active' | 'revoked' | 'not-found' | 'wrong-email' | 'error'
 
 export function InvitePage() {
   const { token } = useParams<{ token: string }>()
@@ -11,6 +11,7 @@ export function InvitePage() {
   const navigate = useNavigate()
   const [state, setState] = useState<State>('loading')
   const [shareId, setShareId] = useState<string | null>(null)
+  const [errorDetail, setErrorDetail] = useState<string>('')
 
   useEffect(() => {
     if (authLoading) return
@@ -20,7 +21,15 @@ export function InvitePage() {
     }
 
     async function process() {
-      const share = await getShareByToken(token!)
+      let share
+      try {
+        share = await getShareByToken(token!)
+      } catch (err: any) {
+        console.error('[InvitePage] getShareByToken failed:', err)
+        setErrorDetail(`getShareByToken: ${err?.message ?? String(err)}`)
+        setState('error')
+        return
+      }
       if (!share) { setState('not-found'); return }
       if (share.status === 'revoked') { setState('revoked'); return }
       if (share.status === 'active' && share.granteeUid === user.uid) {
@@ -33,7 +42,14 @@ export function InvitePage() {
         return
       }
       setState('accepting')
-      await acceptShare(share.id, user.uid)
+      try {
+        await acceptShare(share.id, user.uid)
+      } catch (err: any) {
+        console.error('[InvitePage] acceptShare failed:', err)
+        setErrorDetail(err?.message ?? String(err))
+        setState('error')
+        return
+      }
       setShareId(share.id)
       setState('success')
     }
@@ -56,9 +72,10 @@ export function InvitePage() {
     revoked: 'This invite is no longer valid. Ask the owner to send a new one.',
     'not-found': 'This invite link is invalid.',
     'wrong-email': `This invite was sent to a different email address. Please sign in with the correct account.`,
+    error: `Something went wrong accepting the invite. ${errorDetail}`,
   }
 
-  const isError = state === 'revoked' || state === 'not-found' || state === 'wrong-email'
+  const isError = state === 'revoked' || state === 'not-found' || state === 'wrong-email' || state === 'error'
   const isSuccess = state === 'success' || state === 'already-active'
 
   return (

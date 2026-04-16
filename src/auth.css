@@ -21,6 +21,13 @@
 .header-nav-link:hover { background: #f3f4f6; color: #111827; }
 .header-nav-link.active { color: #3b82f6; font-weight: 600; }
 
+.header-team-dropdown { position: relative; }
+.header-team-trigger { display: flex; align-items: center; gap: 4px; }
+.header-team-chevron { transition: transform 0.2s; color: #9ca3af; flex-shrink: 0; }
+.header-team-trigger[aria-expanded="true"] .header-team-chevron { transform: rotate(180deg); }
+.header-team-menu { position: absolute; top: 100%; left: 0; margin-top: 6px; }
+.header-user-menu-btn-active { color: #3b82f6 !important; font-weight: 600 !important; }
+
 .logo { font-weight: 700; font-size: 15px; letter-spacing: -0.3px; color: #1a1d23; display: flex; align-items: center; gap: 8px; }
 .logo-text { display: flex; flex-direction: column; line-height: 1.1; }
 .logo-line1 { color: #6D2F20; }

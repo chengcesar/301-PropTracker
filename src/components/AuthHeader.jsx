@@ -35,6 +35,8 @@ export default function AuthHeader() {
   } = useAuth();
   const appState = useContext(AppStateContext);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [teamDropdownOpen, setTeamDropdownOpen] = useState(false);
+  const teamDropdownRef = useRef(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
@@ -57,6 +59,16 @@ export default function AuthHeader() {
       return () => document.removeEventListener('mousedown', handler);
     }
   }, [menuOpen]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (teamDropdownRef.current && !teamDropdownRef.current.contains(e.target)) setTeamDropdownOpen(false);
+    };
+    if (teamDropdownOpen) {
+      document.addEventListener('mousedown', handler);
+      return () => document.removeEventListener('mousedown', handler);
+    }
+  }, [teamDropdownOpen]);
 
   function openDeleteModal() {
     setDeleteError('');
@@ -115,13 +127,53 @@ export default function AuthHeader() {
             </Link>
           )}
           {appState && (
-            <button
-              type="button"
-              className={`header-nav-link${appState.selectedId === 'contacts' ? ' active' : ''}`}
-              onClick={() => appState.setSelectedId('contacts')}
-            >
-              Contacts
-            </button>
+            <div className="header-team-dropdown" ref={teamDropdownRef}>
+              <button
+                type="button"
+                className={`header-nav-link header-team-trigger${appState.selectedId === 'contacts' ? ' active' : ''}`}
+                onClick={() => setTeamDropdownOpen((o) => !o)}
+                aria-expanded={teamDropdownOpen}
+                aria-haspopup="true"
+              >
+                Team
+                <svg className="header-team-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {teamDropdownOpen && (
+                <div className="header-user-menu header-team-menu" role="menu">
+                  <div className="header-user-menu-title">Team</div>
+                  <div className="header-user-menu-actions">
+                    <button
+                      type="button"
+                      className={`header-user-menu-btn${appState.selectedId === 'contacts' ? ' header-user-menu-btn-active' : ''}`}
+                      onClick={() => { appState.setSelectedId('contacts'); setTeamDropdownOpen(false); }}
+                      role="menuitem"
+                    >
+                      Contacts
+                    </button>
+                    <Link
+                      to="/settings/sharing"
+                      className="header-user-menu-btn"
+                      style={{ textDecoration: 'none', display: 'block', textAlign: 'left' }}
+                      onClick={() => setTeamDropdownOpen(false)}
+                      role="menuitem"
+                    >
+                      Sharing &amp; Access
+                    </Link>
+                    <Link
+                      to="/shared-with-me"
+                      className="header-user-menu-btn"
+                      style={{ textDecoration: 'none', display: 'block', textAlign: 'left' }}
+                      onClick={() => setTeamDropdownOpen(false)}
+                      role="menuitem"
+                    >
+                      Shared with me
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
           <div className="header-account-wrap">
             <button
@@ -184,14 +236,6 @@ export default function AuthHeader() {
                     Change password
                   </button>
                 )}
-                <Link
-                  to="/settings/sharing"
-                  className="header-user-menu-btn"
-                  style={{ textDecoration: 'none', display: 'block', textAlign: 'left' }}
-                  onClick={() => setMenuOpen(false)}
-                >
-                  🔗 Sharing &amp; Access
-                </Link>
                 <button type="button" className="header-user-menu-btn header-user-menu-btn-danger" onClick={openDeleteModal}>
                   Delete account
                 </button>
