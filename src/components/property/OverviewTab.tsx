@@ -7,6 +7,7 @@ import { fmt, fmtCurrency, fmtCurrencyM } from '../../lib/format'
 import { MonthModal } from '../modals/MonthModal'
 import { OccupantModal } from '../modals/OccupantModal'
 import { KpiInfoIcon } from '../KpiInfoIcon'
+import { useReadOnly } from '../../context/ReadOnlyContext'
 
 type Props = {
   prop: Property
@@ -29,6 +30,7 @@ function formatIncrement(c: { increment: string; ipcExtra: number }): string {
 }
 
 export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency }: Props) {
+  const readOnly = useReadOnly()
   const dc = displayCurrency ?? prop.currency
   const ann = calcAnnual(prop)
   const gpiDisplay = projectedGpiAnnual(prop)
@@ -55,6 +57,10 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
   const incomeInputRef = useRef<HTMLInputElement>(null)
   const [occModal, setOccModal] = useState(false)
   const active = activeContract(prop)
+  const [editingOwner, setEditingOwner] = useState(false)
+  const [ownerDraft, setOwnerDraft] = useState('')
+  const [editingGroup, setEditingGroup] = useState(false)
+  const [groupDraft, setGroupDraft] = useState('')
 
   const saveMonth = (mIdx: number, data: MonthData) => {
     onUpdateProp((p) => {
@@ -346,10 +352,12 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
             <div className="card-inner">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <div className="fw6" style={{ fontSize: '14px' }}>Occupant</div>
-                <div className="flex gap4">
-                  <button type="button" className="ghost fs12" onClick={() => setOccModal(true)}>Edit</button>
-                  <button type="button" className="ghost danger fs12" onClick={removeOccupant}>Remove</button>
-                </div>
+                {!readOnly && (
+                  <div className="flex gap4">
+                    <button type="button" className="ghost fs12" onClick={() => setOccModal(true)}>Edit</button>
+                    <button type="button" className="ghost danger fs12" onClick={removeOccupant}>Remove</button>
+                  </div>
+                )}
               </div>
               <table className="contract-detail-table">
                 <tbody>
@@ -381,11 +389,13 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
           <div className="card">
             <div className="card-inner">
               <div className="warn-box" style={{ marginBottom: 12 }}>No active contract — all months show as vacant.</div>
-              <div className="flex gap8">
-                <button type="button" className="ghost fs12" style={{ color: 'var(--accent-bg)' }} onClick={() => setOccModal(true)}>
-                  + Add occupant
-                </button>
-              </div>
+              {!readOnly && (
+                <div className="flex gap8">
+                  <button type="button" className="ghost fs12" style={{ color: 'var(--accent-bg)' }} onClick={() => setOccModal(true)}>
+                    + Add occupant
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -473,6 +483,96 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
         </div>
       </div>
 
+      <div className="card mb24">
+        <div className="card-inner">
+          <div className="fw6 mb12" style={{ fontSize: '14px' }}>Property details</div>
+          <table className="contract-detail-table">
+            <tbody>
+              <tr>
+                <td className="cdt-label">Owner</td>
+                <td className="cdt-value">
+                  {editingOwner ? (
+                    <div className="flex align-center gap8">
+                      <input
+                        autoFocus
+                        type="text"
+                        value={ownerDraft}
+                        onChange={(e) => setOwnerDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            onUpdateProp((p) => ({ ...p, owner: ownerDraft.trim() }))
+                            setEditingOwner(false)
+                          }
+                          if (e.key === 'Escape') setEditingOwner(false)
+                        }}
+                        style={{ fontSize: 13, padding: '3px 8px', borderRadius: 6, border: '1px solid #e8ecf2', background: '#f7f9fc', width: 180 }}
+                      />
+                      <button type="button" className="primary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => { onUpdateProp((p) => ({ ...p, owner: ownerDraft.trim() })); setEditingOwner(false) }}>Save</button>
+                      <button type="button" className="ghost" style={{ fontSize: 12 }} onClick={() => setEditingOwner(false)}>Cancel</button>
+                    </div>
+                  ) : (
+                    <div className="flex align-center gap8">
+                      <span>{prop.owner || '—'}</span>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          className="ghost"
+                          style={{ padding: '1px 5px', fontSize: 12, color: 'var(--text3)' }}
+                          onClick={() => { setOwnerDraft(prop.owner || ''); setEditingOwner(true) }}
+                          title="Edit owner"
+                        >
+                          ✎
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </td>
+              </tr>
+              <tr>
+                <td className="cdt-label">Group</td>
+                <td className="cdt-value">
+                  {editingGroup ? (
+                    <div className="flex align-center gap8">
+                      <input
+                        autoFocus
+                        type="text"
+                        value={groupDraft}
+                        onChange={(e) => setGroupDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            onUpdateProp((p) => ({ ...p, group: groupDraft.trim() || undefined }))
+                            setEditingGroup(false)
+                          }
+                          if (e.key === 'Escape') setEditingGroup(false)
+                        }}
+                        style={{ fontSize: 13, padding: '3px 8px', borderRadius: 6, border: '1px solid #e8ecf2', background: '#f7f9fc', width: 180 }}
+                      />
+                      <button type="button" className="primary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => { onUpdateProp((p) => ({ ...p, group: groupDraft.trim() || undefined })); setEditingGroup(false) }}>Save</button>
+                      <button type="button" className="ghost" style={{ fontSize: 12 }} onClick={() => setEditingGroup(false)}>Cancel</button>
+                    </div>
+                  ) : (
+                    <div className="flex align-center gap8">
+                      <span>{prop.group || '—'}</span>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          className="ghost"
+                          style={{ padding: '1px 5px', fontSize: 12, color: 'var(--text3)' }}
+                          onClick={() => { setGroupDraft(prop.group || ''); setEditingGroup(true) }}
+                          title="Edit group"
+                        >
+                          ✎
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div className="sec-hdr mb8">
         <span className="sec-title">Monthly entry · {prop.year}</span>
         <div className="flex gap8 align-center">
@@ -543,7 +643,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
             {months.map((m) => {
               if (!m.contract) {
                 return (
-                  <div key={m.i} className="month-tile no-contract" onClick={() => setMonthModal(m.i)} style={{ cursor: 'pointer' }}>
+                  <div key={m.i} className="month-tile no-contract" onClick={readOnly ? undefined : () => setMonthModal(m.i)} style={{ cursor: readOnly ? 'default' : 'pointer' }}>
                     <div className="mt-header">
                       <span className="mt-month">{m.name}</span>
                       <span className="badge archived-c">No contract</span>
@@ -570,7 +670,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                 .join(' ')
               const showPaidToggle = m.status !== 'vacant'
               return (
-                <div key={m.i} className={cls} onClick={() => setMonthModal(m.i)}>
+                <div key={m.i} className={cls} onClick={readOnly ? undefined : () => setMonthModal(m.i)} style={{ cursor: readOnly ? 'default' : undefined }}>
                   <div className="mt-header">
                     <span className="mt-month">{m.name}</span>
                     <span
@@ -601,12 +701,13 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                           id={`rent-received-${m.i}`}
                           type="checkbox"
                           checked={m.rentReceived}
+                          disabled={readOnly}
                           onChange={(e) => {
                             e.stopPropagation()
-                            setRentReceived(m.i, e.target.checked)
+                            if (!readOnly) setRentReceived(m.i, e.target.checked)
                           }}
                           onClick={(e) => e.stopPropagation()}
-                          style={{ width: 16, height: 16, flexShrink: 0, cursor: 'pointer' }}
+                          style={{ width: 16, height: 16, flexShrink: 0, cursor: readOnly ? 'default' : 'pointer' }}
                         />
                         <label
                           htmlFor={`rent-received-${m.i}`}
@@ -812,8 +913,8 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                   {MONTHS.map((name, i) => (
                     <th
                       key={i}
-                      onClick={() => setMonthModal(i)}
-                      style={{ textAlign: 'right', padding: '12px 14px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', cursor: 'pointer', whiteSpace: 'nowrap', minWidth: 100 }}
+                      onClick={readOnly ? undefined : () => setMonthModal(i)}
+                      style={{ textAlign: 'right', padding: '12px 14px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', cursor: readOnly ? 'default' : 'pointer', whiteSpace: 'nowrap', minWidth: 100 }}
                     >
                       {name}
                     </th>

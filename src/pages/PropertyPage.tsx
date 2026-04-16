@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Property } from '../lib/types'
 import { type CurrencyCode, type FxRates, loadFxRates, convert } from '../lib/currency'
 import { useAppState } from '../context/useAppState'
+import { useReadOnly } from '../context/ReadOnlyContext'
 import { activeContract } from '../lib/finance'
 import { getYearWindow } from '../lib/constants'
 import { ContractsTab } from '../components/property/ContractsTab'
@@ -96,6 +97,7 @@ function PropertyTabPicker({ tab, setTab }: { tab: TabId; setTab: (id: TabId) =>
 }
 
 export function PropertyPage({ prop, onUpdateProp }: Props) {
+  const readOnly = useReadOnly()
   const [tab, setTab] = useState<TabId>('overview')
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
@@ -107,6 +109,7 @@ export function PropertyPage({ prop, onUpdateProp }: Props) {
   const yearWindow = getYearWindow(prop.year)
 
   const startEditName = () => {
+    if (readOnly) return
     setNameDraft(prop.name)
     setEditingName(true)
   }
@@ -151,15 +154,17 @@ export function PropertyPage({ prop, onUpdateProp }: Props) {
           ) : (
             <div className="flex align-center gap8">
               <span style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.3px' }}>{prop.name}</span>
-              <button
-                type="button"
-                className="ghost"
-                style={{ padding: '2px 6px', fontSize: 14, color: 'var(--text3)' }}
-                onClick={startEditName}
-                title="Edit property name"
-              >
-                ✎
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  className="ghost"
+                  style={{ padding: '2px 6px', fontSize: 14, color: 'var(--text3)' }}
+                  onClick={startEditName}
+                  title="Edit property name"
+                >
+                  ✎
+                </button>
+              )}
             </div>
           )}
           <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>

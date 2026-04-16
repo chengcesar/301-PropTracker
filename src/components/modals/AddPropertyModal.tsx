@@ -118,6 +118,7 @@ const PinIcon = () => (
 
 export function AddPropertyModal({ onSave, onClose }: Props) {
   const [step, setStep] = useState<1 | 2>(1)
+  const [group, setGroup] = useState('')
   const [form, setForm] = useState({
     owner: '',
     name: '',
@@ -201,6 +202,7 @@ export function AddPropertyModal({ onSave, onClose }: Props) {
       id: Date.now(),
       owner: form.owner,
       name: form.name,
+      group: group.trim() || undefined,
       address: form.address,
       neighbourhood: '',
       city: form.city,
@@ -298,6 +300,15 @@ export function AddPropertyModal({ onSave, onClose }: Props) {
                 <div className="field">
                   <label>Property owner</label>
                   <input placeholder="Juan Pérez" value={form.owner} onChange={(e) => set('owner', e.target.value)} />
+                </div>
+                <div className="field">
+                  <label>Group (optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Group 1, High Yield"
+                    value={group}
+                    onChange={(e) => setGroup(e.target.value)}
+                  />
                 </div>
               </div>
 

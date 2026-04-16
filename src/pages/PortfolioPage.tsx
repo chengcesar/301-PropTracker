@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import type { CapexItem, CapexStatus, Contract, Property } from '../lib/types'
+import type { Share } from '../lib/types'
+import { subscribeViewerShares } from '../services/sharesService'
+import { useAuth } from '../contexts/AuthContext'
+import { useReadOnly } from '../context/ReadOnlyContext'
 import { activeContract, calcAnnual, calcIrr, calcPortfolioAssetKpis, calcPortfolioProjectedGpiIn, calcPortfolioTotalsIn, contractCoveringDate, contractForMonth, convertAnnual, estimatedPropertyValueAtYear, hasNonLeaseOccupant, negotiatedFollowOnAfterContract, nextNegotiatedLeaseNotYetStarted, nonLeaseOccupancyExportValue, nonLeaseOccupancyLabel, occupancyFilterBucket, projectedGpiAnnual, vacancyLossMonthCount } from '../lib/finance'
 import { fmtCurrencyM } from '../lib/format'
 import { type CurrencyCode, type FxRates, CURRENCIES, CURRENCY_LIST, convert, loadFxRates, saveFxRates, flagUrl } from '../lib/currency'
@@ -1147,10 +1152,12 @@ function CapexTodoCard({
   item,
   onStatusChange,
   onOpen,
+  readOnly = false,
 }: {
   item: CapexItem & { propertyName: string }
   onStatusChange: (next: CapexStatus) => void
   onOpen: () => void
+  readOnly?: boolean
 }) {
   const status = item.status ?? 'To do'
   const catColor = CAT_COLORS[item.cat] ?? '#6b7280'
@@ -1198,42 +1205,44 @@ function CapexTodoCard({
             {item.amount > 0 ? `−${item.amount.toLocaleString()}` : '—'}
           </span>
         </div>
-        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-          {nextStatus && (
-            <button
-              type="button"
-              className="ghost"
-              onClick={e => { e.stopPropagation(); onStatusChange(nextStatus) }}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                padding: '3px 9px', borderRadius: 6,
-                border: '1px solid var(--border)',
-                background: 'var(--surface2)',
-                fontSize: 12, fontWeight: 500, color: 'var(--text2)',
-                cursor: 'pointer',
-              }}
-            >
-              {nextStatus === 'Ongoing'   ? '▶ Start'  : '✓ Complete'}
-            </button>
-          )}
-          {prevStatus && (
-            <button
-              type="button"
-              className="ghost"
-              onClick={e => { e.stopPropagation(); onStatusChange(prevStatus) }}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                padding: '3px 9px', borderRadius: 6,
-                border: '1px solid var(--border)',
-                background: 'transparent',
-                fontSize: 12, fontWeight: 500, color: 'var(--text3)',
-                cursor: 'pointer',
-              }}
-            >
-              ↩ Undo
-            </button>
-          )}
-        </div>
+        {!readOnly && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            {nextStatus && (
+              <button
+                type="button"
+                className="ghost"
+                onClick={e => { e.stopPropagation(); onStatusChange(nextStatus) }}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '3px 9px', borderRadius: 6,
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface2)',
+                  fontSize: 12, fontWeight: 500, color: 'var(--text2)',
+                  cursor: 'pointer',
+                }}
+              >
+                {nextStatus === 'Ongoing'   ? '▶ Start'  : '✓ Complete'}
+              </button>
+            )}
+            {prevStatus && (
+              <button
+                type="button"
+                className="ghost"
+                onClick={e => { e.stopPropagation(); onStatusChange(prevStatus) }}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '3px 9px', borderRadius: 6,
+                  border: '1px solid var(--border)',
+                  background: 'transparent',
+                  fontSize: 12, fontWeight: 500, color: 'var(--text3)',
+                  cursor: 'pointer',
+                }}
+              >
+                ↩ Undo
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1630,7 +1639,51 @@ function FxRateEditor({ rates, onSave, onClose }: { rates: FxRates; onSave: (r: 
   )
 }
 
+function SharedWithMeSection() {
+  const { user } = useAuth() as unknown as { user: any }
+  const [shares, setShares] = useState<Share[]>([])
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!user) return
+    return subscribeViewerShares(user.uid, setShares)
+  }, [user])
+
+  if (shares.length === 0) return null
+
+  return (
+    <div className="shared-with-me-section">
+      <div className="sharing-section-label">SHARED WITH ME</div>
+      <div className="shared-with-me-cards">
+        {shares.map((s) => (
+          <button
+            key={s.id}
+            className="shared-with-me-card"
+            onClick={() => navigate(`/shared/${s.id}`)}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+              <span className="shared-with-me-name">{s.ownerPortfolioName}</span>
+              <span className="shared-view-badge">view only</span>
+            </div>
+            <div className="shared-with-me-meta">
+              {s.scope === 'portfolio'
+                ? 'Full portfolio access'
+                : s.scope === 'properties'
+                  ? `${s.propertyIds.length} propert${s.propertyIds.length === 1 ? 'y' : 'ies'}`
+                  : s.filters.length > 0
+                    ? s.filters.map((f) => `${f.field} = ${f.values.join(', ')}`).join(' · ')
+                    : 'Filtered view'}
+            </div>
+            <div style={{ color: '#3b82f6', fontSize: 12, fontWeight: 600, marginTop: 8 }}>Open →</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: Props) {
+  const readOnly = useReadOnly()
   const _saved = useMemo(loadSavedFilters, [])
   const [selectedYear, setSelectedYear] = useState(() => (typeof _saved.selectedYear === 'number' ? _saved.selectedYear : new Date().getFullYear()))
   const yearWindow = getYearWindow(selectedYear)
@@ -2495,7 +2548,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                 />
               )}
             </div>
-            <button className="primary" onClick={() => openAddProperty()}><span className="hide-mobile">+ Add Property</span><span className="show-mobile">+ Add</span></button>
+            {!readOnly && <button className="primary" onClick={() => openAddProperty()}><span className="hide-mobile">+ Add Property</span><span className="show-mobile">+ Add</span></button>}
             <div ref={kpiMenuRef} style={{ position: 'relative' }}>
               <button className="ghost" style={{ padding: '5px 8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} title="KPI settings" onClick={() => setKpiMenuOpen(v => !v)}>
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 11.25C10.2426 11.25 11.25 10.2426 11.25 9C11.25 7.75736 10.2426 6.75 9 6.75C7.75736 6.75 6.75 7.75736 6.75 9C6.75 10.2426 7.75736 11.25 9 11.25Z" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M14.55 11.25C14.4502 11.4762 14.4204 11.7271 14.4645 11.9704C14.5086 12.2137 14.6246 12.4382 14.7975 12.615L14.8425 12.66C14.9819 12.7994 15.0924 12.9648 15.1678 13.1469C15.2433 13.329 15.2821 13.5242 15.2821 13.7213C15.2821 13.9183 15.2433 14.1135 15.1678 14.2956C15.0924 14.4777 14.9819 14.6431 14.8425 14.7825C14.7031 14.9219 14.5377 15.0324 14.3556 15.1078C14.1735 15.1833 13.9783 15.2221 13.7812 15.2221C13.5842 15.2221 13.389 15.1833 13.2069 15.1078C13.0248 15.0324 12.8594 14.9219 12.72 14.7825L12.675 14.7375C12.4982 14.5646 12.2737 14.4486 12.0304 14.4045C11.7871 14.3604 11.5362 14.3902 11.31 14.49C11.0882 14.5851 10.899 14.7429 10.7657 14.9442C10.6325 15.1454 10.561 15.3812 10.56 15.6225V15.75C10.56 16.1478 10.402 16.5294 10.1207 16.8107C9.83936 17.092 9.45782 17.25 9.06 17.25C8.66218 17.25 8.28064 17.092 7.99934 16.8107C7.71804 16.5294 7.56 16.1478 7.56 15.75V15.6825C7.55419 15.4343 7.47384 15.1935 7.32938 14.9915C7.18493 14.7896 6.98305 14.6357 6.75 14.55C6.52379 14.4502 6.27286 14.4204 6.02956 14.4645C5.78626 14.5086 5.56176 14.6246 5.385 14.7975L5.34 14.8425C5.05854 15.124 4.6768 15.2821 4.27875 15.2821C3.8807 15.2821 3.49896 15.124 3.2175 14.8425C2.93604 14.561 2.77792 14.1793 2.77792 13.7812C2.77792 13.3832 2.93604 13.0015 3.2175 12.72L3.2625 12.675C3.44798 12.4934 3.57168 12.2581 3.6161 12.0024C3.66052 11.7467 3.6234 11.4835 3.51 11.25C3.41493 11.0282 3.25707 10.839 3.05585 10.7057C2.85463 10.5725 2.61884 10.501 2.3775 10.5H2.25C1.85218 10.5 1.47064 10.342 1.18934 10.0607C0.908035 9.77936 0.75 9.39782 0.75 9C0.75 8.60218 0.908035 8.22064 1.18934 7.93934C1.47064 7.65804 1.85218 7.5 2.25 7.5H2.3175C2.55884 7.49904 2.79463 7.42753 2.99585 7.29427C3.19707 7.16101 3.35493 6.97183 3.45 6.75C3.54984 6.52379 3.57962 6.27286 3.5355 6.02956C3.49139 5.78626 3.3754 5.56176 3.2025 5.385L3.1575 5.34C3.01813 5.20063 2.90758 5.03518 2.83216 4.85309C2.75674 4.671 2.71792 4.47584 2.71792 4.27875C2.71792 4.08166 2.75674 3.8865 2.83216 3.70441C2.90758 3.52232 3.01813 3.35687 3.1575 3.2175C3.29687 3.07813 3.46232 2.96758 3.64441 2.89216C3.8265 2.81674 4.02166 2.77792 4.21875 2.77792C4.41584 2.77792 4.611 2.81674 4.79309 2.89216C4.97518 2.96758 5.14063 3.07813 5.28 3.2175L5.325 3.2625C5.50656 3.44798 5.74185 3.57168 5.99758 3.6161C6.25331 3.66052 6.51653 3.6234 6.75 3.51C6.97183 3.41493 7.16101 3.25707 7.29427 3.05585C7.42753 2.85463 7.49904 2.61884 7.5 2.3775V2.25C7.5 1.85218 7.65804 1.47064 7.93934 1.18934C8.22064 0.908035 8.60218 0.75 9 0.75C9.39782 0.75 9.77936 0.908035 10.0607 1.18934C10.342 1.47064 10.5 1.85218 10.5 2.25V2.3175C10.501 2.55884 10.5725 2.79463 10.7057 2.99585C10.839 3.19707 11.0282 3.35493 11.25 3.45C11.4762 3.54984 11.7271 3.57962 11.9704 3.5355C12.2137 3.49139 12.4382 3.3754 12.615 3.2025L12.66 3.1575C12.9415 2.87604 13.3232 2.71792 13.7213 2.71792C13.9183 2.71792 14.1135 2.75674 14.2956 2.83216C14.4777 2.90758 14.6431 3.01813 14.7825 3.1575C14.9219 3.29687 15.0324 3.46232 15.1078 3.64441C15.1833 3.8265 15.2221 4.02166 15.2221 4.21875C15.2221 4.41584 15.1833 4.611 15.1078 4.79309C15.0324 4.97518 14.9219 5.14063 14.7825 5.28L14.7375 5.325C14.5618 5.51345 14.4493 5.75204 14.4157 6.00749C14.3821 6.26294 14.429 6.52252 14.55 6.75C14.6451 6.97183 14.8029 7.16101 15.0042 7.29427C15.2054 7.42753 15.4412 7.49904 15.6825 7.5H15.75C16.1478 7.5 16.5294 7.65804 16.8107 7.93934C17.092 8.22064 17.25 8.60218 17.25 9C17.25 9.39782 17.092 9.77936 16.8107 10.0607C16.5294 10.342 16.1478 10.5 15.75 10.5H15.6825C15.4412 10.501 15.2054 10.5725 15.0042 10.7057C14.8029 10.839 14.6451 11.0282 14.55 11.25Z" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -3269,7 +3322,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
           )}
         </div>
 
-        {showSamplePortfolioTip && (
+        {showSamplePortfolioTip && !readOnly && (
           <div className="portfolio-sample-banner mb12" role="region" aria-label="Sample portfolio">
             <div className="portfolio-sample-banner-main">
               <IconSamplePortfolioTip />
@@ -3347,10 +3400,12 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                         <p style={{ fontSize: 13, margin: '8px 0 16px', color: 'var(--text3)' }}>
                           Your portfolio is empty. Create a property to see it in this table.
                         </p>
-                        <button type="button" className="primary" onClick={() => openAddProperty()}>
-                          <span className="hide-mobile">+ Add Property</span>
-                          <span className="show-mobile">+ Add</span>
-                        </button>
+                        {!readOnly && (
+                          <button type="button" className="primary" onClick={() => openAddProperty()}>
+                            <span className="hide-mobile">+ Add Property</span>
+                            <span className="show-mobile">+ Add</span>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -3559,10 +3614,12 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                       {colOrder.filter(k => colVis[k]).map(key => cellMap[key])}
                       <td className="wf-table-actions-col" onClick={(e) => e.stopPropagation()} style={{ width: 52, padding: '8px 12px 8px 0', verticalAlign: 'middle' }}>
                         <div style={{ display: 'flex', justifyContent: 'center' }}>
-                          <RowMenu
-                            onEdit={() => onSelectProperty(p.id)}
-                            onDelete={() => setDeleteTarget(p)}
-                          />
+                          {!readOnly && (
+                            <RowMenu
+                              onEdit={() => onSelectProperty(p.id)}
+                              onDelete={() => setDeleteTarget(p)}
+                            />
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -3682,10 +3739,12 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                     {properties.length === 0 ? (
                       <>
                         <div className="empty-title" style={{ marginBottom: 8 }}>Add your first property</div>
-                        <button type="button" className="primary" onClick={() => openAddProperty()}>
-                          <span className="hide-mobile">+ Add Property</span>
-                          <span className="show-mobile">+ Add</span>
-                        </button>
+                        {!readOnly && (
+                          <button type="button" className="primary" onClick={() => openAddProperty()}>
+                            <span className="hide-mobile">+ Add Property</span>
+                            <span className="show-mobile">+ Add</span>
+                          </button>
+                        )}
                       </>
                     ) : (
                       'No properties match your search or filters.'
@@ -3836,7 +3895,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                           rentInDisplay={p.currency !== displayCurrency ? fm(convert(rent, p.currency, displayCurrency, fxRates)) : null}
                           displayCurrency={displayCurrency}
                           received={received}
-                          onToggle={() => handleToggleRentReceived(p.id, calYear, calMonth, received)}
+                          onToggle={readOnly ? undefined : () => handleToggleRentReceived(p.id, calYear, calMonth, received)}
                           onOpen={() => onSelectProperty(p.id)}
                         />
                       ))}
@@ -3855,7 +3914,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                           rentInDisplay={p.currency !== displayCurrency ? fm(convert(rent, p.currency, displayCurrency, fxRates)) : null}
                           displayCurrency={displayCurrency}
                           received={received}
-                          onToggle={() => handleToggleRentReceived(p.id, calYear, calMonth, received)}
+                          onToggle={readOnly ? undefined : () => handleToggleRentReceived(p.id, calYear, calMonth, received)}
                           onOpen={() => onSelectProperty(p.id)}
                         />
                       ))}
@@ -3936,6 +3995,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                       item={c}
                       onStatusChange={next => handleCapexStatus(c.propertyId, c.id, next)}
                       onOpen={() => onSelectProperty(c.propertyId)}
+                      readOnly={readOnly}
                     />
                   ))}
                   <div className="todo-section-divider" />
@@ -3948,6 +4008,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                       item={c}
                       onStatusChange={next => handleCapexStatus(c.propertyId, c.id, next)}
                       onOpen={() => onSelectProperty(c.propertyId)}
+                      readOnly={readOnly}
                     />
                   ))}
                   <div className="todo-section-divider" />
@@ -3960,6 +4021,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                       item={c}
                       onStatusChange={next => handleCapexStatus(c.propertyId, c.id, next)}
                       onOpen={() => onSelectProperty(c.propertyId)}
+                      readOnly={readOnly}
                     />
                   ))}
                 </div>
@@ -3974,10 +4036,12 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                 {properties.length === 0 ? (
                   <>
                     <div className="empty-title" style={{ marginBottom: 8 }}>Add your first property</div>
-                    <button type="button" className="primary" onClick={() => openAddProperty()}>
-                      <span className="hide-mobile">+ Add Property</span>
-                      <span className="show-mobile">+ Add</span>
-                    </button>
+                    {!readOnly && (
+                      <button type="button" className="primary" onClick={() => openAddProperty()}>
+                        <span className="hide-mobile">+ Add Property</span>
+                        <span className="show-mobile">+ Add</span>
+                      </button>
+                    )}
                   </>
                 ) : (
                   'No properties match your search or filters.'
@@ -4015,6 +4079,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
           displayCurrency={displayCurrency}
           fxRates={fxRates}
         />
+        <SharedWithMeSection />
       </div>
       {deleteTarget && (
         <ConfirmDialog

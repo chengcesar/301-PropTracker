@@ -187,4 +187,30 @@ export interface Property {
   services?: Record<number, ServiceEntry[]>
   serviceOneTimeItems?: ServiceOneTimeItem[]
   factSheet?: FactSheet
+  group?: string
+}
+
+export type ShareScope = 'portfolio' | 'filtered' | 'properties'
+export type ShareStatus = 'pending' | 'active' | 'revoked'
+export type ShareFilterField = 'owner' | 'country' | 'city' | 'group'
+
+export interface ShareFilter {
+  field: ShareFilterField
+  values: string[]
+}
+
+export interface Share {
+  id: string
+  ownerUid: string
+  ownerDisplayName: string
+  ownerPortfolioName: string
+  granteeEmail: string
+  granteeUid: string | null
+  scope: ShareScope
+  filters: ShareFilter[]
+  propertyIds: number[]
+  status: ShareStatus
+  inviteToken: string
+  createdAt: number        // epoch ms — Firestore Timestamp converted on read
+  acceptedAt: number | null
 }
