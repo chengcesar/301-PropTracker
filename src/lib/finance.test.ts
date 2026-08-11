@@ -64,4 +64,13 @@ describe('contractYearBounds', () => {
     expect(b.start.toISOString().slice(0, 10)).toBe('2021-07-01')
     expect(b.end.toISOString().slice(0, 10)).toBe('2022-06-30')
   })
+
+  it('clamps start against contractEnd for an out-of-domain yearIndex past the last real year', () => {
+    const c = makeContract({ startDate: '2020-07-01', endDate: '2022-06-30' })
+    const b = contractYearBounds(c, 3)
+    const contractEnd = new Date('2022-06-30T12:00:00')
+    expect(b.start.getTime()).toBe(contractEnd.getTime())
+    expect(b.end.getTime()).toBe(contractEnd.getTime())
+    expect(b.start.getTime()).toBeLessThanOrEqual(b.end.getTime())
+  })
 })

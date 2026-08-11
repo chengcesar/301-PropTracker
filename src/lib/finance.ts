@@ -158,7 +158,7 @@ export function contractYearBounds(contract: Contract, yearIndex: number): { sta
   )
   const yearEnd = new Date(nextYearStart.getTime() - 24 * 60 * 60 * 1000)
   return {
-    start: yearStart < contractStart ? contractStart : yearStart,
+    start: yearStart < contractStart ? contractStart : yearStart > contractEnd ? contractEnd : yearStart,
     end: yearEnd > contractEnd ? contractEnd : yearEnd,
   }
 }
