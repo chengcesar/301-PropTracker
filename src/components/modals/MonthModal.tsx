@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { MONTHS_FULL } from '../../lib/constants'
 import type { MonthData, Property } from '../../lib/types'
-import { contractForMonth, expenseRowsForYear, yearMonths } from '../../lib/finance'
+import { contractForMonth, expenseRowsForYear, rentOnDate, yearMonths } from '../../lib/finance'
 import { fmt, parseNum } from '../../lib/format'
 
 type ExtraRow = { id: number; label: string; amount: string }
@@ -34,7 +34,7 @@ export function MonthModal({ prop, mIdx, onSave, onClose }: Props) {
   const [expenses, setExpenses] = useState<Record<string, string | number>>(initExpenses)
   const [extras, setExtras] = useState<ExtraRow[]>([])
 
-  const income = !contract ? 0 : status === 'vacant' ? 0 : incOverride !== '' ? parseNum(incOverride) : contract.monthlyRent
+  const income = !contract ? 0 : status === 'vacant' ? 0 : incOverride !== '' ? parseNum(incOverride) : rentOnDate(contract, new Date(prop.year, mIdx, 15))
   const totalOpex =
     Object.values(expenses).reduce((a: number, b: string | number) => a + (parseFloat(String(b)) || 0), 0) +
     extras.reduce((a: number, b) => a + (parseFloat(String(b.amount)) || 0), 0)
@@ -115,7 +115,7 @@ export function MonthModal({ prop, mIdx, onSave, onClose }: Props) {
                     type="text"
                     value={incOverride}
                     onChange={(e) => setIncOverride(e.target.value)}
-                    placeholder={fmt(contract.monthlyRent)}
+                    placeholder={fmt(rentOnDate(contract, new Date(prop.year, mIdx, 15)))}
                     className="input-sm"
                   />
                   {incOverride && (
