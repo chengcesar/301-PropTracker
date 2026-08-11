@@ -6,7 +6,7 @@ import type { Share } from '../lib/types'
 import { subscribeViewerShares } from '../services/sharesService'
 import { useAuth } from '../contexts/AuthContext'
 import { useReadOnly } from '../context/ReadOnlyContext'
-import { activeContract, calcAnnual, calcIrr, calcPortfolioAssetKpis, calcPortfolioProjectedGpiIn, calcPortfolioTotalsIn, contractCoveringDate, contractForMonth, convertAnnual, estimatedPropertyValueAtYear, hasNonLeaseOccupant, negotiatedFollowOnAfterContract, nextNegotiatedLeaseNotYetStarted, nonLeaseOccupancyExportValue, nonLeaseOccupancyLabel, occupancyFilterBucket, projectedGpiAnnual, vacancyLossMonthCount } from '../lib/finance'
+import { activeContract, calcAnnual, calcIrr, calcPortfolioAssetKpis, calcPortfolioProjectedGpiIn, calcPortfolioTotalsIn, contractCoveringDate, contractForMonth, convertAnnual, estimatedPropertyValueAtYear, hasNonLeaseOccupant, negotiatedFollowOnAfterContract, nextNegotiatedLeaseNotYetStarted, nonLeaseOccupancyExportValue, nonLeaseOccupancyLabel, occupancyFilterBucket, projectedGpiAnnual, rentOnDate, vacancyLossMonthCount } from '../lib/finance'
 import { fmtCurrencyM } from '../lib/format'
 import { type CurrencyCode, type FxRates, CURRENCIES, CURRENCY_LIST, convert, loadFxRates, saveFxRates, flagUrl } from '../lib/currency'
 import { useAppState } from '../context/useAppState'
@@ -2039,7 +2039,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
       .map(p => {
         const contract = contractForMonth(p.contracts, calYear, calMonth)!
         const monthData = (p.months[calYear] ?? {})[calMonth]
-        const rent = monthData?.incomeOverride ?? contract.monthlyRent
+        const rent = monthData?.incomeOverride ?? rentOnDate(contract, new Date(calYear, calMonth, 15))
         const received = monthData?.rentReceived === true
         return { property: p, rent, received, calYear, calMonth }
       })
@@ -2063,7 +2063,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
         if (!contract) continue
         const monthData = (p.months[y] ?? {})[m]
         if (monthData?.rentReceived === true) continue
-        const rent = monthData?.incomeOverride ?? contract.monthlyRent
+        const rent = monthData?.incomeOverride ?? rentOnDate(contract, new Date(y, m, 15))
         overdueMonths.push({ calYear: y, calMonth: m, rent })
       }
       if (overdueMonths.length > 0) {
@@ -2159,9 +2159,10 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
 
   const activeContractMap = useMemo(() => {
     const m = new Map<number, { monthlyRent: number } | null>()
+    const now = new Date()
     for (const p of properties) {
       const ac = activeContract(p)
-      m.set(p.id, ac ? { monthlyRent: ac.monthlyRent } : null)
+      m.set(p.id, ac ? { monthlyRent: rentOnDate(ac, now) } : null)
     }
     return m
   }, [properties])
