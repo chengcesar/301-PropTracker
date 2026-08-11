@@ -295,7 +295,11 @@ export function maxMonthlyRentAmongContractsOverlappingYear(
   let max = 0
   for (const c of contracts) {
     if (!contractOverlapsCalendarYear(c, year)) continue
-    max = Math.max(max, c.monthlyRent)
+    const start = new Date(`${c.startDate}T12:00:00`)
+    const end = new Date(`${c.endDate}T12:00:00`)
+    const yearStart = new Date(year, 0, 1, 12, 0, 0, 0)
+    const probe = yearStart < start ? start : yearStart > end ? end : yearStart
+    max = Math.max(max, rentOnDate(c, probe))
   }
   return max
 }
@@ -306,7 +310,7 @@ export function maxMonthlyRentAmongContractsOverlappingYear(
  */
 export function monthlyPotentialRentForGpi(prop: Property, monthIdx: number): number {
   const c = contractForMonth(prop.contracts, prop.year, monthIdx)
-  if (c) return c.monthlyRent
+  if (c) return rentOnDate(c, new Date(prop.year, monthIdx, 15))
   const fromSheet = potentialMonthlyRentFromProp(prop)
   if (fromSheet > 0) return fromSheet
   return maxMonthlyRentAmongContractsOverlappingYear(prop.contracts, prop.year)
@@ -339,7 +343,7 @@ export function getMonthData(prop: Property, mIdx: number): MonthDataResult {
     incomeOverride: null,
     expenses: {},
   }
-  const rent = contract ? contract.monthlyRent : 0
+  const rent = contract ? rentOnDate(contract, new Date(prop.year, mIdx, 15)) : 0
   const income = !contract
     ? 0
     : m.status === 'vacant'

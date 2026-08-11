@@ -147,3 +147,56 @@ describe('rentOnDate', () => {
     expect(rentOnDate(c, new Date('2026-07-01T12:00:00'))).toBeCloseTo(1000 * 1.1 ** 6, 5)
   })
 })
+
+import { maxMonthlyRentAmongContractsOverlappingYear, monthlyPotentialRentForGpi, getMonthData } from './finance'
+import type { Property } from './types'
+
+function makeProperty(overrides: Partial<Property> = {}): Property {
+  return {
+    id: 1,
+    owner: '', name: 'Test', address: '', neighbourhood: '', city: '', postalCode: '', country: '',
+    currency: 'USD', area: 0, bedrooms: 0, bathrooms: 0, parking: 0, storageUnits: 0,
+    concierge: false, terrace: 0, balcony: 0, floors: 0,
+    year: 2026,
+    contracts: [],
+    months: {},
+    capex: [],
+    taxes: { items: [] },
+    ...overrides,
+  }
+}
+
+describe('maxMonthlyRentAmongContractsOverlappingYear uses escalated rent', () => {
+  it('uses the rent at the point the contract overlaps the year, not the flat base', () => {
+    const c = makeContract({
+      monthlyRent: 1000, increment: 'fixed', fixedPct: 10,
+      startDate: '2020-07-01', endDate: '2030-06-30',
+    })
+    // Calendar year 2026 overlaps contract-years 6 and 7 (see contractYearIndex tests) — clamped to Jan 1, 2026
+    const expected = rentForContractYear(c, contractYearIndex(c, new Date(2026, 0, 1, 12)))
+    expect(maxMonthlyRentAmongContractsOverlappingYear([c], 2026)).toBeCloseTo(expected, 5)
+  })
+})
+
+describe('monthlyPotentialRentForGpi uses escalated rent', () => {
+  it('returns the escalated rent for the covering contract in that month', () => {
+    const c = makeContract({
+      monthlyRent: 1000, increment: 'fixed', fixedPct: 10,
+      startDate: '2020-07-01', endDate: '2030-06-30',
+    })
+    const p = makeProperty({ year: 2026, contracts: [c] })
+    // July 2026 (month index 6) is the start of contract-year 7
+    expect(monthlyPotentialRentForGpi(p, 6)).toBeCloseTo(1000 * 1.1 ** 6, 5)
+  })
+})
+
+describe('getMonthData uses escalated rent', () => {
+  it('reports escalated income for a covered month with no override', () => {
+    const c = makeContract({
+      monthlyRent: 1000, increment: 'fixed', fixedPct: 10,
+      startDate: '2020-07-01', endDate: '2030-06-30',
+    })
+    const p = makeProperty({ year: 2026, contracts: [c] })
+    expect(getMonthData(p, 6).income).toBeCloseTo(1000 * 1.1 ** 6, 5)
+  })
+})
