@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { contractYearIndex, contractYearBounds } from './finance'
+import { defaultIncrementPct, effectiveIncrementPct } from './finance'
 import type { Contract } from './types'
 
 function makeContract(overrides: Partial<Contract> = {}): Contract {
@@ -72,5 +73,36 @@ describe('contractYearBounds', () => {
     expect(b.start.getTime()).toBe(contractEnd.getTime())
     expect(b.end.getTime()).toBe(contractEnd.getTime())
     expect(b.start.getTime()).toBeLessThanOrEqual(b.end.getTime())
+  })
+})
+
+describe('defaultIncrementPct', () => {
+  it('returns fixedPct for increment "fixed"', () => {
+    expect(defaultIncrementPct(makeContract({ increment: 'fixed', fixedPct: 3 }))).toBe(3)
+  })
+
+  it('returns cpiEstimatePct for increment "ipc"', () => {
+    expect(defaultIncrementPct(makeContract({ increment: 'ipc', cpiEstimatePct: 5 }))).toBe(5)
+  })
+
+  it('returns cpiEstimatePct + ipcExtra for increment "ipc+"', () => {
+    expect(defaultIncrementPct(makeContract({ increment: 'ipc+', cpiEstimatePct: 5, ipcExtra: 1 }))).toBe(6)
+  })
+
+  it('returns 0 for increment "none"', () => {
+    expect(defaultIncrementPct(makeContract({ increment: 'none', fixedPct: 99 }))).toBe(0)
+  })
+})
+
+describe('effectiveIncrementPct', () => {
+  it('falls back to the default when there is no override', () => {
+    const c = makeContract({ increment: 'fixed', fixedPct: 3 })
+    expect(effectiveIncrementPct(c, 2)).toBe(3)
+  })
+
+  it('uses the override for that year only', () => {
+    const c = makeContract({ increment: 'fixed', fixedPct: 3, yearOverrides: { 2: 10 } })
+    expect(effectiveIncrementPct(c, 2)).toBe(10)
+    expect(effectiveIncrementPct(c, 3)).toBe(3)
   })
 })

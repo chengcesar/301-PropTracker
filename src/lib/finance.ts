@@ -163,6 +163,26 @@ export function contractYearBounds(contract: Contract, yearIndex: number): { sta
   }
 }
 
+/** Type-based increment %, ignoring any per-year override. Same value for every contract-year. */
+export function defaultIncrementPct(contract: Contract): number {
+  switch (contract.increment) {
+    case 'fixed':
+      return contract.fixedPct
+    case 'ipc':
+      return contract.cpiEstimatePct
+    case 'ipc+':
+      return contract.cpiEstimatePct + contract.ipcExtra
+    case 'none':
+    default:
+      return 0
+  }
+}
+
+/** Increment % actually applied for contract-year `yearIndex` — override if set, else the type-based default. */
+export function effectiveIncrementPct(contract: Contract, yearIndex: number): number {
+  return contract.yearOverrides?.[yearIndex] ?? defaultIncrementPct(contract)
+}
+
 export function contractForMonth(
   contracts: Contract[],
   year: number,
