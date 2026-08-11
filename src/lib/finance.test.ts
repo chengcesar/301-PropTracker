@@ -200,3 +200,50 @@ describe('getMonthData uses escalated rent', () => {
     expect(getMonthData(p, 6).income).toBeCloseTo(1000 * 1.1 ** 6, 5)
   })
 })
+
+import { contractYearRows } from './finance'
+
+describe('contractYearRows', () => {
+  it('builds one row per calendar year the contract touches, clamped at both ends', () => {
+    const c = makeContract({
+      monthlyRent: 1000, increment: 'none',
+      startDate: '2020-07-01', endDate: '2022-06-30',
+    })
+    const rows = contractYearRows(c, new Date('2021-01-01T12:00:00'))
+    expect(rows.map((r) => r.calendarYear)).toEqual([2020, 2021, 2022])
+    // 2020: only Jul-Dec in range, all within contract-year 1
+    expect(rows[0].yearIndex).toBe(1)
+    expect(rows[0].months[0].rent).toBeNull() // January, before startDate
+    expect(rows[0].months[6].rent).toBe(1000) // July
+    // 2021: Jan-Jun tail of year 1, Jul-Dec start of year 2
+    expect(rows[1].yearIndex).toBe(2)
+    expect(rows[1].months[0].rent).toBe(1000) // January — still contract-year 1
+    expect(rows[1].months[6].rent).toBe(1000) // July — contract-year 2 (0% increment, same value)
+    // 2022: only Jan-Jun in range (contract ends June 30), within contract-year 2
+    expect(rows[2].yearIndex).toBe(2)
+    expect(rows[2].months[0].rent).toBe(1000)
+    expect(rows[2].months[6].rent).toBeNull() // July, after endDate
+  })
+
+  it('flags exactly one row as current based on the reference date', () => {
+    const c = makeContract({ startDate: '2020-07-01', endDate: '2030-06-30' })
+    const rows = contractYearRows(c, new Date('2026-03-01T12:00:00'))
+    const flagged = rows.filter((r) => r.isCurrent)
+    expect(flagged.map((r) => r.calendarYear)).toEqual([2026])
+    expect(rows.find((r) => r.calendarYear === 2024)?.isPast).toBe(true)
+    expect(rows.find((r) => r.calendarYear === 2028)?.isFuture).toBe(true)
+  })
+
+  it('reports the default increment hint alongside any override', () => {
+    const c = makeContract({
+      increment: 'fixed', fixedPct: 5,
+      startDate: '2020-07-01', endDate: '2022-06-30',
+      yearOverrides: { 2: 8 },
+    })
+    const rows = contractYearRows(c, new Date('2021-01-01T12:00:00'))
+    const row2021 = rows.find((r) => r.calendarYear === 2021)!
+    expect(row2021.yearIndex).toBe(2)
+    expect(row2021.defaultIncrementPct).toBe(5)
+    expect(row2021.incrementPct).toBe(8)
+  })
+})

@@ -197,6 +197,63 @@ export function rentOnDate(contract: Contract, date: Date): number {
   return rentForContractYear(contract, contractYearIndex(contract, date))
 }
 
+export interface ContractYearMonth {
+  /** Rent for this calendar month, or null if it falls outside [startDate, endDate]. */
+  rent: number | null
+}
+
+export interface ContractYearRow {
+  calendarYear: number
+  /** The contract-year active in the second half of this calendar year — used as the row's "Year N" label. */
+  yearIndex: number
+  months: ContractYearMonth[]
+  /** Type-based increment %, ignoring any override (the "+X% default" hint). */
+  defaultIncrementPct: number
+  /** Increment % actually applied for `yearIndex` (override if set, else the default). */
+  incrementPct: number
+  /** Sum of this row's non-null months' rent. */
+  annualTotal: number
+  isPast: boolean
+  isCurrent: boolean
+  isFuture: boolean
+}
+
+/** One row per calendar year the contract touches, for the "Full contract" timeline view. */
+export function contractYearRows(contract: Contract, today: Date): ContractYearRow[] {
+  const start = new Date(`${contract.startDate}T12:00:00`)
+  const end = new Date(`${contract.endDate}T12:00:00`)
+  const rows: ContractYearRow[] = []
+  const currentCalendarYear = today.getFullYear()
+
+  for (let calendarYear = start.getFullYear(); calendarYear <= end.getFullYear(); calendarYear++) {
+    const months: ContractYearMonth[] = []
+    for (let m = 0; m < 12; m++) {
+      const probe = new Date(calendarYear, m, 15, 12, 0, 0, 0)
+      if (probe < start || probe > end) {
+        months.push({ rent: null })
+      } else {
+        months.push({ rent: rentOnDate(contract, probe) })
+      }
+    }
+    const labelProbeRaw = new Date(calendarYear, 11, 31, 12, 0, 0, 0)
+    const labelProbe = labelProbeRaw > end ? end : labelProbeRaw
+    const yearIndex = contractYearIndex(contract, labelProbe)
+    const annualTotal = months.reduce((sum, m) => sum + (m.rent ?? 0), 0)
+    rows.push({
+      calendarYear,
+      yearIndex,
+      months,
+      defaultIncrementPct: defaultIncrementPct(contract),
+      incrementPct: effectiveIncrementPct(contract, yearIndex),
+      annualTotal,
+      isPast: calendarYear < currentCalendarYear,
+      isCurrent: calendarYear === currentCalendarYear,
+      isFuture: calendarYear > currentCalendarYear,
+    })
+  }
+  return rows
+}
+
 export function contractForMonth(
   contracts: Contract[],
   year: number,
