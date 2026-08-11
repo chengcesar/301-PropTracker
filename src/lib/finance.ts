@@ -192,6 +192,11 @@ export function rentForContractYear(contract: Contract, yearIndex: number): numb
   return rent
 }
 
+/** What this contract actually pays on `date` — the new source of truth for real rent, replacing raw monthlyRent reads. */
+export function rentOnDate(contract: Contract, date: Date): number {
+  return rentForContractYear(contract, contractYearIndex(contract, date))
+}
+
 export function contractForMonth(
   contracts: Contract[],
   year: number,

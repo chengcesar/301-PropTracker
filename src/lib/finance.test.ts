@@ -132,3 +132,18 @@ describe('rentForContractYear', () => {
     expect(rentForContractYear(c, 3)).toBeCloseTo(1100, 5) // year 3 has no override, +10% on top of year 2's 1000
   })
 })
+
+import { rentOnDate } from './finance'
+
+describe('rentOnDate', () => {
+  it('returns the base rent inside year 1', () => {
+    const c = makeContract({ monthlyRent: 1000, increment: 'fixed', fixedPct: 10 })
+    expect(rentOnDate(c, new Date('2021-01-15T12:00:00'))).toBe(1000)
+  })
+
+  it('returns the escalated rent once a later contract-year has started', () => {
+    const c = makeContract({ monthlyRent: 1000, increment: 'fixed', fixedPct: 10 })
+    // 2026-07-01 is the start of contract-year 7 (see contractYearIndex tests)
+    expect(rentOnDate(c, new Date('2026-07-01T12:00:00'))).toBeCloseTo(1000 * 1.1 ** 6, 5)
+  })
+})
