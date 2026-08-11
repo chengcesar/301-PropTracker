@@ -183,6 +183,15 @@ export function effectiveIncrementPct(contract: Contract, yearIndex: number): nu
   return contract.yearOverrides?.[yearIndex] ?? defaultIncrementPct(contract)
 }
 
+/** Rent for contract-year `yearIndex`, compounding the effective increment from year 1's base monthlyRent. */
+export function rentForContractYear(contract: Contract, yearIndex: number): number {
+  let rent = contract.monthlyRent
+  for (let y = 2; y <= yearIndex; y++) {
+    rent = rent * (1 + effectiveIncrementPct(contract, y) / 100)
+  }
+  return rent
+}
+
 export function contractForMonth(
   contracts: Contract[],
   year: number,

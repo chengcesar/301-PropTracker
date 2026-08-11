@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { contractYearIndex, contractYearBounds } from './finance'
 import { defaultIncrementPct, effectiveIncrementPct } from './finance'
+import { rentForContractYear } from './finance'
 import type { Contract } from './types'
 
 function makeContract(overrides: Partial<Contract> = {}): Contract {
@@ -104,5 +105,30 @@ describe('effectiveIncrementPct', () => {
     const c = makeContract({ increment: 'fixed', fixedPct: 3, yearOverrides: { 2: 10 } })
     expect(effectiveIncrementPct(c, 2)).toBe(10)
     expect(effectiveIncrementPct(c, 3)).toBe(3)
+  })
+})
+
+describe('rentForContractYear', () => {
+  it('year 1 is always the base monthlyRent, no increment applied', () => {
+    const c = makeContract({ monthlyRent: 1000, increment: 'fixed', fixedPct: 10 })
+    expect(rentForContractYear(c, 1)).toBe(1000)
+  })
+
+  it('compounds the default increment year over year', () => {
+    const c = makeContract({ monthlyRent: 1000, increment: 'fixed', fixedPct: 10 })
+    expect(rentForContractYear(c, 2)).toBe(1100)
+    expect(rentForContractYear(c, 3)).toBeCloseTo(1210, 5)
+  })
+
+  it('an override on year N changes N and compounds into later years, not earlier ones', () => {
+    const c = makeContract({
+      monthlyRent: 1000,
+      increment: 'fixed',
+      fixedPct: 10,
+      yearOverrides: { 2: 0 },
+    })
+    expect(rentForContractYear(c, 1)).toBe(1000)
+    expect(rentForContractYear(c, 2)).toBe(1000) // override: 0% instead of 10%
+    expect(rentForContractYear(c, 3)).toBeCloseTo(1100, 5) // year 3 has no override, +10% on top of year 2's 1000
   })
 })
