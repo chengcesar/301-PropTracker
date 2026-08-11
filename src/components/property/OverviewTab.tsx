@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { MONTHS, MONTHS_FULL } from '../../lib/constants'
 import type { MonthData, Occupant, Property } from '../../lib/types'
-import { activeContract, calcAnnual, contractForMonth, estimatedPropertyValueAtYear, expenseRowsForYear, getMonthData, projectedGpiAnnual, resolveServices, sumServiceOneTimeForMonth, vacancyLossMonthCount, yearMonths } from '../../lib/finance'
+import { activeContract, calcAnnual, contractForMonth, estimatedPropertyValueAtYear, expenseRowsForYear, getMonthData, projectedGpiAnnual, rentOnDate, resolveServices, sumServiceOneTimeForMonth, vacancyLossMonthCount, yearMonths } from '../../lib/finance'
 import { type CurrencyCode } from '../../lib/currency'
 import { fmt, fmtCurrency, fmtCurrencyM } from '../../lib/format'
 import { MonthModal } from '../modals/MonthModal'
@@ -83,7 +83,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
       const ym = p.months[p.year] ?? {}
       const existing = ym[mIdx] ?? { status: 'rented' as const, incomeOverride: null, expenses: {} }
       const c = contractForMonth(p.contracts, p.year, mIdx)
-      const override = c && val === c.monthlyRent ? null : val
+      const override = c && val === rentOnDate(c, new Date(p.year, mIdx, 15)) ? null : val
       return {
         ...p,
         months: { ...p.months, [p.year]: { ...ym, [mIdx]: { ...existing, incomeOverride: override } } },
@@ -778,7 +778,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
           const m = ym[i]
           if (!c) return 0
           if (m?.incomeOverride !== null && m?.incomeOverride !== undefined) return m.incomeOverride
-          return c.monthlyRent
+          return rentOnDate(c, new Date(prop.year, i, 15))
         })
         const incTotal = incomeVals.reduce((a, b) => a + b, 0)
         const incFilled = incomeVals.filter((v) => v > 0).length
