@@ -130,6 +130,39 @@ export function nonLeaseOccupancyExportValue(prop: Property): string {
   return `${nonLeaseOccupancyLabel(prop)} · ${name}`
 }
 
+/** 1-based contract-year containing `date`, anchored to startDate's anniversary (not calendar Jan 1). */
+export function contractYearIndex(contract: Contract, date: Date): number {
+  const start = new Date(`${contract.startDate}T12:00:00`)
+  const probe = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0, 0)
+  let years = probe.getFullYear() - start.getFullYear()
+  const anniversary = new Date(start.getFullYear() + years, start.getMonth(), start.getDate(), 12, 0, 0, 0)
+  if (probe < anniversary) years -= 1
+  return years + 1
+}
+
+/** Calendar bounds of contract-year `yearIndex`, clamped to the contract's actual start/end. */
+export function contractYearBounds(contract: Contract, yearIndex: number): { start: Date; end: Date } {
+  const contractStart = new Date(`${contract.startDate}T12:00:00`)
+  const contractEnd = new Date(`${contract.endDate}T12:00:00`)
+  const yearStart = new Date(
+    contractStart.getFullYear() + (yearIndex - 1),
+    contractStart.getMonth(),
+    contractStart.getDate(),
+    12, 0, 0, 0,
+  )
+  const nextYearStart = new Date(
+    contractStart.getFullYear() + yearIndex,
+    contractStart.getMonth(),
+    contractStart.getDate(),
+    12, 0, 0, 0,
+  )
+  const yearEnd = new Date(nextYearStart.getTime() - 24 * 60 * 60 * 1000)
+  return {
+    start: yearStart < contractStart ? contractStart : yearStart,
+    end: yearEnd > contractEnd ? contractEnd : yearEnd,
+  }
+}
+
 export function contractForMonth(
   contracts: Contract[],
   year: number,
