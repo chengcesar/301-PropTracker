@@ -99,6 +99,38 @@ export function activeContract(prop: Property): Contract | null {
   return prop.contracts.find((c) => c.status === 'active') ?? null
 }
 
+/** Human-readable annual increment, e.g. "Fixed 5%", "IPC 5% + 1%", "None". */
+export function incrementSummary(c: { increment: string; fixedPct: number; cpiEstimatePct: number; ipcExtra: number }): string {
+  switch (c.increment) {
+    case 'fixed':
+      return `Fixed ${c.fixedPct}%`
+    case 'ipc':
+      return `IPC ${c.cpiEstimatePct}%`
+    case 'ipc+':
+      return `IPC ${c.cpiEstimatePct}% + ${c.ipcExtra}%`
+    case 'none':
+    default:
+      return 'None'
+  }
+}
+
+/** Contract duration in whole days, from startDate to endDate. */
+function contractDurationDays(contract: Contract): number {
+  const start = new Date(`${contract.startDate}T12:00:00`)
+  const end = new Date(`${contract.endDate}T12:00:00`)
+  return (end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)
+}
+
+/** Contract duration rounded to whole years (average 365.25-day year). */
+export function contractDurationYears(contract: Contract): number {
+  return Math.round(contractDurationDays(contract) / 365.25)
+}
+
+/** Contract duration rounded to whole months (average 30.4368-day month). */
+export function contractDurationMonths(contract: Contract): number {
+  return Math.round(contractDurationDays(contract) / 30.4368)
+}
+
 /** Someone living there without an active lease (Overview → occupant). */
 export function hasNonLeaseOccupant(prop: Property): boolean {
   return Boolean(prop.occupant?.name?.trim())

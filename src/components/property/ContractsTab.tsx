@@ -1,35 +1,27 @@
 import { Fragment, useState } from 'react'
 import type { Contract, Property } from '../../lib/types'
+import { activeContract, incrementSummary } from '../../lib/finance'
+import { type CurrencyCode } from '../../lib/currency'
 import { fmtCurrency } from '../../lib/format'
 import { EditContractModal } from '../modals/EditContractModal'
 import { NewContractModal } from '../modals/NewContractModal'
+import { ActiveContractCard } from './ActiveContractCard'
 
 type Props = {
   prop: Property
   onUpdateProp: (fn: (p: Property) => Property) => void
+  cx?: (n: number) => number
+  displayCurrency?: CurrencyCode
 }
 
-function incrementSummary(c: Contract): string {
-  switch (c.increment) {
-    case 'fixed':
-      return `Fixed ${c.fixedPct}%`
-    case 'ipc':
-      return `IPC ${c.cpiEstimatePct}%`
-    case 'ipc+':
-      return `IPC ${c.cpiEstimatePct}% + ${c.ipcExtra}%`
-    case 'none':
-    default:
-      return 'None'
-  }
-}
-
-export function ContractsTab({ prop, onUpdateProp }: Props) {
+export function ContractsTab({ prop, onUpdateProp, cx, displayCurrency }: Props) {
   const [newModal, setNewModal] = useState(false)
   const [editModal, setEditModal] = useState<Contract | null>(null)
   const [confirmArchive, setConfirmArchive] = useState<number | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
 
   const sorted = [...prop.contracts].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
+  const active = activeContract(prop)
 
   const archiveContract = (id: number) => {
     onUpdateProp((p) => ({
@@ -68,6 +60,11 @@ export function ContractsTab({ prop, onUpdateProp }: Props) {
 
   return (
     <div>
+      {active && (
+        <div className="mb24">
+          <ActiveContractCard prop={prop} contract={active} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />
+        </div>
+      )}
       <div className="sec-hdr mb12">
         <span className="sec-title">Contract history</span>
         <button type="button" className="primary" style={{ fontSize: '12px', padding: '5px 14px' }} onClick={() => setNewModal(true)}>

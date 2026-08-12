@@ -8,7 +8,7 @@ import { MonthModal } from '../modals/MonthModal'
 import { OccupantModal } from '../modals/OccupantModal'
 import { KpiInfoIcon } from '../KpiInfoIcon'
 import { useReadOnly } from '../../context/ReadOnlyContext'
-import { ActiveContractCard } from './ActiveContractCard'
+import { ActiveContractSummaryCard } from './ActiveContractSummaryCard'
 
 type Props = {
   prop: Property
@@ -308,7 +308,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
 
       <div className="overview-duo mb24">
         {active ? (
-          <ActiveContractCard prop={prop} contract={active} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />
+          <ActiveContractSummaryCard prop={prop} contract={active} cx={cx} displayCurrency={displayCurrency} />
         ) : prop.occupant ? (
           <div className="card">
             <div className="card-inner">

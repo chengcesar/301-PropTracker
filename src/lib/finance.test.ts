@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { contractYearIndex } from './finance'
 import { defaultIncrementPct, effectiveIncrementPct } from './finance'
 import { rentForContractYear } from './finance'
+import { incrementSummary, contractDurationYears, contractDurationMonths } from './finance'
 import type { Contract } from './types'
 
 function makeContract(overrides: Partial<Contract> = {}): Contract {
@@ -225,5 +226,37 @@ describe('contractYearRows', () => {
     expect(row2021.yearIndex).toBe(2)
     expect(row2021.defaultIncrementPct).toBe(5)
     expect(row2021.incrementPct).toBe(8)
+  })
+})
+
+describe('incrementSummary', () => {
+  it('formats fixed', () => {
+    expect(incrementSummary(makeContract({ increment: 'fixed', fixedPct: 5 }))).toBe('Fixed 5%')
+  })
+
+  it('formats ipc', () => {
+    expect(incrementSummary(makeContract({ increment: 'ipc', cpiEstimatePct: 5 }))).toBe('IPC 5%')
+  })
+
+  it('formats ipc+', () => {
+    expect(incrementSummary(makeContract({ increment: 'ipc+', cpiEstimatePct: 5, ipcExtra: 1 }))).toBe('IPC 5% + 1%')
+  })
+
+  it('formats none', () => {
+    expect(incrementSummary(makeContract({ increment: 'none' }))).toBe('None')
+  })
+})
+
+describe('contractDurationYears / contractDurationMonths', () => {
+  it('reports whole years and months for an exact 10-year contract', () => {
+    const c = makeContract({ startDate: '2020-07-01', endDate: '2030-06-30' })
+    expect(contractDurationYears(c)).toBe(10)
+    expect(contractDurationMonths(c)).toBe(120)
+  })
+
+  it('reports whole years and months for a 2-year contract', () => {
+    const c = makeContract({ startDate: '2020-07-01', endDate: '2022-06-30' })
+    expect(contractDurationYears(c)).toBe(2)
+    expect(contractDurationMonths(c)).toBe(24)
   })
 })

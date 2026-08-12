@@ -19,6 +19,16 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+/**
+ * Color a covered month by its own contract-year number (odd/even), not by where the anniversary
+ * falls within its row. Always the green pair — past rows are already dimmed via the row's own
+ * `opacity: 0.7`, so a separate muted palette here would risk looking like the vacant gray.
+ */
+function monthColor(yearIndex: number | null): string {
+  if (yearIndex == null) return '#E2DED6'
+  return yearIndex % 2 === 1 ? '#8FE0B8' : '#1A6B47'
+}
+
 export function ActiveContractCard({ prop, contract, onUpdateProp, cx = (n) => n, displayCurrency }: Props) {
   const [tab, setTab] = useState<'year' | 'full'>('year')
   const [draftOverrides, setDraftOverrides] = useState<Record<number, string>>({})
@@ -41,6 +51,9 @@ export function ActiveContractCard({ prop, contract, onUpdateProp, cx = (n) => n
   }
 
   const rows = contractYearRows(contract, new Date())
+
+  /** The calendar-year row matching prop.year, if the contract touches that year — drives the {year} tab's two-tone bar. */
+  const currentYearRow = rows.find((r) => r.calendarYear === prop.year)
 
   const contractStart = new Date(`${contract.startDate}T12:00:00`)
   const contractEnd = new Date(`${contract.endDate}T12:00:00`)
@@ -83,17 +96,27 @@ export function ActiveContractCard({ prop, contract, onUpdateProp, cx = (n) => n
         {tab === 'year' ? (
           <>
             <div className="month-bar-row mb8">
-              {coverage.map(({ name, contract: c }, i) => (
-                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                  <div className="month-bar-seg" style={{ background: c ? '#1A6B47' : '#E2DED6' }} />
-                  <span className="fs11 text3">{name}</span>
-                </div>
-              ))}
+              {coverage.map(({ name }, i) => {
+                const monthYearIndex = currentYearRow?.months[i]?.yearIndex ?? null
+                return (
+                  <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                    <div
+                      className="month-bar-seg"
+                      style={{ background: monthColor(monthYearIndex) }}
+                    />
+                    <span className="fs11 text3">{name}</span>
+                  </div>
+                )
+              })}
             </div>
             <div className="flex gap16">
               <span className="fs11 text3 flex gap4 align-center">
+                <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#8FE0B8' }} />
+                Year 1, 3, 5…
+              </span>
+              <span className="fs11 text3 flex gap4 align-center">
                 <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#1A6B47' }} />
-                Covered
+                Year 2, 4, 6…
               </span>
               <span className="fs11 text3 flex gap4 align-center">
                 <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#E2DED6' }} />
@@ -112,11 +135,29 @@ export function ActiveContractCard({ prop, contract, onUpdateProp, cx = (n) => n
                 : row.isFuture
                   ? { border: '1px solid var(--purple)', background: 'var(--purple-bg)', borderRadius: 10, padding: 12 }
                   : { border: '1px solid var(--border)', borderRadius: 10, padding: 12, opacity: 0.7 }
+              const segments: { rent: number; yearIndex: number; count: number }[] = []
+              for (const m of row.months) {
+                if (m.rent == null || m.yearIndex == null) continue
+                const last = segments[segments.length - 1]
+                if (last && last.yearIndex === m.yearIndex) last.count += 1
+                else segments.push({ rent: m.rent, yearIndex: m.yearIndex, count: 1 })
+              }
               return (
                 <div key={row.calendarYear} style={rowStyle}>
                   <div className="flex align-center" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-                    <div className="fw6 fs13">
-                      {row.calendarYear} <span className="text3">Year {row.yearIndex}</span>
+                    <div>
+                      <div className="fw6 fs13">
+                        {row.calendarYear} <span className="text3">Year {row.yearIndex}</span>
+                      </div>
+                      <div className="flex align-center gap8 fs11 text3" style={{ marginTop: 2 }}>
+                        {segments.map((s, idx) => (
+                          <span key={idx} className="flex align-center gap4">
+                            {idx > 0 && <span>+</span>}
+                            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: monthColor(s.yearIndex) }} />
+                            {fmtCurrency(cx(s.rent), displayCurrency ?? prop.currency)}/mo × {s.count} mos
+                          </span>
+                        ))}
+                      </div>
                     </div>
                     <div className="flex align-center gap8">
                       <label className="fs11 text3">Increment %</label>
@@ -149,14 +190,7 @@ export function ActiveContractCard({ prop, contract, onUpdateProp, cx = (n) => n
                         <div
                           className="month-bar-seg"
                           title={month.rent != null ? fmtCurrency(cx(month.rent), displayCurrency ?? prop.currency) : 'No contract'}
-                          style={{
-                            background:
-                              month.rent == null
-                                ? '#E2DED6'
-                                : row.isPast
-                                  ? month.yearIndex === row.yearIndex ? '#a8a094' : '#c8c2b6'
-                                  : month.yearIndex === row.yearIndex ? '#1A6B47' : '#4a8f6d',
-                          }}
+                          style={{ background: monthColor(month.yearIndex) }}
                         />
                         <span className="fs11 text3">{MONTHS[i]}</span>
                       </div>

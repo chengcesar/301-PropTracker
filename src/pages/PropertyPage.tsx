@@ -234,7 +234,7 @@ export function PropertyPage({ prop, onUpdateProp }: Props) {
       </div>
       <div className="content">
         {tab === 'overview' && <OverviewTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
-        {tab === 'contracts' && <ContractsTab prop={prop} onUpdateProp={onUpdateProp} />}
+        {tab === 'contracts' && <ContractsTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
         {tab === 'cashflow' && <CashflowTab prop={prop} cx={cx} displayCurrency={displayCurrency} />}
         {tab === 'opex' && <OpexCapexTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
         {tab === 'taxes' && <TaxesTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}

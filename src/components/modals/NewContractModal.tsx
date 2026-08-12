@@ -1,24 +1,10 @@
 import { Fragment, useState } from 'react'
 import type { Contract, Property } from '../../lib/types'
-import { activeContract } from '../../lib/finance'
+import { activeContract, incrementSummary } from '../../lib/finance'
 import { parseNum, fmtCurrency } from '../../lib/format'
 import { ContractForm, type ContractFormState } from './ContractForm'
 
 type NewContractForm = ContractFormState & { activateNow: boolean }
-
-function incrementSummary(form: NewContractForm): string {
-  switch (form.increment) {
-    case 'fixed':
-      return `Fixed ${form.fixedPct}%`
-    case 'ipc':
-      return `IPC ${form.cpiEstimatePct}%`
-    case 'ipc+':
-      return `IPC ${form.cpiEstimatePct}% + ${form.ipcExtra}%`
-    case 'none':
-    default:
-      return 'None'
-  }
-}
 
 type Props = {
   prop: Property
