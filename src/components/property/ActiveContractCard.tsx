@@ -42,6 +42,11 @@ export function ActiveContractCard({ prop, contract, onUpdateProp, cx = (n) => n
 
   const rows = contractYearRows(contract, new Date())
 
+  const contractStart = new Date(`${contract.startDate}T12:00:00`)
+  const contractEnd = new Date(`${contract.endDate}T12:00:00`)
+  const durationYears = Math.round((contractEnd.getTime() - contractStart.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+  const totalContractValue = rows.reduce((sum, r) => sum + r.annualTotal, 0)
+
   return (
     <div className="card">
       <div className="card-inner">
@@ -67,8 +72,12 @@ export function ActiveContractCard({ prop, contract, onUpdateProp, cx = (n) => n
           </div>
         </div>
 
+        <div className="flex align-center gap8 mb4">
+          <span className="badge active-c">Active</span>
+          <span className="fs11 text3">{durationYears} {durationYears === 1 ? 'yr' : 'yrs'}</span>
+        </div>
         <div className="fs12 text3 mb12">
-          {contract.tenant || '—'} · {formatDate(contract.startDate)} → {formatDate(contract.endDate)} · {fmtCurrency(cx(contract.monthlyRent), displayCurrency ?? prop.currency)}/mo base · {contract.deposit} mo. deposit
+          {contract.tenant || '—'} · {formatDate(contract.startDate)} → {formatDate(contract.endDate)} · {fmtCurrency(cx(contract.monthlyRent), displayCurrency ?? prop.currency)}/mo base · {contract.deposit} mo. deposit · {fmtCurrency(cx(totalContractValue), displayCurrency ?? prop.currency)} total
         </div>
 
         {tab === 'year' ? (
@@ -145,8 +154,8 @@ export function ActiveContractCard({ prop, contract, onUpdateProp, cx = (n) => n
                               month.rent == null
                                 ? '#E2DED6'
                                 : row.isPast
-                                  ? '#c8c2b6'
-                                  : '#1A6B47',
+                                  ? month.yearIndex === row.yearIndex ? '#a8a094' : '#c8c2b6'
+                                  : month.yearIndex === row.yearIndex ? '#1A6B47' : '#4a8f6d',
                           }}
                         />
                         <span className="fs11 text3">{MONTHS[i]}</span>

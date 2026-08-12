@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { contractYearIndex, contractYearBounds } from './finance'
+import { contractYearIndex } from './finance'
 import { defaultIncrementPct, effectiveIncrementPct } from './finance'
 import { rentForContractYear } from './finance'
 import type { Contract } from './types'
@@ -49,31 +49,6 @@ describe('contractYearIndex', () => {
   it('returns 7 exactly on the sixth anniversary', () => {
     const c = makeContract()
     expect(contractYearIndex(c, new Date('2026-07-01T12:00:00'))).toBe(7)
-  })
-})
-
-describe('contractYearBounds', () => {
-  it('bounds year 1 to the contract start date', () => {
-    const c = makeContract()
-    const b = contractYearBounds(c, 1)
-    expect(b.start.toISOString().slice(0, 10)).toBe('2020-07-01')
-    expect(b.end.toISOString().slice(0, 10)).toBe('2021-06-30')
-  })
-
-  it('bounds the last year to the contract end date', () => {
-    const c = makeContract({ startDate: '2020-07-01', endDate: '2022-06-30' })
-    const b = contractYearBounds(c, 2)
-    expect(b.start.toISOString().slice(0, 10)).toBe('2021-07-01')
-    expect(b.end.toISOString().slice(0, 10)).toBe('2022-06-30')
-  })
-
-  it('clamps start against contractEnd for an out-of-domain yearIndex past the last real year', () => {
-    const c = makeContract({ startDate: '2020-07-01', endDate: '2022-06-30' })
-    const b = contractYearBounds(c, 3)
-    const contractEnd = new Date('2022-06-30T12:00:00')
-    expect(b.start.getTime()).toBe(contractEnd.getTime())
-    expect(b.end.getTime()).toBe(contractEnd.getTime())
-    expect(b.start.getTime()).toBeLessThanOrEqual(b.end.getTime())
   })
 })
 
@@ -214,15 +189,20 @@ describe('contractYearRows', () => {
     // 2020: only Jul-Dec in range, all within contract-year 1
     expect(rows[0].yearIndex).toBe(1)
     expect(rows[0].months[0].rent).toBeNull() // January, before startDate
+    expect(rows[0].months[0].yearIndex).toBeNull()
     expect(rows[0].months[6].rent).toBe(1000) // July
+    expect(rows[0].months[6].yearIndex).toBe(1) // July 2020 — contract-year 1
     // 2021: Jan-Jun tail of year 1, Jul-Dec start of year 2
     expect(rows[1].yearIndex).toBe(2)
     expect(rows[1].months[0].rent).toBe(1000) // January — still contract-year 1
+    expect(rows[1].months[0].yearIndex).toBe(1) // January 2021 — still contract-year 1
     expect(rows[1].months[6].rent).toBe(1000) // July — contract-year 2 (0% increment, same value)
+    expect(rows[1].months[6].yearIndex).toBe(2) // July 2021 — contract-year 2 starts here
     // 2022: only Jan-Jun in range (contract ends June 30), within contract-year 2
     expect(rows[2].yearIndex).toBe(2)
     expect(rows[2].months[0].rent).toBe(1000)
     expect(rows[2].months[6].rent).toBeNull() // July, after endDate
+    expect(rows[2].months[6].yearIndex).toBeNull()
   })
 
   it('flags exactly one row as current based on the reference date', () => {

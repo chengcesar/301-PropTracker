@@ -140,29 +140,6 @@ export function contractYearIndex(contract: Contract, date: Date): number {
   return years + 1
 }
 
-/** Calendar bounds of contract-year `yearIndex`, clamped to the contract's actual start/end. */
-export function contractYearBounds(contract: Contract, yearIndex: number): { start: Date; end: Date } {
-  const contractStart = new Date(`${contract.startDate}T12:00:00`)
-  const contractEnd = new Date(`${contract.endDate}T12:00:00`)
-  const yearStart = new Date(
-    contractStart.getFullYear() + (yearIndex - 1),
-    contractStart.getMonth(),
-    contractStart.getDate(),
-    12, 0, 0, 0,
-  )
-  const nextYearStart = new Date(
-    contractStart.getFullYear() + yearIndex,
-    contractStart.getMonth(),
-    contractStart.getDate(),
-    12, 0, 0, 0,
-  )
-  const yearEnd = new Date(nextYearStart.getTime() - 24 * 60 * 60 * 1000)
-  return {
-    start: yearStart < contractStart ? contractStart : yearStart > contractEnd ? contractEnd : yearStart,
-    end: yearEnd > contractEnd ? contractEnd : yearEnd,
-  }
-}
-
 /** Type-based increment %, ignoring any per-year override. Same value for every contract-year. */
 export function defaultIncrementPct(contract: Contract): number {
   switch (contract.increment) {
@@ -200,6 +177,8 @@ export function rentOnDate(contract: Contract, date: Date): number {
 export interface ContractYearMonth {
   /** Rent for this calendar month, or null if it falls outside [startDate, endDate]. */
   rent: number | null
+  /** Contract-year this month belongs to, or null if it falls outside [startDate, endDate]. */
+  yearIndex: number | null
 }
 
 export interface ContractYearRow {
@@ -230,9 +209,10 @@ export function contractYearRows(contract: Contract, today: Date): ContractYearR
     for (let m = 0; m < 12; m++) {
       const probe = new Date(calendarYear, m, 15, 12, 0, 0, 0)
       if (probe < start || probe > end) {
-        months.push({ rent: null })
+        months.push({ rent: null, yearIndex: null })
       } else {
-        months.push({ rent: rentOnDate(contract, probe) })
+        const monthYearIndex = contractYearIndex(contract, probe)
+        months.push({ rent: rentForContractYear(contract, monthYearIndex), yearIndex: monthYearIndex })
       }
     }
     const labelProbeRaw = new Date(calendarYear, 11, 31, 12, 0, 0, 0)
