@@ -314,4 +314,24 @@ describe('getMonthData includes maintenance events in totalOpex/noi', () => {
     expect(july.totalOpex).toBe(0)
     expect(july.noi).toBe(1000)
   })
+
+  it('combines manual expenses and a maintenance event in the same month', () => {
+    const c = makeContract({
+      monthlyRent: 1000, increment: 'none',
+      startDate: '2020-01-01', endDate: '2030-12-31',
+    })
+    const p = makeProperty({
+      year: 2026,
+      contracts: [c],
+      months: {
+        2026: {
+          5: { status: 'rented', incomeOverride: null, expenses: { admin: 100 } },
+        },
+      },
+      maintenanceEvents: [makeMaintenanceEvent({ amount: 300, date: '2026-06-15' })],
+    })
+    const june = getMonthData(p, 5) // June = month index 5
+    expect(june.totalOpex).toBe(400) // 100 manual + 300 maintenance
+    expect(june.noi).toBe(1000 - 400)
+  })
 })
