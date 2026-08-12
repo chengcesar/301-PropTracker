@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { MONTHS } from '../../lib/constants'
 import type { Contract, Property } from '../../lib/types'
-import { contractForMonth } from '../../lib/finance'
+import { contractForMonth, contractYearRows } from '../../lib/finance'
 import { type CurrencyCode } from '../../lib/currency'
 import { fmtCurrency } from '../../lib/format'
 
@@ -20,10 +20,6 @@ function formatDate(dateStr: string): string {
 }
 
 export function ActiveContractCard({ prop, contract, onUpdateProp, cx = (n) => n, displayCurrency }: Props) {
-  // Not used yet — wired up in Task 13 for saving per-year contract overrides.
-  // `noUnusedParameters` in tsconfig.app.json errors on the unused destructured
-  // param, so we reference it here; remove this line once Task 13 uses it.
-  void onUpdateProp
   const [tab, setTab] = useState<'year' | 'full'>('year')
 
   const coverage = MONTHS.map((name, i) => ({
@@ -31,6 +27,19 @@ export function ActiveContractCard({ prop, contract, onUpdateProp, cx = (n) => n
     contract: contractForMonth(prop.contracts, prop.year, i),
   }))
   const coveredCount = coverage.filter((c) => c.contract).length
+
+  const setYearOverride = (yearIndex: number, pct: number) => {
+    onUpdateProp((p) => ({
+      ...p,
+      contracts: p.contracts.map((c) =>
+        c.id === contract.id
+          ? { ...c, yearOverrides: { ...(c.yearOverrides ?? {}), [yearIndex]: pct } }
+          : c,
+      ),
+    }))
+  }
+
+  const rows = contractYearRows(contract, new Date())
 
   return (
     <div className="card">
@@ -86,7 +95,55 @@ export function ActiveContractCard({ prop, contract, onUpdateProp, cx = (n) => n
             </div>
           </>
         ) : (
-          <div className="fs12 text3">Full contract view coming up next.</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {rows.map((row) => {
+              const rowStyle: React.CSSProperties = row.isCurrent
+                ? { border: '1px solid #1A6B47', background: '#f0fdf4', borderRadius: 10, padding: 12 }
+                : row.isFuture
+                  ? { border: '1px solid #a78bfa', borderRadius: 10, padding: 12 }
+                  : { border: '1px solid var(--border)', borderRadius: 10, padding: 12, opacity: 0.7 }
+              return (
+                <div key={row.calendarYear} style={rowStyle}>
+                  <div className="flex align-center" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+                    <div className="fw6 fs13">
+                      {row.calendarYear} <span className="text3">Year {row.yearIndex}</span>
+                    </div>
+                    <div className="flex align-center gap8">
+                      <label className="fs11 text3">Increment %</label>
+                      <input
+                        type="number"
+                        step={0.1}
+                        value={row.incrementPct}
+                        onChange={(e) => setYearOverride(row.yearIndex, parseFloat(e.target.value) || 0)}
+                        style={{ width: 60, fontSize: 12, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--border)' }}
+                      />
+                      <span className="fs11 text3">+{row.defaultIncrementPct}% default</span>
+                      <span className="fs12 fw5">= {fmtCurrency(cx(row.annualTotal), displayCurrency ?? prop.currency)} / yr</span>
+                    </div>
+                  </div>
+                  <div className="flex" style={{ gap: 2 }}>
+                    {row.months.map((month, i) => (
+                      <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                        <div
+                          className="month-bar-seg"
+                          title={month.rent != null ? fmtCurrency(cx(month.rent), displayCurrency ?? prop.currency) : 'No contract'}
+                          style={{
+                            background:
+                              month.rent == null
+                                ? '#E2DED6'
+                                : row.isPast
+                                  ? '#c8c2b6'
+                                  : '#1A6B47',
+                          }}
+                        />
+                        <span className="fs11 text3">{MONTHS[i]}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         )}
       </div>
     </div>
