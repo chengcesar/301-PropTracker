@@ -863,9 +863,7 @@ export function ServicesTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                     <td style={{ textAlign: 'left' }}>{it.provider || '—'}</td>
                     <td style={{ textAlign: 'left' }}>
                       <span
-                        className={`badge ${
-                          it.cat === 'Improvement' ? 'rented' : it.cat === 'Equipment' ? 'override' : it.cat === 'Repair' ? 'pending' : ''
-                        }`}
+                        className={`badge ${it.cat === 'Improvement' ? 'rented' : it.cat === 'Equipment' ? 'override' : 'pending'}`}
                       >
                         {it.cat}
                       </span>
