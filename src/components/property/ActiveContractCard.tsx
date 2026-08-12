@@ -21,6 +21,7 @@ function formatDate(dateStr: string): string {
 
 export function ActiveContractCard({ prop, contract, onUpdateProp, cx = (n) => n, displayCurrency }: Props) {
   const [tab, setTab] = useState<'year' | 'full'>('year')
+  const [draftOverrides, setDraftOverrides] = useState<Record<number, string>>({})
 
   const coverage = MONTHS.map((name, i) => ({
     name,
@@ -100,7 +101,7 @@ export function ActiveContractCard({ prop, contract, onUpdateProp, cx = (n) => n
               const rowStyle: React.CSSProperties = row.isCurrent
                 ? { border: '1px solid #1A6B47', background: '#f0fdf4', borderRadius: 10, padding: 12 }
                 : row.isFuture
-                  ? { border: '1px solid #a78bfa', borderRadius: 10, padding: 12 }
+                  ? { border: '1px solid var(--purple)', background: 'var(--purple-bg)', borderRadius: 10, padding: 12 }
                   : { border: '1px solid var(--border)', borderRadius: 10, padding: 12, opacity: 0.7 }
               return (
                 <div key={row.calendarYear} style={rowStyle}>
@@ -113,8 +114,20 @@ export function ActiveContractCard({ prop, contract, onUpdateProp, cx = (n) => n
                       <input
                         type="number"
                         step={0.1}
-                        value={row.incrementPct}
-                        onChange={(e) => setYearOverride(row.yearIndex, parseFloat(e.target.value) || 0)}
+                        value={draftOverrides[row.yearIndex] ?? row.incrementPct}
+                        onChange={(e) => {
+                          const raw = e.target.value
+                          setDraftOverrides((d) => ({ ...d, [row.yearIndex]: raw }))
+                          const parsed = parseFloat(raw)
+                          if (!Number.isNaN(parsed)) setYearOverride(row.yearIndex, parsed)
+                        }}
+                        onBlur={() =>
+                          setDraftOverrides((d) => {
+                            const next = { ...d }
+                            delete next[row.yearIndex]
+                            return next
+                          })
+                        }
                         style={{ width: 60, fontSize: 12, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--border)' }}
                       />
                       <span className="fs11 text3">+{row.defaultIncrementPct}% default</span>
