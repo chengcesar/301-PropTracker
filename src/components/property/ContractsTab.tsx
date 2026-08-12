@@ -1,7 +1,5 @@
 import { Fragment, useState } from 'react'
-import { MONTHS } from '../../lib/constants'
 import type { Contract, Property } from '../../lib/types'
-import { contractForMonth } from '../../lib/finance'
 import { fmtCurrency } from '../../lib/format'
 import { EditContractModal } from '../modals/EditContractModal'
 import { NewContractModal } from '../modals/NewContractModal'
@@ -68,47 +66,13 @@ export function ContractsTab({ prop, onUpdateProp }: Props) {
     }))
   }
 
-  const coverage = MONTHS.map((name, i) => ({
-    name,
-    contract: contractForMonth(prop.contracts, prop.year, i),
-  }))
-
   return (
     <div>
-      <div className="sec-hdr mb8">
-        <span className="sec-title">Coverage — {prop.year}</span>
+      <div className="sec-hdr mb12">
+        <span className="sec-title">Contract history</span>
         <button type="button" className="primary" style={{ fontSize: '12px', padding: '5px 14px' }} onClick={() => setNewModal(true)}>
           + New contract
         </button>
-      </div>
-      <div className="card mb24">
-        <div className="card-inner">
-          <div className="month-bar-row mb8">
-            {coverage.map(({ name, contract }, i) => (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <div className="month-bar-seg" style={{ background: contract ? '#1A6B47' : '#E2DED6' }} />
-                <span className="fs11 text3">{name}</span>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap16">
-            <span className="fs11 text3 flex gap4 align-center">
-              <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#1A6B47' }} />
-              Covered
-            </span>
-            <span className="fs11 text3 flex gap4 align-center">
-              <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#E2DED6' }} />
-              Vacant / no contract
-            </span>
-            <span className="fs11 text3 mono" style={{ marginLeft: 'auto' }}>
-              {coverage.filter((c) => c.contract).length} / 12 months covered
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="sec-hdr mb12">
-        <span className="sec-title">Contract history</span>
       </div>
       <div className="contract-timeline">
         <div className="ct-line" />
