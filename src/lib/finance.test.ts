@@ -335,3 +335,39 @@ describe('getMonthData includes maintenance events in totalOpex/noi', () => {
     expect(june.noi).toBe(1000 - 400)
   })
 })
+
+import { calcAnnual, sumMaintenanceAnnual } from './finance'
+
+describe('sumMaintenanceAnnual', () => {
+  it('sums maintenance events across all months of prop.year', () => {
+    const p = makeProperty({
+      year: 2026,
+      maintenanceEvents: [
+        makeMaintenanceEvent({ id: 1, amount: 200, date: '2026-03-10' }),
+        makeMaintenanceEvent({ id: 2, amount: 300, date: '2026-11-02' }),
+        makeMaintenanceEvent({ id: 3, amount: 999, date: '2025-03-10' }), // different year
+      ],
+    })
+    expect(sumMaintenanceAnnual(p)).toBe(500)
+  })
+})
+
+describe('calcAnnual exposes maintenance without double-subtracting it', () => {
+  it('includes maintenance in totalOpex/noi exactly once, and reports it on ann.maintenance', () => {
+    const c = makeContract({
+      monthlyRent: 1000, increment: 'none',
+      startDate: '2020-01-01', endDate: '2030-12-31',
+    })
+    const p = makeProperty({
+      year: 2026,
+      contracts: [c],
+      maintenanceEvents: [makeMaintenanceEvent({ amount: 300, date: '2026-06-15' })],
+    })
+    const ann = calcAnnual(p)
+    expect(ann.maintenance).toBe(300)
+    expect(ann.totalOpex).toBe(300)
+    expect(ann.noi).toBe(12000 - 300)
+    // netCf must NOT subtract maintenance again — it's already inside noi via totalOpex
+    expect(ann.netCf).toBe(ann.noi - ann.totalCapex - ann.taxes - ann.serviceOneTime)
+  })
+})

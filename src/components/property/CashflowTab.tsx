@@ -173,6 +173,25 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
                 </tr>
               )
             })}
+            {ann.maintenance > 0 && (
+              <tr className="indent">
+                <td>− Maintenance</td>
+                <td>
+                  <div className="wf-bar">
+                    <div
+                      className="wf-bar-fill"
+                      style={{
+                        width: gpiDen ? `${Math.max(1, Math.round((ann.maintenance / gpiDen) * 100))}%` : '0%',
+                        background: '#4A3FA0',
+                      }}
+                    />
+                  </div>
+                </td>
+                <td className="neg">−{fmt(cx(ann.maintenance))}</td>
+                <td>{fmt(cx(ann.maintenance / 12))}</td>
+                <td>{gpiDen ? `${Math.round((ann.maintenance / gpiDen) * 100)}%` : '—'}</td>
+              </tr>
+            )}
             <tr className="subtotal">
               <td>NOI</td>
               <td>
