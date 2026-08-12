@@ -254,7 +254,7 @@ export function PropertyLeaderboardMap({ properties, annuals, onSelectProperty, 
           egiPerM2: areaM2 > 0 ? egiAnnual / areaM2 : 0,
           noiPerM2: areaM2 > 0 && Number.isFinite(noiAnnual) ? noiAnnual / areaM2 : 0,
           margin: gpiAnnual > 0 ? (netCfAnnual / gpiAnnual) * 100 : 0,
-          annual: annual ?? { gpi: 0, vacancy: 0, egi: 0, totalOpex: 0, noi: 0, totalCapex: 0, taxes: 0, serviceOneTime: 0, netCf: 0 },
+          annual: annual ?? { gpi: 0, vacancy: 0, egi: 0, totalOpex: 0, noi: 0, totalCapex: 0, taxes: 0, serviceOneTime: 0, maintenance: 0, netCf: 0 },
           monthsLeft: ac?.endDate ? monthsUntil(ac.endDate) : null,
           vacant: !ac,
           ...(() => {

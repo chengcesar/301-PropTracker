@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { MONTHS, MONTHS_FULL } from '../../lib/constants'
 import type { MonthData, Occupant, Property } from '../../lib/types'
-import { activeContract, calcAnnual, contractForMonth, estimatedPropertyValueAtYear, expenseRowsForYear, getMonthData, projectedGpiAnnual, rentOnDate, resolveServices, sumServiceOneTimeForMonth, vacancyLossMonthCount, yearMonths } from '../../lib/finance'
+import { activeContract, calcAnnual, contractForMonth, estimatedPropertyValueAtYear, expenseRowsForYear, getMonthData, projectedGpiAnnual, rentOnDate, resolveServices, sumMaintenanceForMonth, sumServiceOneTimeForMonth, vacancyLossMonthCount, yearMonths } from '../../lib/finance'
 import { type CurrencyCode } from '../../lib/currency'
 import { fmt, fmtCurrencyM } from '../../lib/format'
 import { MonthModal } from '../modals/MonthModal'
@@ -729,6 +729,21 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
           }))
         }
 
+        const maintenanceValues = MONTHS.map((_, i) => sumMaintenanceForMonth(prop, i))
+        const maintenanceTotal = maintenanceValues.reduce((a, b) => a + b, 0)
+        if (maintenanceTotal > 0) {
+          const filled = maintenanceValues.filter((v) => v > 0).length
+          rows.push({
+            key: 'maintenance',
+            label: 'Maintenance',
+            editable: false,
+            removable: false,
+            values: maintenanceValues,
+            total: maintenanceTotal,
+            avg: filled ? maintenanceTotal / filled : 0,
+          })
+        }
+
         // Totals row
         const totals = MONTHS.map((_, i) => rows.reduce((a, r) => a + r.values[i], 0))
         const grandTotal = totals.reduce((a, b) => a + b, 0)
@@ -891,6 +906,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                     <td style={{ ...stickyLabel, background: rowIdx % 2 === 0 ? '#fff' : '#fafbfc' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
                         <span style={{ flex: 1 }}>{row.label}</span>
+                        {row.key !== 'maintenance' && (
                         <span className="exp-row-actions" style={{ position: 'absolute', right: 0, display: 'flex', gap: 2, opacity: 0, transition: 'opacity 0.15s' }}>
                           <button
                             type="button"
@@ -917,6 +933,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                             +
                           </button>
                         </span>
+                        )}
                       </div>
                     </td>
                     {row.values.map((v, i) => {

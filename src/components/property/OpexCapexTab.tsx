@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { CAPEX_CATS, CAPEX_STATUSES, MONTHS } from '../../lib/constants'
 import type { CapexItem, CapexStatus, Property } from '../../lib/types'
 import type { CurrencyCode } from '../../lib/currency'
-import { expenseRowsForYear, yearMonths } from '../../lib/finance'
+import { expenseRowsForYear, sumMaintenanceForMonth, yearMonths } from '../../lib/finance'
 import { fmt, parseNum } from '../../lib/format'
 
 function capexDurationWeeks(start: string, end?: string): number | null {
@@ -116,6 +116,7 @@ export function OpexCapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
               {rowDefs.map((def) => (
                 <th key={def.key}>{def.label}</th>
               ))}
+              <th>Maintenance</th>
               <th>Total</th>
             </tr>
           </thead>
@@ -130,12 +131,15 @@ export function OpexCapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                 total += val
                 return val
               })
+              const maintenanceVal = sumMaintenanceForMonth(prop, i)
+              total += maintenanceVal
               return (
                 <tr key={i} className={!ym[i] ? 'no-contract-row' : ''}>
                   <td>{name}</td>
                   {cellValues.map((v, j) => (
                     <td key={rowDefs[j].key} className={v ? '' : 'text3'}>{v ? fmt(cx(v)) : '—'}</td>
                   ))}
+                  <td className={maintenanceVal ? '' : 'text3'}>{maintenanceVal ? fmt(cx(maintenanceVal)) : '—'}</td>
                   <td className="fw5">−{fmt(cx(total))}</td>
                 </tr>
               )

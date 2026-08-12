@@ -260,3 +260,114 @@ describe('contractDurationYears / contractDurationMonths', () => {
     expect(contractDurationMonths(c)).toBe(24)
   })
 })
+
+import { sumMaintenanceForMonth } from './finance'
+import type { MaintenanceEvent } from './types'
+
+function makeMaintenanceEvent(overrides: Partial<MaintenanceEvent> = {}): MaintenanceEvent {
+  return {
+    id: 1,
+    desc: 'Plumbing repair',
+    cat: 'Repair',
+    amount: 200,
+    date: '2026-03-10',
+    ...overrides,
+  }
+}
+
+describe('sumMaintenanceForMonth', () => {
+  it('sums events whose start date falls in the given month and year', () => {
+    const p = makeProperty({
+      year: 2026,
+      maintenanceEvents: [
+        makeMaintenanceEvent({ id: 1, amount: 200, date: '2026-03-10' }),
+        makeMaintenanceEvent({ id: 2, amount: 50, date: '2026-03-25' }),
+        makeMaintenanceEvent({ id: 3, amount: 999, date: '2026-04-01' }), // different month
+        makeMaintenanceEvent({ id: 4, amount: 999, date: '2025-03-10' }), // different year
+      ],
+    })
+    expect(sumMaintenanceForMonth(p, 2)).toBe(250) // March = month index 2
+  })
+
+  it('returns 0 when there are no maintenance events', () => {
+    const p = makeProperty({ year: 2026 })
+    expect(sumMaintenanceForMonth(p, 2)).toBe(0)
+  })
+})
+
+describe('getMonthData includes maintenance events in totalOpex/noi', () => {
+  it('reduces NOI by the maintenance amount booked to its start month', () => {
+    const c = makeContract({
+      monthlyRent: 1000, increment: 'none',
+      startDate: '2020-01-01', endDate: '2030-12-31',
+    })
+    const p = makeProperty({
+      year: 2026,
+      contracts: [c],
+      maintenanceEvents: [makeMaintenanceEvent({ amount: 300, date: '2026-06-15' })],
+    })
+    const june = getMonthData(p, 5) // June = month index 5
+    expect(june.totalOpex).toBe(300)
+    expect(june.noi).toBe(1000 - 300)
+
+    const july = getMonthData(p, 6) // no maintenance event this month
+    expect(july.totalOpex).toBe(0)
+    expect(july.noi).toBe(1000)
+  })
+
+  it('combines manual expenses and a maintenance event in the same month', () => {
+    const c = makeContract({
+      monthlyRent: 1000, increment: 'none',
+      startDate: '2020-01-01', endDate: '2030-12-31',
+    })
+    const p = makeProperty({
+      year: 2026,
+      contracts: [c],
+      months: {
+        2026: {
+          5: { status: 'rented', incomeOverride: null, expenses: { admin: 100 } },
+        },
+      },
+      maintenanceEvents: [makeMaintenanceEvent({ amount: 300, date: '2026-06-15' })],
+    })
+    const june = getMonthData(p, 5) // June = month index 5
+    expect(june.totalOpex).toBe(400) // 100 manual + 300 maintenance
+    expect(june.noi).toBe(1000 - 400)
+  })
+})
+
+import { calcAnnual, sumMaintenanceAnnual } from './finance'
+
+describe('sumMaintenanceAnnual', () => {
+  it('sums maintenance events across all months of prop.year', () => {
+    const p = makeProperty({
+      year: 2026,
+      maintenanceEvents: [
+        makeMaintenanceEvent({ id: 1, amount: 200, date: '2026-03-10' }),
+        makeMaintenanceEvent({ id: 2, amount: 300, date: '2026-11-02' }),
+        makeMaintenanceEvent({ id: 3, amount: 999, date: '2025-03-10' }), // different year
+      ],
+    })
+    expect(sumMaintenanceAnnual(p)).toBe(500)
+  })
+})
+
+describe('calcAnnual exposes maintenance without double-subtracting it', () => {
+  it('includes maintenance in totalOpex/noi exactly once, and reports it on ann.maintenance', () => {
+    const c = makeContract({
+      monthlyRent: 1000, increment: 'none',
+      startDate: '2020-01-01', endDate: '2030-12-31',
+    })
+    const p = makeProperty({
+      year: 2026,
+      contracts: [c],
+      maintenanceEvents: [makeMaintenanceEvent({ amount: 300, date: '2026-06-15' })],
+    })
+    const ann = calcAnnual(p)
+    expect(ann.maintenance).toBe(300)
+    expect(ann.totalOpex).toBe(300)
+    expect(ann.noi).toBe(12000 - 300)
+    // netCf must NOT subtract maintenance again — it's already inside noi via totalOpex
+    expect(ann.netCf).toBe(ann.noi - ann.totalCapex - ann.taxes - ann.serviceOneTime)
+  })
+})

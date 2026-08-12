@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import type { CapexItem, CapexStatus, Contract, Property } from '../lib/types'
+import type { CapexItem, CapexStatus, Contract, MaintenanceEvent, Property } from '../lib/types'
 import type { Share } from '../lib/types'
 import { subscribeViewerShares } from '../services/sharesService'
 import { useAuth } from '../contexts/AuthContext'
@@ -1767,6 +1767,13 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
     }))
   }
 
+  function handleMaintenanceStatus(propertyId: number, eventId: number, next: CapexStatus) {
+    updateProperty(propertyId, p => ({
+      ...p,
+      maintenanceEvents: (p.maintenanceEvents ?? []).map(c => c.id === eventId ? { ...c, status: next } : c),
+    }))
+  }
+
   function toggleTodoPanel(key: TodoPanelKey) {
     setTodoPanelVis(prev => {
       const next = { ...prev, [key]: !prev[key], feed: true }
@@ -2077,14 +2084,19 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
     return results
   }, [sortedProperties])
 
-  // Maintenance panel — current-year CAPEX items from all filtered properties
+  // Maintenance panel — current-year CAPEX + maintenance events from all filtered properties
   const maintenanceItems = useMemo(() => {
     const calYear = new Date().getFullYear()
-    const out: Array<CapexItem & { propertyId: number; propertyName: string }> = []
+    const out: Array<CapexItem & { propertyId: number; propertyName: string; source: 'capex' | 'maintenance' }> = []
     for (const p of filteredProperties) {
       for (const c of (p.capex ?? [])) {
         if (new Date(c.date).getFullYear() === calYear) {
-          out.push({ ...c, propertyId: p.id, propertyName: p.name })
+          out.push({ ...c, propertyId: p.id, propertyName: p.name, source: 'capex' })
+        }
+      }
+      for (const c of (p.maintenanceEvents ?? []) as MaintenanceEvent[]) {
+        if (new Date(c.date).getFullYear() === calYear) {
+          out.push({ ...c, propertyId: p.id, propertyName: p.name, source: 'maintenance' })
         }
       }
     }
@@ -3994,7 +4006,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                     <CapexTodoCard
                       key={`${c.propertyId}-${c.id}`}
                       item={c}
-                      onStatusChange={next => handleCapexStatus(c.propertyId, c.id, next)}
+                      onStatusChange={next => c.source === 'capex' ? handleCapexStatus(c.propertyId, c.id, next) : handleMaintenanceStatus(c.propertyId, c.id, next)}
                       onOpen={() => onSelectProperty(c.propertyId)}
                       readOnly={readOnly}
                     />
@@ -4007,7 +4019,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                     <CapexTodoCard
                       key={`${c.propertyId}-${c.id}`}
                       item={c}
-                      onStatusChange={next => handleCapexStatus(c.propertyId, c.id, next)}
+                      onStatusChange={next => c.source === 'capex' ? handleCapexStatus(c.propertyId, c.id, next) : handleMaintenanceStatus(c.propertyId, c.id, next)}
                       onOpen={() => onSelectProperty(c.propertyId)}
                       readOnly={readOnly}
                     />
@@ -4020,7 +4032,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                     <CapexTodoCard
                       key={`${c.propertyId}-${c.id}`}
                       item={c}
-                      onStatusChange={next => handleCapexStatus(c.propertyId, c.id, next)}
+                      onStatusChange={next => c.source === 'capex' ? handleCapexStatus(c.propertyId, c.id, next) : handleMaintenanceStatus(c.propertyId, c.id, next)}
                       onOpen={() => onSelectProperty(c.propertyId)}
                       readOnly={readOnly}
                     />

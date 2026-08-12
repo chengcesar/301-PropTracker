@@ -11,6 +11,8 @@ export interface AnnualResult {
   taxes: number
   /** Sum of one-time service/utility payments dated in prop.year */
   serviceOneTime: number
+  /** Sum of maintenanceEvents dated in prop.year — already included in totalOpex/noi; exposed separately so breakdown views can itemize it. */
+  maintenance: number
   netCf: number
 }
 
@@ -404,6 +406,22 @@ export function calcPortfolioProjectedGpiIn(
   )
 }
 
+/**
+ * Sum of `maintenanceEvents` attributed to calendar month `monthIndex` (0–11)
+ * when the event's start `date` falls in `prop.year`. Missing `date` contributes 0.
+ */
+export function sumMaintenanceForMonth(prop: Property, monthIndex: number): number {
+  let sum = 0
+  for (const item of prop.maintenanceEvents ?? []) {
+    if (!item.date?.trim()) continue
+    const d = new Date(item.date + 'T12:00')
+    if (d.getFullYear() !== prop.year) continue
+    if (d.getMonth() !== monthIndex) continue
+    sum += item.amount ?? 0
+  }
+  return sum
+}
+
 export function getMonthData(prop: Property, mIdx: number): MonthDataResult {
   const contract = contractForMonth(prop.contracts, prop.year, mIdx)
   const ym = yearMonths(prop)
@@ -423,7 +441,8 @@ export function getMonthData(prop: Property, mIdx: number): MonthDataResult {
   const autoExp: Record<string, number> = {}
   const manExp = { ...m.expenses }
   const manualSum = sumNumericExpenseValues(manExp as Record<string, unknown>)
-  const totalOpex = manualSum
+  const maintenance = sumMaintenanceForMonth(prop, mIdx)
+  const totalOpex = manualSum + maintenance
   return {
     income,
     manExp,
@@ -463,6 +482,12 @@ export function sumServiceOneTimeAnnual(prop: Property): number {
   return sum
 }
 
+export function sumMaintenanceAnnual(prop: Property): number {
+  let sum = 0
+  for (let i = 0; i < 12; i++) sum += sumMaintenanceForMonth(prop, i)
+  return sum
+}
+
 export function calcAnnual(prop: Property): AnnualResult {
   let gpi = 0
   let egi = 0
@@ -478,6 +503,7 @@ export function calcAnnual(prop: Property): AnnualResult {
   const totalCapex = prop.capex.reduce((a, b) => a + b.amount, 0)
   const taxes = (prop.taxes.items ?? []).reduce((a, t) => a + (t.amount ?? 0), 0)
   const serviceOneTime = sumServiceOneTimeAnnual(prop)
+  const maintenance = sumMaintenanceAnnual(prop)
   const noi = egi - totalOpex
   return {
     gpi,
@@ -488,6 +514,7 @@ export function calcAnnual(prop: Property): AnnualResult {
     totalCapex,
     taxes,
     serviceOneTime,
+    maintenance,
     netCf: noi - totalCapex - taxes - serviceOneTime,
   }
 }
@@ -543,6 +570,7 @@ export function convertAnnual(result: AnnualResult, from: CurrencyCode, to: Curr
     totalCapex: c(result.totalCapex),
     taxes: c(result.taxes),
     serviceOneTime: c(result.serviceOneTime),
+    maintenance: c(result.maintenance),
     netCf: c(result.netCf),
   }
 }

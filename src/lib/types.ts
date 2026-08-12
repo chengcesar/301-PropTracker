@@ -91,6 +91,19 @@ export interface ServiceOneTimeItem {
   status?: TaxStatus
 }
 
+/** Ad-hoc maintenance/repair cost routed to OpEx (reduces NOI) — distinct from CapEx (below-the-line) and one-time payments (netCf-only). */
+export interface MaintenanceEvent {
+  id: number
+  desc: string
+  provider?: string
+  cat: 'Improvement' | 'Equipment' | 'Repair' | 'Other'
+  amount: number
+  date: string
+  dateEnd?: string
+  status?: CapexStatus
+  notes?: string
+}
+
 export interface OwnershipEntry {
   id: number
   name: string
@@ -192,6 +205,7 @@ export interface Property {
   taxes: { items: TaxItem[] }
   services?: Record<number, ServiceEntry[]>
   serviceOneTimeItems?: ServiceOneTimeItem[]
+  maintenanceEvents?: MaintenanceEvent[]
   factSheet?: FactSheet
   group?: string
 }
