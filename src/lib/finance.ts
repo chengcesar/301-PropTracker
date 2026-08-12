@@ -404,6 +404,22 @@ export function calcPortfolioProjectedGpiIn(
   )
 }
 
+/**
+ * Sum of `maintenanceEvents` attributed to calendar month `monthIndex` (0–11)
+ * when the event's start `date` falls in `prop.year`. Missing `date` contributes 0.
+ */
+export function sumMaintenanceForMonth(prop: Property, monthIndex: number): number {
+  let sum = 0
+  for (const item of prop.maintenanceEvents ?? []) {
+    if (!item.date?.trim()) continue
+    const d = new Date(item.date + 'T12:00')
+    if (d.getFullYear() !== prop.year) continue
+    if (d.getMonth() !== monthIndex) continue
+    sum += item.amount ?? 0
+  }
+  return sum
+}
+
 export function getMonthData(prop: Property, mIdx: number): MonthDataResult {
   const contract = contractForMonth(prop.contracts, prop.year, mIdx)
   const ym = yearMonths(prop)
@@ -423,7 +439,8 @@ export function getMonthData(prop: Property, mIdx: number): MonthDataResult {
   const autoExp: Record<string, number> = {}
   const manExp = { ...m.expenses }
   const manualSum = sumNumericExpenseValues(manExp as Record<string, unknown>)
-  const totalOpex = manualSum
+  const maintenance = sumMaintenanceForMonth(prop, mIdx)
+  const totalOpex = manualSum + maintenance
   return {
     income,
     manExp,
