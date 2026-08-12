@@ -24,6 +24,8 @@ export function NewContractModal({ prop, onSave, onClose }: Props) {
     deposit: 2,
     increment: 'ipc+',
     ipcExtra: 1,
+    fixedPct: 0,
+    cpiEstimatePct: 0,
     adminFee: '',
     notes: '',
     activateNow: true,
@@ -50,6 +52,8 @@ export function NewContractModal({ prop, onSave, onClose }: Props) {
       deposit: form.deposit,
       increment: form.increment as Contract['increment'],
       ipcExtra: form.ipcExtra,
+      fixedPct: form.fixedPct,
+      cpiEstimatePct: form.cpiEstimatePct,
       adminFee: parseNum(form.adminFee),
       notes: form.notes ?? '',
     }
