@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react'
-import type { Property, ServiceEntry, ServiceOneTimeItem, TaxStatus } from '../../lib/types'
+import type { CapexStatus, MaintenanceEvent, Property, ServiceEntry, ServiceOneTimeItem, TaxStatus } from '../../lib/types'
 import type { CurrencyCode } from '../../lib/currency'
 import { fmt, parseNum } from '../../lib/format'
+import { CAPEX_CATS, CAPEX_STATUSES } from '../../lib/constants'
 
 const IconCopy = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
@@ -301,6 +302,124 @@ export function ServicesTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }, [services, totalMonthlyCost, cx])
+
+  const maintenanceItems = prop.maintenanceEvents ?? []
+  const maintenanceYearTotal = maintenanceItems.reduce((a, it) => {
+    if (!it.date?.trim()) return a
+    const d = new Date(it.date + 'T12:00')
+    if (d.getFullYear() !== prop.year) return a
+    return a + (it.amount ?? 0)
+  }, 0)
+
+  const [showMaintForm, setShowMaintForm] = useState(false)
+  const [editingMaintId, setEditingMaintId] = useState<number | null>(null)
+  const [copiedMaint, setCopiedMaint] = useState(false)
+  const [formMaint, setFormMaint] = useState({
+    desc: '',
+    provider: '',
+    cat: 'Repair' as (typeof CAPEX_CATS)[number],
+    amount: '',
+    date: '',
+    dateEnd: '',
+    status: 'To do' as CapexStatus,
+    notes: '',
+  })
+
+  const setMaint = <K extends keyof typeof formMaint>(k: K, v: (typeof formMaint)[K]) => {
+    setFormMaint((p) => ({ ...p, [k]: v }))
+  }
+
+  const resetMaintForm = () => {
+    setFormMaint({ desc: '', provider: '', cat: 'Repair', amount: '', date: '', dateEnd: '', status: 'To do', notes: '' })
+    setShowMaintForm(false)
+    setEditingMaintId(null)
+  }
+
+  const addMaintenance = () => {
+    if (!formMaint.desc.trim() || !formMaint.date.trim()) return
+    const item: MaintenanceEvent = {
+      id: Date.now(),
+      desc: formMaint.desc.trim(),
+      provider: formMaint.provider.trim() || undefined,
+      cat: formMaint.cat,
+      amount: parseNum(formMaint.amount),
+      date: formMaint.date,
+      dateEnd: formMaint.dateEnd.trim() || undefined,
+      status: formMaint.status,
+      notes: formMaint.notes.trim() || undefined,
+    }
+    onUpdateProp((p) => ({
+      ...p,
+      maintenanceEvents: [...(p.maintenanceEvents ?? []), item],
+    }))
+    resetMaintForm()
+  }
+
+  const startEditMaintenance = (it: MaintenanceEvent) => {
+    setEditingMaintId(it.id)
+    setFormMaint({
+      desc: it.desc,
+      provider: it.provider ?? '',
+      cat: it.cat,
+      amount: it.amount ? String(it.amount) : '',
+      date: it.date,
+      dateEnd: it.dateEnd ?? '',
+      status: it.status ?? 'To do',
+      notes: it.notes ?? '',
+    })
+    setShowMaintForm(true)
+  }
+
+  const saveEditMaintenance = () => {
+    if (!formMaint.desc.trim() || !formMaint.date.trim() || editingMaintId === null) return
+    onUpdateProp((p) => ({
+      ...p,
+      maintenanceEvents: (p.maintenanceEvents ?? []).map((it) =>
+        it.id === editingMaintId
+          ? {
+              ...it,
+              desc: formMaint.desc.trim(),
+              provider: formMaint.provider.trim() || undefined,
+              cat: formMaint.cat,
+              amount: parseNum(formMaint.amount),
+              date: formMaint.date,
+              dateEnd: formMaint.dateEnd.trim() || undefined,
+              status: formMaint.status,
+              notes: formMaint.notes.trim() || undefined,
+            }
+          : it,
+      ),
+    }))
+    resetMaintForm()
+  }
+
+  const removeMaintenance = (id: number) => {
+    onUpdateProp((p) => ({
+      ...p,
+      maintenanceEvents: (p.maintenanceEvents ?? []).filter((it) => it.id !== id),
+    }))
+  }
+
+  const handleCopyMaintenance = useCallback(() => {
+    const headers = ['Description', 'Provider', 'Category', 'Amount', 'Start date', 'End date', 'Status', 'Notes']
+    const rows = maintenanceItems.map((it) =>
+      [
+        it.desc || '—',
+        it.provider || '—',
+        it.cat,
+        it.amount ? fmt(cx(it.amount)) : '—',
+        formatPayCell(it.date),
+        it.dateEnd ? formatPayCell(it.dateEnd) : '—',
+        it.status ?? 'To do',
+        it.notes || '—',
+      ].join('\t'),
+    )
+    const totalAll = maintenanceItems.reduce((a, it) => a + (it.amount ?? 0), 0)
+    rows.push(['Total (all)', '', '', totalAll ? fmt(cx(totalAll)) : '—', '', '', '', ''].join('\t'))
+    navigator.clipboard.writeText([headers.join('\t'), ...rows].join('\n'))
+    setCopiedMaint(true)
+    setTimeout(() => setCopiedMaint(false), 2000)
+  }, [maintenanceItems, cx])
 
   return (
     <div>
@@ -674,6 +793,181 @@ export function ServicesTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
                 {editingOtId ? 'Save changes' : 'Add payment'}
               </button>
               <button type="button" className="ghost" style={{ fontSize: 12 }} onClick={resetOtForm}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="sec-hdr mb12 mt24">
+        <span className="sec-title">Maintenance events · {prop.year}</span>
+        <button
+          type="button"
+          className="primary"
+          style={{ fontSize: 12, padding: '5px 14px' }}
+          onClick={() => setShowMaintForm(true)}
+        >
+          + Add event
+        </button>
+      </div>
+      <div className="fs12 text3 mb12" style={{ maxWidth: 640 }}>
+        Ad-hoc costs routed to OpEx — reduce NOI.
+      </div>
+
+      {maintenanceItems.length === 0 && !showMaintForm && (
+        <div className="card mb24">
+          <div className="card-inner">
+            <div className="empty-state" style={{ padding: 24 }}>
+              <div className="empty-title">No maintenance events</div>
+              <div className="fs12 text3 mt4">Add ad-hoc maintenance costs that reduce NOI via OpEx</div>
+              <button type="button" className="primary mt12" onClick={() => setShowMaintForm(true)}>
+                + Add first event
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {maintenanceItems.length > 0 && (
+        <div className="card mb24" style={{ overflow: 'hidden' }}>
+          <table className="cf-table">
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left' }}>Description</th>
+                <th style={{ textAlign: 'left' }}>Provider</th>
+                <th style={{ textAlign: 'left' }}>Category</th>
+                <th>Amount</th>
+                <th>Start date</th>
+                <th>End date</th>
+                <th style={{ textAlign: 'left' }}>Status</th>
+                <th style={{ textAlign: 'left' }}>Notes</th>
+                <th style={{ width: 64, textAlign: 'center' }}>
+                  <button
+                    className="ghost"
+                    style={{ padding: 0, border: 'none', background: 'transparent', margin: '0 auto', display: 'block' }}
+                    title={copiedMaint ? 'Copied!' : 'Copy table'}
+                    onClick={handleCopyMaintenance}
+                  >
+                    {copiedMaint ? <IconCheck /> : <IconCopy />}
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {maintenanceItems.map((it) => {
+                const status = it.status ?? 'To do'
+                return (
+                  <tr key={it.id}>
+                    <td style={{ textAlign: 'left', fontWeight: 500 }}>{it.desc}</td>
+                    <td style={{ textAlign: 'left' }}>{it.provider || '—'}</td>
+                    <td style={{ textAlign: 'left' }}>
+                      <span
+                        className={`badge ${
+                          it.cat === 'Improvement' ? 'rented' : it.cat === 'Equipment' ? 'override' : it.cat === 'Repair' ? 'pending' : ''
+                        }`}
+                      >
+                        {it.cat}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>{it.amount ? fmt(cx(it.amount)) : '—'}</td>
+                    <td style={{ textAlign: 'right' }}>{formatPayCell(it.date)}</td>
+                    <td style={{ textAlign: 'right' }}>{it.dateEnd ? formatPayCell(it.dateEnd) : '—'}</td>
+                    <td style={{ textAlign: 'left' }}>
+                      <span className={`badge ${status === 'Completed' ? 'rented' : status === 'Ongoing' ? 'override' : 'pending'}`}>
+                        {status}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'left', color: 'var(--text3)', fontSize: 12 }}>{it.notes || '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button
+                        type="button"
+                        className="ghost"
+                        style={{ padding: '4px 8px', fontSize: 13 }}
+                        onClick={() => startEditMaintenance(it)}
+                        title="Edit"
+                      >
+                        ✎
+                      </button>
+                      <button type="button" className="ghost danger" style={{ padding: '4px 8px' }} onClick={() => removeMaintenance(it.id)} title="Delete">
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+              <tr className="total-row">
+                <td style={{ textAlign: 'left' }}>Total ({prop.year})</td>
+                <td />
+                <td />
+                <td style={{ textAlign: 'right', fontWeight: 700 }}>{maintenanceYearTotal ? fmt(cx(maintenanceYearTotal)) : '—'}</td>
+                <td />
+                <td />
+                <td />
+                <td />
+                <td />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showMaintForm && (
+        <div className="card mb24">
+          <div className="card-inner">
+            <div className="sec-title mb12">{editingMaintId ? 'Edit maintenance event' : 'New maintenance event'}</div>
+            <div className="contract-grid">
+              <div className="field">
+                <label>Description *</label>
+                <input type="text" placeholder="Describe the maintenance work..." value={formMaint.desc} onChange={(e) => setMaint('desc', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Service provider</label>
+                <input type="text" placeholder="Contractor, company..." value={formMaint.provider} onChange={(e) => setMaint('provider', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Category</label>
+                <select value={formMaint.cat} onChange={(e) => setMaint('cat', e.target.value as (typeof CAPEX_CATS)[number])}>
+                  {CAPEX_CATS.map((x) => (
+                    <option key={x} value={x}>{x}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Amount ({prop.currency})</label>
+                <input type="text" placeholder="0" value={formMaint.amount} onChange={(e) => setMaint('amount', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Start date *</label>
+                <input type="date" value={formMaint.date} onChange={(e) => setMaint('date', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>End date</label>
+                <input type="date" value={formMaint.dateEnd} onChange={(e) => setMaint('dateEnd', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Status</label>
+                <select value={formMaint.status} onChange={(e) => setMaint('status', e.target.value as CapexStatus)}>
+                  {CAPEX_STATUSES.map((x) => (
+                    <option key={x} value={x}>{x}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Notes</label>
+                <input type="text" value={formMaint.notes} onChange={(e) => setMaint('notes', e.target.value)} />
+              </div>
+            </div>
+            <div className="flex gap8 mt12">
+              <button
+                type="button"
+                className="primary"
+                style={{ fontSize: 12, padding: '6px 16px' }}
+                onClick={editingMaintId ? saveEditMaintenance : addMaintenance}
+              >
+                {editingMaintId ? 'Save changes' : 'Add event'}
+              </button>
+              <button type="button" className="ghost" style={{ fontSize: 12 }} onClick={resetMaintForm}>
                 Cancel
               </button>
             </div>
