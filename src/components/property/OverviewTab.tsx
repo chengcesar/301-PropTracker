@@ -308,7 +308,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
 
       <div className="overview-duo mb24">
         {active ? (
-          <ActiveContractCard prop={prop} contract={active} onUpdateProp={onUpdateProp} />
+          <ActiveContractCard prop={prop} contract={active} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />
         ) : prop.occupant ? (
           <div className="card">
             <div className="card-inner">

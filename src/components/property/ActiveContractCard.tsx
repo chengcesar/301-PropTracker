@@ -2,12 +2,15 @@ import { useState } from 'react'
 import { MONTHS } from '../../lib/constants'
 import type { Contract, Property } from '../../lib/types'
 import { contractForMonth } from '../../lib/finance'
+import { type CurrencyCode } from '../../lib/currency'
 import { fmtCurrency } from '../../lib/format'
 
 type Props = {
   prop: Property
   contract: Contract
   onUpdateProp: (fn: (p: Property) => Property) => void
+  cx?: (n: number) => number
+  displayCurrency?: CurrencyCode
 }
 
 function formatDate(dateStr: string): string {
@@ -16,7 +19,7 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-export function ActiveContractCard({ prop, contract, onUpdateProp }: Props) {
+export function ActiveContractCard({ prop, contract, onUpdateProp, cx = (n) => n, displayCurrency }: Props) {
   // Not used yet — wired up in Task 13 for saving per-year contract overrides.
   // `noUnusedParameters` in tsconfig.app.json errors on the unused destructured
   // param, so we reference it here; remove this line once Task 13 uses it.
@@ -55,7 +58,7 @@ export function ActiveContractCard({ prop, contract, onUpdateProp }: Props) {
         </div>
 
         <div className="fs12 text3 mb12">
-          {formatDate(contract.startDate)} → {formatDate(contract.endDate)} · {fmtCurrency(contract.monthlyRent, prop.currency)}/mo base
+          {contract.tenant || '—'} · {formatDate(contract.startDate)} → {formatDate(contract.endDate)} · {fmtCurrency(cx(contract.monthlyRent), displayCurrency ?? prop.currency)}/mo base · {contract.deposit} mo. deposit
         </div>
 
         {tab === 'year' ? (
