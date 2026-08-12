@@ -603,7 +603,7 @@ function gridCardLeasePrimaryLabel(leaseProgress: GridCardLeaseStrip | null): st
   if (leaseProgress.kind === 'upcoming') {
     return `Upcoming contract · starts ${formatOwnedSinceCell(leaseProgress.startDate)}`
   }
-  const prefix = leaseProgress.hasNegotiatedFollowOn ? 'Upcoming contract' : 'No contract negotiated'
+  const prefix = leaseProgress.hasNegotiatedFollowOn ? 'Renewed' : 'Active contract'
   return `${prefix} · ${leaseProgress.monthsLeftLabel}`
 }
 
