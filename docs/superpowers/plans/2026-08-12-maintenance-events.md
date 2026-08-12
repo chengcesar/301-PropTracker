@@ -4,7 +4,7 @@
 
 **Goal:** Add a "Maintenance events" section to the Services tab for ad-hoc maintenance/repair costs that reduce NOI via OpEx, and surface those events in the Portfolio "Maintenance & Works" panel alongside CapEx.
 
-**Architecture:** A new `MaintenanceEvent` type stored flat on `Property.maintenanceEvents[]` (same pattern as `serviceOneTimeItems`). Its amount is folded into `getMonthData()`'s `totalOpex` for the event's start-date month, so NOI drops automatically everywhere NOI is already computed (Cashflow, Overview, Portfolio rollups) with no changes needed to those tabs' breakdown tables. The Services tab gets a new section cloning the existing "One-time payments" section's UI pattern. The Portfolio "Maintenance & Works" panel merges maintenance events into its existing CapEx-sourced list.
+**Architecture:** A new `MaintenanceEvent` type stored flat on `Property.maintenanceEvents[]` (same pattern as `serviceOneTimeItems`). Its amount is folded into `getMonthData()`'s `totalOpex` for the event's start-date month, so NOI drops automatically everywhere NOI is already computed (Cashflow, Overview, Portfolio rollups). The Services tab gets a new section cloning the existing "One-time payments" section's UI pattern. The Portfolio "Maintenance & Works" panel merges maintenance events into its existing CapEx-sourced list. **Addendum (added after Tasks 1-4 were implemented and reviewed):** a final holistic review found that three pre-existing, itemized OpEx breakdown views (Cashflow's P&L waterfall, Overview's monthly expense table, CapEx tab's "OPEX by month" table) decompose `totalOpex` by category and don't know about `maintenanceEvents`, so their sums silently stop reconciling with the NOI/OpEx figures shown elsewhere once a maintenance event exists. Task 5 (below) adds maintenance as an explicit line/column to those three views so everything reconciles; the original Task 5 (final verification) is renumbered to Task 6.
 
 **Tech Stack:** React 19 + TypeScript, Vitest for `src/lib/finance.ts` unit tests (no component-test harness exists in this repo — UI changes are verified manually via the dev server, matching existing project convention).
 
@@ -729,7 +729,377 @@ git commit -m "feat(portfolio): include maintenance events in Maintenance & Work
 
 ---
 
-### Task 5: Final verification pass
+### Task 5: Reconcile maintenance events with existing OpEx breakdown views
+
+**Files:**
+- Modify: `src/lib/finance.ts` (add `sumMaintenanceAnnual`, add `maintenance` to `AnnualResult`, wire into `calcAnnual`)
+- Test: `src/lib/finance.test.ts` (append)
+- Modify: `src/components/property/CashflowTab.tsx` (insert a "Maintenance" row in the P&L waterfall's Operating Expenses section)
+- Modify: `src/components/property/OverviewTab.tsx` (insert a read-only "Maintenance" row in the monthly expense table)
+- Modify: `src/components/property/OpexCapexTab.tsx` (insert a "Maintenance" column in the OPEX-by-month table)
+
+- [ ] **Step 1: Write the failing test for `sumMaintenanceAnnual`**
+
+Append to `src/lib/finance.test.ts` (reuses the existing `makeMaintenanceEvent`/`makeProperty` helpers already in the file from Task 2):
+
+```ts
+import { sumMaintenanceAnnual } from './finance'
+
+describe('sumMaintenanceAnnual', () => {
+  it('sums maintenance events across all months of prop.year', () => {
+    const p = makeProperty({
+      year: 2026,
+      maintenanceEvents: [
+        makeMaintenanceEvent({ id: 1, amount: 200, date: '2026-03-10' }),
+        makeMaintenanceEvent({ id: 2, amount: 300, date: '2026-11-02' }),
+        makeMaintenanceEvent({ id: 3, amount: 999, date: '2025-03-10' }), // different year
+      ],
+    })
+    expect(sumMaintenanceAnnual(p)).toBe(500)
+  })
+})
+
+describe('calcAnnual exposes maintenance without double-subtracting it', () => {
+  it('includes maintenance in totalOpex/noi exactly once, and reports it on ann.maintenance', () => {
+    const c = makeContract({
+      monthlyRent: 1000, increment: 'none',
+      startDate: '2020-01-01', endDate: '2030-12-31',
+    })
+    const p = makeProperty({
+      year: 2026,
+      contracts: [c],
+      maintenanceEvents: [makeMaintenanceEvent({ amount: 300, date: '2026-06-15' })],
+    })
+    const ann = calcAnnual(p)
+    expect(ann.maintenance).toBe(300)
+    expect(ann.totalOpex).toBe(300)
+    expect(ann.noi).toBe(12000 - 300)
+    // netCf must NOT subtract maintenance again — it's already inside noi via totalOpex
+    expect(ann.netCf).toBe(ann.noi - ann.totalCapex - ann.taxes - ann.serviceOneTime)
+  })
+})
+```
+
+Note: `calcAnnual` is already imported in this test file (used by earlier describe blocks) — don't re-import it.
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `npx vitest run src/lib/finance.test.ts`
+Expected: FAIL — `sumMaintenanceAnnual` is not exported from `./finance`.
+
+- [ ] **Step 3: Implement `sumMaintenanceAnnual` and wire it into `AnnualResult`/`calcAnnual`**
+
+In `src/lib/finance.ts`, add this function right after `sumServiceOneTimeAnnual` (and before `calcAnnual`):
+
+```ts
+export function sumMaintenanceAnnual(prop: Property): number {
+  let sum = 0
+  for (let i = 0; i < 12; i++) sum += sumMaintenanceForMonth(prop, i)
+  return sum
+}
+
+```
+
+Change the `AnnualResult` interface from:
+
+```ts
+export interface AnnualResult {
+  gpi: number
+  vacancy: number
+  egi: number
+  totalOpex: number
+  noi: number
+  totalCapex: number
+  taxes: number
+  /** Sum of one-time service/utility payments dated in prop.year */
+  serviceOneTime: number
+  netCf: number
+}
+```
+
+to:
+
+```ts
+export interface AnnualResult {
+  gpi: number
+  vacancy: number
+  egi: number
+  totalOpex: number
+  noi: number
+  totalCapex: number
+  taxes: number
+  /** Sum of one-time service/utility payments dated in prop.year */
+  serviceOneTime: number
+  /** Sum of maintenanceEvents dated in prop.year — already included in totalOpex/noi; exposed separately so breakdown views can itemize it. */
+  maintenance: number
+  netCf: number
+}
+```
+
+In `calcAnnual`, change:
+
+```ts
+  const serviceOneTime = sumServiceOneTimeAnnual(prop)
+  const noi = egi - totalOpex
+  return {
+    gpi,
+    vacancy,
+    egi,
+    totalOpex,
+    noi,
+    totalCapex,
+    taxes,
+    serviceOneTime,
+    netCf: noi - totalCapex - taxes - serviceOneTime,
+  }
+```
+
+to:
+
+```ts
+  const serviceOneTime = sumServiceOneTimeAnnual(prop)
+  const maintenance = sumMaintenanceAnnual(prop)
+  const noi = egi - totalOpex
+  return {
+    gpi,
+    vacancy,
+    egi,
+    totalOpex,
+    noi,
+    totalCapex,
+    taxes,
+    serviceOneTime,
+    maintenance,
+    netCf: noi - totalCapex - taxes - serviceOneTime,
+  }
+```
+
+(`maintenance` is informational only here — it's already inside `totalOpex`/`noi` via Task 2's `getMonthData` wiring, so it must NOT be subtracted again in `netCf`.)
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `npx vitest run src/lib/finance.test.ts`
+Expected: PASS (all tests, including the 2 new ones — should be 34 total).
+
+- [ ] **Step 5: Add the Maintenance row to CashflowTab's P&L waterfall**
+
+In `src/components/property/CashflowTab.tsx`, find the end of the category-rows map and the start of the NOI subtotal row:
+
+```tsx
+              )
+            })}
+            <tr className="subtotal">
+              <td>NOI</td>
+```
+
+Replace with (inserting a new row between them):
+
+```tsx
+              )
+            })}
+            {ann.maintenance > 0 && (
+              <tr className="indent">
+                <td>− Maintenance</td>
+                <td>
+                  <div className="wf-bar">
+                    <div
+                      className="wf-bar-fill"
+                      style={{
+                        width: gpiDen ? `${Math.max(1, Math.round((ann.maintenance / gpiDen) * 100))}%` : '0%',
+                        background: '#4A3FA0',
+                      }}
+                    />
+                  </div>
+                </td>
+                <td className="neg">−{fmt(cx(ann.maintenance))}</td>
+                <td>{fmt(cx(ann.maintenance / 12))}</td>
+                <td>{gpiDen ? `${Math.round((ann.maintenance / gpiDen) * 100)}%` : '—'}</td>
+              </tr>
+            )}
+            <tr className="subtotal">
+              <td>NOI</td>
+```
+
+(Same `#4A3FA0` purple used by the other Operating Expenses category rows just above — visually groups it with them, distinct from "Below the line"'s CapEx/Taxes/One-time-services colors.)
+
+- [ ] **Step 6: Add the Maintenance row to OverviewTab's monthly expense table**
+
+In `src/components/property/OverviewTab.tsx`, extend the finance import (find the existing multi-import line starting `import { activeContract, calcAnnual, ...} from '../../lib/finance'`) to add `sumMaintenanceForMonth` to the named imports.
+
+Then find:
+
+```tsx
+        // Totals row
+        const totals = MONTHS.map((_, i) => rows.reduce((a, r) => a + r.values[i], 0))
+```
+
+Replace with (inserting the maintenance row just before totals are computed, so `totals`/`grandTotal` include it):
+
+```tsx
+        const maintenanceValues = MONTHS.map((_, i) => sumMaintenanceForMonth(prop, i))
+        const maintenanceTotal = maintenanceValues.reduce((a, b) => a + b, 0)
+        if (maintenanceTotal > 0) {
+          const filled = maintenanceValues.filter((v) => v > 0).length
+          rows.push({
+            key: 'maintenance',
+            label: 'Maintenance',
+            editable: false,
+            removable: false,
+            values: maintenanceValues,
+            total: maintenanceTotal,
+            avg: filled ? maintenanceTotal / filled : 0,
+          })
+        }
+
+        // Totals row
+        const totals = MONTHS.map((_, i) => rows.reduce((a, r) => a + r.values[i], 0))
+```
+
+Then find the row-label cell (the row-actions buttons that let a user remove/add a category):
+
+```tsx
+                    <td style={{ ...stickyLabel, background: rowIdx % 2 === 0 ? '#fff' : '#fafbfc' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
+                        <span style={{ flex: 1 }}>{row.label}</span>
+                        <span className="exp-row-actions" style={{ position: 'absolute', right: 0, display: 'flex', gap: 2, opacity: 0, transition: 'opacity 0.15s' }}>
+```
+
+Replace with (hiding the remove/add actions specifically for the synthetic maintenance row, since it's not a real expense category and `removeExpenseCat('maintenance')` would write inert data to `hiddenExpenseCats` without actually hiding this row):
+
+```tsx
+                    <td style={{ ...stickyLabel, background: rowIdx % 2 === 0 ? '#fff' : '#fafbfc' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
+                        <span style={{ flex: 1 }}>{row.label}</span>
+                        {row.key !== 'maintenance' && (
+                        <span className="exp-row-actions" style={{ position: 'absolute', right: 0, display: 'flex', gap: 2, opacity: 0, transition: 'opacity 0.15s' }}>
+```
+
+...and find the matching closing tags a few lines later:
+
+```tsx
+                          </button>
+                        </span>
+                      </div>
+                    </td>
+```
+
+Replace with:
+
+```tsx
+                          </button>
+                        </span>
+                        )}
+                      </div>
+                    </td>
+```
+
+(The cell-value rendering below already respects `row.editable` for cursor/click behavior — `cursor: row.editable ? 'text' : 'default'` and `onClick={() => row.editable && startEdit(...)}` — so with `editable: false` on the new row, no further change is needed there; clicking a maintenance cell in this table does nothing, which is correct since these amounts are edited via the Services tab.)
+
+- [ ] **Step 7: Add the Maintenance column to OpexCapexTab's OPEX-by-month table**
+
+In `src/components/property/OpexCapexTab.tsx`, change the import:
+
+```ts
+import { expenseRowsForYear, yearMonths } from '../../lib/finance'
+```
+
+to:
+
+```ts
+import { expenseRowsForYear, sumMaintenanceForMonth, yearMonths } from '../../lib/finance'
+```
+
+Then change:
+
+```tsx
+            <tr>
+              <th>Month</th>
+              {rowDefs.map((def) => (
+                <th key={def.key}>{def.label}</th>
+              ))}
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {MONTHS.map((name, i) => {
+              const exp = ym[i]?.expenses ?? {}
+              let total = 0
+              const cellValues = rowDefs.map((def) => {
+                let val = 0
+                const v = exp[def.key]
+                val = typeof v === 'number' ? v : 0
+                total += val
+                return val
+              })
+              return (
+                <tr key={i} className={!ym[i] ? 'no-contract-row' : ''}>
+                  <td>{name}</td>
+                  {cellValues.map((v, j) => (
+                    <td key={rowDefs[j].key} className={v ? '' : 'text3'}>{v ? fmt(cx(v)) : '—'}</td>
+                  ))}
+                  <td className="fw5">−{fmt(cx(total))}</td>
+                </tr>
+              )
+            })}
+```
+
+to:
+
+```tsx
+            <tr>
+              <th>Month</th>
+              {rowDefs.map((def) => (
+                <th key={def.key}>{def.label}</th>
+              ))}
+              <th>Maintenance</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {MONTHS.map((name, i) => {
+              const exp = ym[i]?.expenses ?? {}
+              let total = 0
+              const cellValues = rowDefs.map((def) => {
+                let val = 0
+                const v = exp[def.key]
+                val = typeof v === 'number' ? v : 0
+                total += val
+                return val
+              })
+              const maintenanceVal = sumMaintenanceForMonth(prop, i)
+              total += maintenanceVal
+              return (
+                <tr key={i} className={!ym[i] ? 'no-contract-row' : ''}>
+                  <td>{name}</td>
+                  {cellValues.map((v, j) => (
+                    <td key={rowDefs[j].key} className={v ? '' : 'text3'}>{v ? fmt(cx(v)) : '—'}</td>
+                  ))}
+                  <td className={maintenanceVal ? '' : 'text3'}>{maintenanceVal ? fmt(cx(maintenanceVal)) : '—'}</td>
+                  <td className="fw5">−{fmt(cx(total))}</td>
+                </tr>
+              )
+            })}
+```
+
+- [ ] **Step 8: Typecheck**
+
+Run: `npx tsc -b`
+Expected: no errors.
+
+- [ ] **Step 9: Smoke-check the dev server compiles cleanly**
+
+No browser-automation tool is available in this environment (consistent with Tasks 3-4). Run `npm run dev` in the background, confirm "ready" with no compile errors for `CashflowTab.tsx`/`OverviewTab.tsx`/`OpexCapexTab.tsx`, then stop it. State plainly in your report that this is not full interactive browser verification.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add src/lib/finance.ts src/lib/finance.test.ts src/components/property/CashflowTab.tsx src/components/property/OverviewTab.tsx src/components/property/OpexCapexTab.tsx
+git commit -m "fix(finance): reconcile maintenance events with OpEx breakdown views"
+```
+
+---
+
+### Task 6: Final verification pass
 
 **Files:** none (verification only)
 
@@ -758,3 +1128,4 @@ Run: `npm run dev`. In the browser:
 5. Delete the event, confirm the numbers revert.
 6. Re-add an event, then open the Portfolio page and confirm it shows up in "Maintenance & Works" (if the event's start date is in the current real-world year) and that toggling its status there works.
 7. Confirm the pre-existing "One-time payments" section and CapEx log still work exactly as before (unaffected by these changes).
+8. On the Cashflow tab, confirm the P&L waterfall's new "− Maintenance" row appears in the Operating Expenses section for the month's event, and that the Operating Expenses rows (including it) sum to `EGI − NOI`. On the Overview tab's table view, confirm the new read-only "Maintenance" row appears, is not editable (clicking it does nothing), and that the grid's bottom-right grand total matches the "Net cashflow" KPI card's implied OpEx. On the CapEx tab, confirm the "OPEX by month" table's new "Maintenance" column shows the event's amount in the correct month and that row's "Total" column includes it.
