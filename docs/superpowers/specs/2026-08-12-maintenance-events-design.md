@@ -42,14 +42,38 @@ Fold this sum into `getMonthData()`'s `totalOpex` (alongside the existing manual
 `calcAnnual()` already aggregates `totalOpex` from `getMonthData()` per month, so the
 annual NOI/Cashflow/Overview figures pick it up with no further wiring.
 
-This deliberately does **not** get its own row in `CashflowTab`'s P&L waterfall or
-`OpexCapexTab`'s categorized monthly OpEx table — the app already has this exact
-precedent for "extra" one-off month expenses added from the Overview table's expense
-grid, which count toward `totalOpex`/NOI without appearing as a named waterfall line.
-Maintenance events follow the same convention.
-
 One-time payments remain unchanged: they bypass OpEx/NOI entirely and only subtract at
 the `netCf` level. Maintenance events are intentionally different — they reduce NOI.
+
+**Addendum (added after initial implementation):** the original version of this spec
+argued maintenance events didn't need their own row in `CashflowTab`'s P&L waterfall or
+`OpexCapexTab`'s categorized monthly OpEx table, citing the "extra" one-off month
+expenses precedent as justification. A post-implementation review found that precedent
+doesn't actually generalize — extras live inside `m.expenses` so `OverviewTab`'s own
+`extraKeys` scan picks them up, but maintenance events live in a wholly separate
+`prop.maintenanceEvents` array invisible to `expenseRowsForYear` and every view built on
+it. Left as-is, `CashflowTab`'s waterfall, `OverviewTab`'s expense grid, and
+`OpexCapexTab`'s OPEX-by-month table would all silently stop reconciling with the
+NOI/OpEx figures shown elsewhere once a maintenance event exists. Fixed by adding
+`sumMaintenanceAnnual(prop)` and an informational `AnnualResult.maintenance` field (not
+double-subtracted in `netCf`), and by adding an explicit "Maintenance" row/column to all
+three of those views, sourced from the same `sumMaintenanceForMonth`/`sumMaintenanceAnnual`
+functions used for the real NOI math — see "Reconciliation" below.
+
+## Reconciliation with existing OpEx breakdown views
+
+- `src/lib/finance.ts`: `sumMaintenanceAnnual(prop)` sums `sumMaintenanceForMonth` across
+  all 12 months. `AnnualResult` gained `maintenance: number` — informational only, already
+  reflected inside `totalOpex`/`noi`; `netCf`'s formula is unchanged.
+- `CashflowTab.tsx`: a `− Maintenance` row (shown when `ann.maintenance > 0`) in the P&L
+  waterfall's Operating Expenses section, using the same purple (`#4A3FA0`) as the other
+  category rows, positioned just above the NOI subtotal.
+- `OverviewTab.tsx`: a read-only `Maintenance` row (`editable: false`, `removable: false`)
+  in the monthly expense grid, pushed into `rows` before the totals/grand-total
+  computation so both include it; its remove/add row-actions are hidden since it isn't a
+  real expense category.
+- `OpexCapexTab.tsx`: a `Maintenance` column in the "OPEX by month" table, folded into
+  each month's `Total`.
 
 ## UI — Services tab
 
@@ -98,8 +122,9 @@ merges in `maintenanceEvents` alongside `capex`:
 
 ## Out of scope
 
-- No changes to `OpexCapexTab.tsx`'s CapEx log/table, `CashflowTab.tsx`'s P&L waterfall
-  or KPI cards, or `OverviewTab.tsx`'s expense grid.
+- No changes to `OpexCapexTab.tsx`'s CapEx log/table itself, or to `CashflowTab.tsx`'s
+  KPI cards (only the P&L waterfall gained a reconciliation row — see "Reconciliation"
+  above).
 - No proration of an event's amount across its `dateEnd` — full amount hits the start
   month only.
 - No seed data changes.
