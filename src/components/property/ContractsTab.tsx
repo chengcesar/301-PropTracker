@@ -11,6 +11,20 @@ type Props = {
   onUpdateProp: (fn: (p: Property) => Property) => void
 }
 
+function incrementSummary(c: Contract): string {
+  switch (c.increment) {
+    case 'fixed':
+      return `Fixed ${c.fixedPct}%`
+    case 'ipc':
+      return `IPC ${c.cpiEstimatePct}%`
+    case 'ipc+':
+      return `IPC ${c.cpiEstimatePct}% + ${c.ipcExtra}%`
+    case 'none':
+    default:
+      return 'None'
+  }
+}
+
 export function ContractsTab({ prop, onUpdateProp }: Props) {
   const [newModal, setNewModal] = useState(false)
   const [editModal, setEditModal] = useState<Contract | null>(null)
@@ -150,7 +164,7 @@ export function ContractsTab({ prop, onUpdateProp }: Props) {
                     </div>
                     <div>
                       <div className="ct-field-label">Increment</div>
-                      <div className="ct-field-val">{c.increment === 'ipc+' ? `IPC+${c.ipcExtra}%` : c.increment}</div>
+                      <div className="ct-field-val">{incrementSummary(c)}</div>
                     </div>
                     <div>
                       <div className="ct-field-label">Deposit</div>
