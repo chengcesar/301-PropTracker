@@ -235,6 +235,8 @@ export function AddPropertyModal({ onSave, onClose }: Props) {
               deposit: 2,
               increment: 'ipc+',
               ipcExtra: 1,
+              fixedPct: 0,
+              cpiEstimatePct: 0,
               adminFee: parseNum(form.adminFee),
               notes: '',
             },

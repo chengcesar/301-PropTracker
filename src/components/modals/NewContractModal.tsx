@@ -6,6 +6,20 @@ import { ContractForm, type ContractFormState } from './ContractForm'
 
 type NewContractForm = ContractFormState & { activateNow: boolean }
 
+function incrementSummary(form: NewContractForm): string {
+  switch (form.increment) {
+    case 'fixed':
+      return `Fixed ${form.fixedPct}%`
+    case 'ipc':
+      return `IPC ${form.cpiEstimatePct}%`
+    case 'ipc+':
+      return `IPC ${form.cpiEstimatePct}% + ${form.ipcExtra}%`
+    case 'none':
+    default:
+      return 'None'
+  }
+}
+
 type Props = {
   prop: Property
   onSave: (contracts: Contract[]) => void
@@ -24,6 +38,8 @@ export function NewContractModal({ prop, onSave, onClose }: Props) {
     deposit: 2,
     increment: 'ipc+',
     ipcExtra: 1,
+    fixedPct: 0,
+    cpiEstimatePct: 0,
     adminFee: '',
     notes: '',
     activateNow: true,
@@ -50,6 +66,8 @@ export function NewContractModal({ prop, onSave, onClose }: Props) {
       deposit: form.deposit,
       increment: form.increment as Contract['increment'],
       ipcExtra: form.ipcExtra,
+      fixedPct: form.fixedPct,
+      cpiEstimatePct: form.cpiEstimatePct,
       adminFee: parseNum(form.adminFee),
       notes: form.notes ?? '',
     }
@@ -119,10 +137,7 @@ export function NewContractModal({ prop, onSave, onClose }: Props) {
                         ['Tenant', form.tenant],
                         ['Rent', fmtCurrency(parseNum(form.monthlyRent), prop.currency)],
                         ['Period', `${form.startDate} → ${form.endDate}`],
-                        [
-                          'Increment',
-                          form.increment === 'ipc+' ? `IPC+${form.ipcExtra}%` : form.increment,
-                        ],
+                        ['Increment', incrementSummary(form)],
                         ['Admin fee', fmtCurrency(parseNum(form.adminFee), prop.currency)],
                         ['Deposit', `${form.deposit} months`],
                       ] as const

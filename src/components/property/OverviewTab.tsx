@@ -1,13 +1,14 @@
 import { useRef, useState } from 'react'
 import { MONTHS, MONTHS_FULL } from '../../lib/constants'
 import type { MonthData, Occupant, Property } from '../../lib/types'
-import { activeContract, calcAnnual, contractForMonth, estimatedPropertyValueAtYear, expenseRowsForYear, getMonthData, projectedGpiAnnual, resolveServices, sumServiceOneTimeForMonth, vacancyLossMonthCount, yearMonths } from '../../lib/finance'
+import { activeContract, calcAnnual, contractForMonth, estimatedPropertyValueAtYear, expenseRowsForYear, getMonthData, projectedGpiAnnual, rentOnDate, resolveServices, sumServiceOneTimeForMonth, vacancyLossMonthCount, yearMonths } from '../../lib/finance'
 import { type CurrencyCode } from '../../lib/currency'
-import { fmt, fmtCurrency, fmtCurrencyM } from '../../lib/format'
+import { fmt, fmtCurrencyM } from '../../lib/format'
 import { MonthModal } from '../modals/MonthModal'
 import { OccupantModal } from '../modals/OccupantModal'
 import { KpiInfoIcon } from '../KpiInfoIcon'
 import { useReadOnly } from '../../context/ReadOnlyContext'
+import { ActiveContractCard } from './ActiveContractCard'
 
 type Props = {
   prop: Property
@@ -20,13 +21,6 @@ function formatDate(dateStr: string): string {
   if (!dateStr) return '—'
   const d = new Date(dateStr)
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
-function formatIncrement(c: { increment: string; ipcExtra: number }): string {
-  if (c.increment === 'ipc+') return `IPC +${c.ipcExtra}%`
-  if (c.increment === 'ipc') return 'IPC'
-  if (c.increment === 'fixed') return 'Fixed'
-  return 'None'
 }
 
 export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency }: Props) {
@@ -83,7 +77,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
       const ym = p.months[p.year] ?? {}
       const existing = ym[mIdx] ?? { status: 'rented' as const, incomeOverride: null, expenses: {} }
       const c = contractForMonth(p.contracts, p.year, mIdx)
-      const override = c && val === c.monthlyRent ? null : val
+      const override = c && val === rentOnDate(c, new Date(p.year, mIdx, 15)) ? null : val
       return {
         ...p,
         months: { ...p.months, [p.year]: { ...ym, [mIdx]: { ...existing, incomeOverride: override } } },
@@ -314,39 +308,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
 
       <div className="overview-duo mb24">
         {active ? (
-          <div className="card">
-            <div className="card-inner">
-              <div className="fw6 mb12" style={{ fontSize: '14px' }}>Active contract</div>
-              <table className="contract-detail-table">
-                <tbody>
-                  <tr>
-                    <td className="cdt-label">Tenant</td>
-                    <td className="cdt-value">{active.tenant || '—'}</td>
-                  </tr>
-                  <tr>
-                    <td className="cdt-label">Monthly rent</td>
-                    <td className="cdt-value">{fmtCurrency(cx(active.monthlyRent ?? 0), displayCurrency ?? prop.currency)}</td>
-                  </tr>
-                  <tr>
-                    <td className="cdt-label">Start date</td>
-                    <td className="cdt-value">{formatDate(active.startDate)}</td>
-                  </tr>
-                  <tr>
-                    <td className="cdt-label">End date</td>
-                    <td className="cdt-value">{formatDate(active.endDate)}</td>
-                  </tr>
-                  <tr>
-                    <td className="cdt-label">Annual increment</td>
-                    <td className="cdt-value">{formatIncrement(active)}</td>
-                  </tr>
-                  <tr>
-                    <td className="cdt-label">Security deposit</td>
-                    <td className="cdt-value">{active.deposit} months</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <ActiveContractCard prop={prop} contract={active} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />
         ) : prop.occupant ? (
           <div className="card">
             <div className="card-inner">
@@ -778,7 +740,7 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
           const m = ym[i]
           if (!c) return 0
           if (m?.incomeOverride !== null && m?.incomeOverride !== undefined) return m.incomeOverride
-          return c.monthlyRent
+          return rentOnDate(c, new Date(prop.year, i, 15))
         })
         const incTotal = incomeVals.reduce((a, b) => a + b, 0)
         const incFilled = incomeVals.filter((v) => v > 0).length

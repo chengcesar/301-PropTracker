@@ -130,6 +130,110 @@ export function nonLeaseOccupancyExportValue(prop: Property): string {
   return `${nonLeaseOccupancyLabel(prop)} · ${name}`
 }
 
+/** 1-based contract-year containing `date`, anchored to startDate's anniversary (not calendar Jan 1). */
+export function contractYearIndex(contract: Contract, date: Date): number {
+  const start = new Date(`${contract.startDate}T12:00:00`)
+  const probe = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0, 0)
+  let years = probe.getFullYear() - start.getFullYear()
+  const anniversary = new Date(start.getFullYear() + years, start.getMonth(), start.getDate(), 12, 0, 0, 0)
+  if (probe < anniversary) years -= 1
+  return years + 1
+}
+
+/** Type-based increment %, ignoring any per-year override. Same value for every contract-year. */
+export function defaultIncrementPct(contract: Contract): number {
+  switch (contract.increment) {
+    case 'fixed':
+      return contract.fixedPct
+    case 'ipc':
+      return contract.cpiEstimatePct
+    case 'ipc+':
+      return contract.cpiEstimatePct + contract.ipcExtra
+    case 'none':
+    default:
+      return 0
+  }
+}
+
+/** Increment % actually applied for contract-year `yearIndex` — override if set, else the type-based default. */
+export function effectiveIncrementPct(contract: Contract, yearIndex: number): number {
+  return contract.yearOverrides?.[yearIndex] ?? defaultIncrementPct(contract)
+}
+
+/** Rent for contract-year `yearIndex`, compounding the effective increment from year 1's base monthlyRent. */
+export function rentForContractYear(contract: Contract, yearIndex: number): number {
+  let rent = contract.monthlyRent
+  for (let y = 2; y <= yearIndex; y++) {
+    rent = rent * (1 + effectiveIncrementPct(contract, y) / 100)
+  }
+  return rent
+}
+
+/** What this contract actually pays on `date` — the new source of truth for real rent, replacing raw monthlyRent reads. */
+export function rentOnDate(contract: Contract, date: Date): number {
+  return rentForContractYear(contract, contractYearIndex(contract, date))
+}
+
+export interface ContractYearMonth {
+  /** Rent for this calendar month, or null if it falls outside [startDate, endDate]. */
+  rent: number | null
+  /** Contract-year this month belongs to, or null if it falls outside [startDate, endDate]. */
+  yearIndex: number | null
+}
+
+export interface ContractYearRow {
+  calendarYear: number
+  /** The contract-year active in the second half of this calendar year — used as the row's "Year N" label. */
+  yearIndex: number
+  months: ContractYearMonth[]
+  /** Type-based increment %, ignoring any override (the "+X% default" hint). */
+  defaultIncrementPct: number
+  /** Increment % actually applied for `yearIndex` (override if set, else the default). */
+  incrementPct: number
+  /** Sum of this row's non-null months' rent. */
+  annualTotal: number
+  isPast: boolean
+  isCurrent: boolean
+  isFuture: boolean
+}
+
+/** One row per calendar year the contract touches, for the "Full contract" timeline view. */
+export function contractYearRows(contract: Contract, today: Date): ContractYearRow[] {
+  const start = new Date(`${contract.startDate}T12:00:00`)
+  const end = new Date(`${contract.endDate}T12:00:00`)
+  const rows: ContractYearRow[] = []
+  const currentCalendarYear = today.getFullYear()
+
+  for (let calendarYear = start.getFullYear(); calendarYear <= end.getFullYear(); calendarYear++) {
+    const months: ContractYearMonth[] = []
+    for (let m = 0; m < 12; m++) {
+      const probe = new Date(calendarYear, m, 15, 12, 0, 0, 0)
+      if (probe < start || probe > end) {
+        months.push({ rent: null, yearIndex: null })
+      } else {
+        const monthYearIndex = contractYearIndex(contract, probe)
+        months.push({ rent: rentForContractYear(contract, monthYearIndex), yearIndex: monthYearIndex })
+      }
+    }
+    const labelProbeRaw = new Date(calendarYear, 11, 31, 12, 0, 0, 0)
+    const labelProbe = labelProbeRaw > end ? end : labelProbeRaw
+    const yearIndex = contractYearIndex(contract, labelProbe)
+    const annualTotal = months.reduce((sum, m) => sum + (m.rent ?? 0), 0)
+    rows.push({
+      calendarYear,
+      yearIndex,
+      months,
+      defaultIncrementPct: defaultIncrementPct(contract),
+      incrementPct: effectiveIncrementPct(contract, yearIndex),
+      annualTotal,
+      isPast: calendarYear < currentCalendarYear,
+      isCurrent: calendarYear === currentCalendarYear,
+      isFuture: calendarYear > currentCalendarYear,
+    })
+  }
+  return rows
+}
+
 export function contractForMonth(
   contracts: Contract[],
   year: number,
@@ -228,7 +332,11 @@ export function maxMonthlyRentAmongContractsOverlappingYear(
   let max = 0
   for (const c of contracts) {
     if (!contractOverlapsCalendarYear(c, year)) continue
-    max = Math.max(max, c.monthlyRent)
+    const start = new Date(`${c.startDate}T12:00:00`)
+    const end = new Date(`${c.endDate}T12:00:00`)
+    const yearStart = new Date(year, 0, 1, 12, 0, 0, 0)
+    const probe = yearStart < start ? start : yearStart > end ? end : yearStart
+    max = Math.max(max, rentOnDate(c, probe))
   }
   return max
 }
@@ -239,7 +347,7 @@ export function maxMonthlyRentAmongContractsOverlappingYear(
  */
 export function monthlyPotentialRentForGpi(prop: Property, monthIdx: number): number {
   const c = contractForMonth(prop.contracts, prop.year, monthIdx)
-  if (c) return c.monthlyRent
+  if (c) return rentOnDate(c, new Date(prop.year, monthIdx, 15))
   const fromSheet = potentialMonthlyRentFromProp(prop)
   if (fromSheet > 0) return fromSheet
   return maxMonthlyRentAmongContractsOverlappingYear(prop.contracts, prop.year)
@@ -272,7 +380,7 @@ export function getMonthData(prop: Property, mIdx: number): MonthDataResult {
     incomeOverride: null,
     expenses: {},
   }
-  const rent = contract ? contract.monthlyRent : 0
+  const rent = contract ? rentOnDate(contract, new Date(prop.year, mIdx, 15)) : 0
   const income = !contract
     ? 0
     : m.status === 'vacant'

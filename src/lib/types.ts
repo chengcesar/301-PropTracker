@@ -21,6 +21,12 @@ export interface Contract {
   deposit: number
   increment: IncrementType
   ipcExtra: number
+  /** Annual % increase used when increment === 'fixed' */
+  fixedPct: number
+  /** Estimated CPI % used as the base for increment === 'ipc' | 'ipc+' (manually entered — not fetched) */
+  cpiEstimatePct: number
+  /** Contract-year index (1-based, anchored to startDate's anniversary) -> increment % override for that year only */
+  yearOverrides?: Record<number, number>
   adminFee: number
   notes: string
 }

@@ -12,6 +12,8 @@ export type ContractFormState = {
   deposit: number
   increment: IncrementType | string
   ipcExtra: number
+  fixedPct: number
+  cpiEstimatePct: number
   adminFee: string | number
   notes: string
 }
@@ -91,16 +93,49 @@ export function ContractForm({ value, onChange, currency = 'COP' }: Props) {
           ))}
         </select>
       </div>
-      {(value.increment === 'ipc+' || !value.increment) && (
+      {value.increment === 'fixed' && (
         <div className="field">
-          <label>% over IPC</label>
+          <label>Fixed %</label>
           <input
             type="number"
             step={0.1}
-            value={value.ipcExtra ?? 1}
-            onChange={(e) => set('ipcExtra', parseFloat(e.target.value))}
+            value={value.fixedPct ?? 0}
+            onChange={(e) => set('fixedPct', parseFloat(e.target.value))}
           />
         </div>
+      )}
+      {value.increment === 'ipc' && (
+        <div className="field">
+          <label>IPC (estimate) %</label>
+          <input
+            type="number"
+            step={0.1}
+            value={value.cpiEstimatePct ?? 0}
+            onChange={(e) => set('cpiEstimatePct', parseFloat(e.target.value))}
+          />
+        </div>
+      )}
+      {(value.increment === 'ipc+' || !value.increment) && (
+        <>
+          <div className="field">
+            <label>IPC (estimate) %</label>
+            <input
+              type="number"
+              step={0.1}
+              value={value.cpiEstimatePct ?? 0}
+              onChange={(e) => set('cpiEstimatePct', parseFloat(e.target.value))}
+            />
+          </div>
+          <div className="field">
+            <label>Fixed extra %</label>
+            <input
+              type="number"
+              step={0.1}
+              value={value.ipcExtra ?? 1}
+              onChange={(e) => set('ipcExtra', parseFloat(e.target.value))}
+            />
+          </div>
+        </>
       )}
       <div className="divider" style={{ gridColumn: '1/-1' }} />
       <div className="field">
