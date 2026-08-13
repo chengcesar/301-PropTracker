@@ -416,3 +416,60 @@ describe('calcAnnual scopes totalCapex to prop.year', () => {
     expect(calcAnnual(p).totalCapex).toBe(120000)
   })
 })
+
+describe('calcAnnual computes an amortized net cash flow view', () => {
+  it('matches totalCapex for an expense-treated item (same full-year hit)', () => {
+    const p = makeProperty({
+      year: 2026,
+      capex: [makeCapexItemForTest({ id: 1, date: '2026-03-01', amount: 5000, treatment: 'expense' })],
+    })
+    const ann = calcAnnual(p)
+    expect(ann.totalCapexAmortized).toBe(ann.totalCapex)
+    expect(ann.netCfAmortized).toBe(ann.netCf)
+  })
+
+  it('spreads a capitalized item across its schedule instead of hitting the payment year', () => {
+    const p = makeProperty({
+      year: 2026,
+      capex: [
+        makeCapexItemForTest({
+          id: 1,
+          date: '2023-02-01',
+          dateEnd: '2023-11-01',
+          amount: 120000,
+          treatment: 'capitalize',
+          amortizeBasis: 'manual',
+          amortizeMonths: 24, // Nov 2023 -> Oct 2025, so 2026 gets none of it
+        }),
+      ],
+    })
+    const ann = calcAnnual(p)
+    // Real: full amount only hit 2023 (the item's date year), so 2026's totalCapex is 0
+    expect(ann.totalCapex).toBe(0)
+    // Amortized: schedule ended Oct 2025, so 2026 gets 0 depreciation too
+    expect(ann.totalCapexAmortized).toBe(0)
+  })
+
+  it('attributes depreciation slices to a later year than the payment year', () => {
+    const p = makeProperty({
+      year: 2024,
+      capex: [
+        makeCapexItemForTest({
+          id: 1,
+          date: '2023-02-01',
+          dateEnd: '2023-11-01', // schedule starts November 2023
+          amount: 120000,
+          treatment: 'capitalize',
+          amortizeBasis: 'manual',
+          amortizeMonths: 24, // runs through October 2025
+        }),
+      ],
+    })
+    const ann = calcAnnual(p)
+    // Real: item's date (2023) isn't 2024, so no cash hit this year
+    expect(ann.totalCapex).toBe(0)
+    // Amortized: all 12 months of 2024 fall within the Nov 2023 - Oct 2025 schedule
+    expect(ann.totalCapexAmortized).toBe(12 * (120000 / 24))
+    expect(ann.netCfAmortized).toBe(ann.noi - ann.totalCapexAmortized - ann.taxes - ann.serviceOneTime)
+  })
+})

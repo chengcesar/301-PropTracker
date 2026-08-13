@@ -1,5 +1,6 @@
-import type { Contract, MonthData, Property, ServiceEntry } from './types'
+import type { CapexItem, Contract, MonthData, Property, ServiceEntry } from './types'
 import { type CurrencyCode, type FxRates, convert } from './currency'
+import { capexDepreciationForMonth } from './capexAmortization'
 
 export interface AnnualResult {
   gpi: number
@@ -8,12 +9,16 @@ export interface AnnualResult {
   totalOpex: number
   noi: number
   totalCapex: number
+  /** Sum of capitalized items' monthly depreciation falling in prop.year, plus the full amount of expense-treated items dated in prop.year. */
+  totalCapexAmortized: number
   taxes: number
   /** Sum of one-time service/utility payments dated in prop.year */
   serviceOneTime: number
   /** Sum of maintenanceEvents dated in prop.year — already included in totalOpex/noi; exposed separately so breakdown views can itemize it. */
   maintenance: number
   netCf: number
+  /** Net cash flow using totalCapexAmortized instead of totalCapex — a book/depreciation view rather than a cash view. */
+  netCfAmortized: number
 }
 
 export interface MonthDataResult {
@@ -503,6 +508,7 @@ export function calcAnnual(prop: Property): AnnualResult {
   const totalCapex = prop.capex
     .filter((c) => new Date(`${c.date}T12:00:00`).getFullYear() === prop.year)
     .reduce((a, b) => a + b.amount, 0)
+  const totalCapexAmortized = totalCapexAmortizedForYear(prop.capex, prop.contracts, prop.year)
   const taxes = (prop.taxes.items ?? []).reduce((a, t) => a + (t.amount ?? 0), 0)
   const serviceOneTime = sumServiceOneTimeAnnual(prop)
   const maintenance = sumMaintenanceAnnual(prop)
@@ -514,11 +520,26 @@ export function calcAnnual(prop: Property): AnnualResult {
     totalOpex,
     noi,
     totalCapex,
+    totalCapexAmortized,
     taxes,
     serviceOneTime,
     maintenance,
     netCf: noi - totalCapex - taxes - serviceOneTime,
+    netCfAmortized: noi - totalCapexAmortized - taxes - serviceOneTime,
   }
+}
+
+/** Sum, for a given year, of: capitalized items' monthly depreciation landing in that year + expense-treated items' full amount dated in that year. */
+function totalCapexAmortizedForYear(capex: CapexItem[], contracts: Contract[], year: number): number {
+  let sum = 0
+  for (const item of capex) {
+    if (item.treatment === 'capitalize') {
+      for (let m = 0; m < 12; m++) sum += capexDepreciationForMonth(item, contracts, year, m)
+    } else if (new Date(`${item.date}T12:00:00`).getFullYear() === year) {
+      sum += item.amount
+    }
+  }
+  return sum
 }
 
 /** Months in the selected year where GPI for that month exceeds actual rent collected. */
@@ -570,10 +591,12 @@ export function convertAnnual(result: AnnualResult, from: CurrencyCode, to: Curr
     totalOpex: c(result.totalOpex),
     noi: c(result.noi),
     totalCapex: c(result.totalCapex),
+    totalCapexAmortized: c(result.totalCapexAmortized),
     taxes: c(result.taxes),
     serviceOneTime: c(result.serviceOneTime),
     maintenance: c(result.maintenance),
     netCf: c(result.netCf),
+    netCfAmortized: c(result.netCfAmortized),
   }
 }
 
