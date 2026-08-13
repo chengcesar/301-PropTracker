@@ -140,3 +140,45 @@ describe('capexDepreciationForMonth', () => {
     expect(capexDepreciationForMonth(longItem, [], 2026, 0)).toBe(12000 / 180) // still depreciating in Jan 2026
   })
 })
+
+import { capexAmortizationProgress, type CapexAmortizationSchedule } from './capexAmortization'
+
+describe('capexAmortizationProgress', () => {
+  const schedule: CapexAmortizationSchedule = {
+    itemId: 1,
+    monthlyAmount: 10000,
+    totalMonths: 12,
+    startYear: 2023,
+    startMonthIndex: 10, // November 2023
+  }
+
+  it('is 0% before the schedule starts', () => {
+    const progress = capexAmortizationProgress(schedule, 2023, 9) // October 2023
+    expect(progress.monthsElapsed).toBe(0)
+    expect(progress.percent).toBe(0)
+    expect(progress.amountAmortized).toBe(0)
+    expect(progress.amountLeft).toBe(120000)
+  })
+
+  it('counts the first month as elapsed once it starts', () => {
+    const progress = capexAmortizationProgress(schedule, 2023, 10) // November 2023 (month 1)
+    expect(progress.monthsElapsed).toBe(1)
+    expect(progress.amountAmortized).toBe(10000)
+  })
+
+  it('is mid-schedule partway through', () => {
+    const progress = capexAmortizationProgress(schedule, 2024, 3) // April 2024 (month 6)
+    expect(progress.monthsElapsed).toBe(6)
+    expect(progress.percent).toBe(50)
+    expect(progress.amountAmortized).toBe(60000)
+    expect(progress.amountLeft).toBe(60000)
+  })
+
+  it('clamps at 100% once fully amortized', () => {
+    const progress = capexAmortizationProgress(schedule, 2025, 0) // well past the end
+    expect(progress.monthsElapsed).toBe(12)
+    expect(progress.percent).toBe(100)
+    expect(progress.amountAmortized).toBe(120000)
+    expect(progress.amountLeft).toBe(0)
+  })
+})

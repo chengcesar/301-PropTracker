@@ -65,3 +65,30 @@ export function capexDepreciationForMonth(
   if (offset < 0 || offset >= schedule.totalMonths) return 0
   return schedule.monthlyAmount
 }
+
+export interface CapexAmortizationProgress {
+  totalMonths: number
+  monthsElapsed: number
+  percent: number
+  amountAmortized: number
+  amountLeft: number
+}
+
+/** Live progress of a schedule as of a given calendar month (0-based) — pass today's year/month for a "right now" status. */
+export function capexAmortizationProgress(
+  schedule: CapexAmortizationSchedule,
+  asOfYear: number,
+  asOfMonthIndex: number,
+): CapexAmortizationProgress {
+  const totalAmount = schedule.monthlyAmount * schedule.totalMonths
+  const rawElapsed = asOfYear * 12 + asOfMonthIndex - (schedule.startYear * 12 + schedule.startMonthIndex) + 1
+  const monthsElapsed = Math.min(schedule.totalMonths, Math.max(0, rawElapsed))
+  const amountAmortized = schedule.monthlyAmount * monthsElapsed
+  return {
+    totalMonths: schedule.totalMonths,
+    monthsElapsed,
+    percent: (monthsElapsed / schedule.totalMonths) * 100,
+    amountAmortized,
+    amountLeft: totalAmount - amountAmortized,
+  }
+}
