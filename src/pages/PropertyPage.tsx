@@ -8,13 +8,14 @@ import { getYearWindow } from '../lib/constants'
 import { ContractsTab } from '../components/property/ContractsTab'
 import { CashflowTab } from '../components/property/CashflowTab'
 import { OpexCapexTab } from '../components/property/OpexCapexTab'
+import { CapexTab } from '../components/property/CapexTab'
 import { OverviewTab } from '../components/property/OverviewTab'
 import { TaxesTab } from '../components/property/TaxesTab'
 import { ServicesTab } from '../components/property/ServicesTab'
 import { FactSheetTab } from '../components/property/FactSheetTab'
 import { ValueEquityTab } from '../components/property/ValueEquityTab'
 
-type TabId = 'overview' | 'contracts' | 'cashflow' | 'opex' | 'taxes' | 'services' | 'valuation' | 'factsheet'
+type TabId = 'overview' | 'contracts' | 'cashflow' | 'opex' | 'capex' | 'taxes' | 'services' | 'valuation' | 'factsheet'
 
 type Props = {
   prop: Property
@@ -26,6 +27,7 @@ const TABS: [TabId, string][] = [
   ['contracts', 'Contracts'],
   ['cashflow', 'Cashflow'],
   ['opex', 'OPEX / CAPEX'],
+  ['capex', 'CapEx'],
   ['taxes', 'Taxes'],
   ['services', 'Services'],
 ]
@@ -237,6 +239,7 @@ export function PropertyPage({ prop, onUpdateProp }: Props) {
         {tab === 'contracts' && <ContractsTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
         {tab === 'cashflow' && <CashflowTab prop={prop} cx={cx} displayCurrency={displayCurrency} />}
         {tab === 'opex' && <OpexCapexTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
+        {tab === 'capex' && <CapexTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
         {tab === 'taxes' && <TaxesTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
         {tab === 'services' && <ServicesTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}
         {tab === 'valuation' && <ValueEquityTab prop={prop} onUpdateProp={onUpdateProp} cx={cx} displayCurrency={displayCurrency} />}

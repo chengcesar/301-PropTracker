@@ -49,6 +49,8 @@ export interface CapexItem {
   cat: 'Improvement' | 'Equipment' | 'Repair' | 'Other'
   amount: number
   status?: CapexStatus
+  /** Recurring capital reserve (repairs/upgrades/equipment) vs. a one-time non-recurring project. Defaults to non-recurring when absent. */
+  recurring?: boolean
 }
 
 export type OccupantRelation = 'Owner' | 'Family' | 'Caretaker' | 'Other'
