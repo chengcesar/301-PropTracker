@@ -134,9 +134,16 @@ function CapexLogSection({
     }
   }
 
+  const isFormValid = (): boolean => {
+    if (!form.desc || !form.amount) return false
+    if (form.treatment !== 'capitalize') return true
+    if (form.amortizeBasis === 'manual') return parseNum(form.amortizeMonths) >= 1
+    return form.contractId !== ''
+  }
+
   const saveEdit = () => {
     if (editingId === null) return
-    if (!form.desc || !form.amount) return
+    if (!isFormValid()) return
     const id = editingId
     onUpdateProp((p) => ({
       ...p,
@@ -146,7 +153,7 @@ function CapexLogSection({
   }
 
   const addItem = () => {
-    if (!form.desc || !form.amount) return
+    if (!isFormValid()) return
     const item = buildCapexItemFromForm(Date.now(), recurring)
     onUpdateProp((p) => ({ ...p, capex: [...p.capex, item] }))
     resetForm()
@@ -413,7 +420,13 @@ function CapexLogSection({
               </div>
             )}
             <div className="flex gap8 mt12">
-              <button type="button" className="primary" style={{ fontSize: 12, padding: '6px 16px' }} onClick={editingId ? saveEdit : addItem}>
+              <button
+                type="button"
+                className="primary"
+                style={{ fontSize: 12, padding: '6px 16px' }}
+                disabled={!isFormValid()}
+                onClick={editingId ? saveEdit : addItem}
+              >
                 {editingId ? 'Save changes' : 'Add CapEx'}
               </button>
               <button type="button" className="ghost" style={{ fontSize: 12 }} onClick={resetForm}>

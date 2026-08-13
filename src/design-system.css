@@ -553,7 +553,7 @@
   .mt-footer--stack { flex-direction: column; align-items: stretch; gap: 8px; justify-content: flex-start; }
   .mt-net { font-size: 12px; font-weight: 500; font-family: var(--mono); }
   .mt-net.pos { color: var(--green); } .mt-net.neg { color: var(--red); }
-  .badge { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 600; font-family: var(--mono); }
+  .badge { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 600; font-family: var(--mono); white-space: nowrap; flex-shrink: 0; }
   .badge.rented { background: var(--green-bg); color: var(--green); }
   .badge.vacant { background: var(--amber-bg); color: #d97706; }
   .badge.override { background: var(--purple-bg); color: var(--purple); }
