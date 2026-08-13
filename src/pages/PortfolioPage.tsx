@@ -765,7 +765,7 @@ const COL_KEYS = [
   'owner', 'country', 'status', 'nonLeaseOcc', 'endDate', 'taxStatus',
   'propertyType', 'bedrooms', 'area', 'bathrooms', 'parking', 'floor', 'estrato', 'yearBuilt', 'lastRenovation',
   'estValue', 'valueYoY', 'ownedSince', 'debt', 'mtgYearsLeft',
-  'gpi', 'egi', 'egiPerM2', 'vacancyMoRate', 'opex', 'noi', 'noiPerM2', 'valuePerM2', 'capRate', 'capex', 'yieldOnCapex', 'payback', 'taxes', 'netCf', 'margin',
+  'gpi', 'egi', 'egiPerM2', 'vacancyMoRate', 'opex', 'noi', 'noiPerM2', 'valuePerM2', 'capRate', 'capex', 'yieldOnCapex', 'payback', 'taxes', 'netCf', 'netCfAmortized', 'margin',
 ] as const
 type ColKey = typeof COL_KEYS[number]
 const COL_LABELS: Record<ColKey, string> = {
@@ -775,7 +775,7 @@ const COL_LABELS: Record<ColKey, string> = {
   estValue: 'Est. value', valueYoY: 'Value YoY', ownedSince: 'Owned since', debt: 'Debt', mtgYearsLeft: 'Mortgage (yrs)',
   gpi: 'GPI', egi: 'EGI', egiPerM2: '$/m²', vacancyMoRate: 'Vac. mo rate', opex: 'OPEX', noi: 'NOI',
   noiPerM2: 'NOI/m²', valuePerM2: 'Value/m²',
-  capRate: 'Cap rate', capex: 'CAPEX', yieldOnCapex: 'Yield on CAPEX', payback: 'Payback (yrs)', taxes: 'Taxes', netCf: 'Net CF', margin: 'Margin',
+  capRate: 'Cap rate', capex: 'CAPEX', yieldOnCapex: 'Yield on CAPEX', payback: 'Payback (yrs)', taxes: 'Taxes', netCf: 'Net CF', netCfAmortized: 'Net CF (Amortized)', margin: 'Margin',
 }
 const DETAIL_COLS: ColKey[] = ['propertyType', 'bedrooms', 'area', 'bathrooms', 'parking', 'floor', 'estrato', 'yearBuilt', 'lastRenovation']
 const BUILT_IN_PRESETS: { id: string; label: string; cols: ColKey[] }[] = [
@@ -1052,6 +1052,8 @@ function formatCardMetricValue(
       return a.taxes ? { text: `−${fm(a.taxes)}`, tone: 'neg' } : dash
     case 'netCf':
       return { text: `${a.netCf >= 0 ? '+' : ''}${fm(a.netCf)}`, tone: a.netCf >= 0 ? 'pos' : 'neg' }
+    case 'netCfAmortized':
+      return { text: `${a.netCfAmortized >= 0 ? '+' : ''}${fm(a.netCfAmortized)}`, tone: a.netCfAmortized >= 0 ? 'pos' : 'neg' }
     case 'margin':
       return gpiRow ? { text: `${Math.round((a.netCf / gpiRow) * 100)}%` } : dash
     default:
@@ -1987,6 +1989,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
         else if (sortKey === 'capex') { va = aa.totalCapex ?? 0; vb = ab.totalCapex ?? 0 }
         else if (sortKey === 'taxes') { va = aa.taxes ?? 0; vb = ab.taxes ?? 0 }
         else if (sortKey === 'netCf') { va = aa.netCf; vb = ab.netCf }
+        else if (sortKey === 'netCfAmortized') { va = aa.netCfAmortized; vb = ab.netCfAmortized }
         else if (sortKey === 'vacancyMoRate') {
           va = vacancyLossMonthCount(withYear(a)) / 12
           vb = vacancyLossMonthCount(withYear(b)) / 12
@@ -2485,6 +2488,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
       },
       taxes: { label: `Taxes (${dc})`, value: (_p, a) => raw(a.taxes ? -a.taxes : 0) },
       netCf: { label: `Net CF (${dc})`, value: (_p, a) => raw(a.netCf) },
+      netCfAmortized: { label: `Net CF Amortized (${dc})`, value: (_p, a) => raw(a.netCfAmortized) },
       margin: {
         label: 'Margin',
         value: (p, a) => {
@@ -3616,6 +3620,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                     })(),
                     taxes: <td key="taxes" className={a.taxes ? 'neg' : 'text3'}>{a.taxes ? `−${fm(a.taxes)}` : '—'}</td>,
                     netCf: <td key="netCf" className={a.netCf >= 0 ? 'pos fw5' : 'neg fw5'}>{a.netCf >= 0 ? '+' : ''}{fm(a.netCf)}</td>,
+                    netCfAmortized: <td key="netCfAmortized" className={a.netCfAmortized >= 0 ? 'pos fw5' : 'neg fw5'}>{a.netCfAmortized >= 0 ? '+' : ''}{fm(a.netCfAmortized)}</td>,
                     margin: <td key="margin">{gpiRow ? `${Math.round((a.netCf / gpiRow) * 100)}%` : '—'}</td>,
                   }
                   return (
@@ -3708,6 +3713,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                     })(),
                     taxes: <td key="taxes">{totals.taxes ? `−${fm(totals.taxes)}` : '—'}</td>,
                     netCf: <td key="netCf">{totals.net >= 0 ? '+' : ''}{fm(totals.net)}</td>,
+                    netCfAmortized: <td key="netCfAmortized">{totals.netAmortized >= 0 ? '+' : ''}{fm(totals.netAmortized)}</td>,
                     margin: <td key="margin">{portfolioProjectedGpi ? `${Math.round((totals.net / portfolioProjectedGpi) * 100)}%` : '—'}</td>,
                   }
                   return (
