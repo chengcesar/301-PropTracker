@@ -336,7 +336,7 @@ describe('getMonthData includes maintenance events in totalOpex/noi', () => {
   })
 })
 
-import { calcAnnual, sumMaintenanceAnnual } from './finance'
+import { calcAnnual, calcPortfolioTotals, sumMaintenanceAnnual } from './finance'
 
 describe('sumMaintenanceAnnual', () => {
   it('sums maintenance events across all months of prop.year', () => {
@@ -471,5 +471,21 @@ describe('calcAnnual computes an amortized net cash flow view', () => {
     // Amortized: all 12 months of 2024 fall within the Nov 2023 - Oct 2025 schedule
     expect(ann.totalCapexAmortized).toBe(12 * (120000 / 24))
     expect(ann.netCfAmortized).toBe(ann.noi - ann.totalCapexAmortized - ann.taxes - ann.serviceOneTime)
+  })
+})
+
+describe('calcPortfolioTotals includes netAmortized', () => {
+  it('sums netCfAmortized across properties', () => {
+    const p1 = makeProperty({
+      year: 2026,
+      capex: [makeCapexItemForTest({ id: 1, date: '2026-01-01', amount: 1000, treatment: 'expense' })],
+    })
+    const p2 = makeProperty({
+      id: 2,
+      year: 2026,
+      capex: [makeCapexItemForTest({ id: 2, date: '2026-01-01', amount: 2000, treatment: 'expense' })],
+    })
+    const totals = calcPortfolioTotals([p1, p2])
+    expect(totals.netAmortized).toBe(calcAnnual(p1).netCfAmortized + calcAnnual(p2).netCfAmortized)
   })
 })

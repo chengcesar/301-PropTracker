@@ -560,6 +560,7 @@ export interface PortfolioTotals {
   capex: number
   taxes: number
   net: number
+  netAmortized: number
 }
 
 export function calcPortfolioTotals(properties: Property[]): PortfolioTotals {
@@ -574,9 +575,10 @@ export function calcPortfolioTotals(properties: Property[]): PortfolioTotals {
         capex: acc.capex + a.totalCapex,
         taxes: acc.taxes + a.taxes,
         net: acc.net + a.netCf,
+        netAmortized: acc.netAmortized + a.netCfAmortized,
       }
     },
-    { gpi: 0, egi: 0, opex: 0, noi: 0, capex: 0, taxes: 0, net: 0 },
+    { gpi: 0, egi: 0, opex: 0, noi: 0, capex: 0, taxes: 0, net: 0, netAmortized: 0 },
   )
 }
 
@@ -613,9 +615,10 @@ export function calcPortfolioTotalsIn(properties: Property[], to: CurrencyCode, 
         capex: acc.capex + a.totalCapex,
         taxes: acc.taxes + a.taxes,
         net: acc.net + a.netCf,
+        netAmortized: acc.netAmortized + a.netCfAmortized,
       }
     },
-    { gpi: 0, egi: 0, opex: 0, noi: 0, capex: 0, taxes: 0, net: 0 },
+    { gpi: 0, egi: 0, opex: 0, noi: 0, capex: 0, taxes: 0, net: 0, netAmortized: 0 },
   )
 }
 
