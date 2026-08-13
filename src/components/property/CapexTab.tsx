@@ -207,54 +207,78 @@ function CapexLogSection({
           <div className="card-inner">
             {items.map((c) => {
               const weeks = capexDurationWeeks(c.date, c.dateEnd)
+              const schedule = buildCapexAmortizationSchedule(c, prop.contracts)
+              const today = new Date()
+              const progress = schedule ? capexAmortizationProgress(schedule, today.getFullYear(), today.getMonth()) : null
+              const linkedContract = c.contractId != null ? prop.contracts.find((ct) => ct.id === c.contractId) : undefined
               return (
-                <div key={c.id} className="capex-item">
-                  <div style={{ width: '110px', flexShrink: 0 }}>
-                    <div className="fs11 text3">Start</div>
-                    <div className="fs13 mono">{c.date || '—'}</div>
+                <div key={c.id} className="capex-item-wrap">
+                  <div className="capex-item">
+                    <div style={{ width: '110px', flexShrink: 0 }}>
+                      <div className="fs11 text3">Start</div>
+                      <div className="fs13 mono">{c.date || '—'}</div>
+                    </div>
+                    <div style={{ width: '110px', flexShrink: 0 }}>
+                      <div className="fs11 text3">End</div>
+                      <div className="fs13 mono">{c.dateEnd?.trim() ? c.dateEnd : '—'}</div>
+                    </div>
+                    <div style={{ width: '80px', flexShrink: 0 }}>
+                      <div className="fs11 text3">Weeks</div>
+                      <div className="fs13 fw5">{weeks !== null ? weeks : '—'}</div>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div className="fs11 text3">Description</div>
+                      <div className="fs13 fw5">{c.desc}</div>
+                      {c.provider && <div className="fs11 text3">{c.provider}</div>}
+                    </div>
+                    <span className={`badge ${c.cat === 'Improvement' ? 'rented' : c.cat === 'Equipment' ? 'override' : 'pending'}`}>
+                      {c.cat}
+                    </span>
+                    <span className={`badge ${c.status === 'Completed' ? 'rented' : c.status === 'Ongoing' ? 'override' : 'pending'}`}>
+                      {c.status ?? 'To do'}
+                    </span>
+                    <span className={`badge ${c.treatment === 'capitalize' ? 'override' : 'vacant'}`}>
+                      {CAPEX_TREATMENT_LABELS[c.treatment ?? 'expense']}
+                    </span>
+                    <div style={{ width: '130px', textAlign: 'right' }}>
+                      <div className="fs11 text3">Amount</div>
+                      <div className="fs13 fw6 neg">−{fmt(cx(c.amount))}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        className="ghost"
+                        title="Edit CapEx entry"
+                        onClick={() => startEdit(c)}
+                        style={{ padding: '4px 8px', fontSize: 13 }}
+                      >
+                        ✎
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost danger"
+                        title="Remove CapEx entry"
+                        onClick={() => removeItem(c.id)}
+                        style={{ padding: '4px 8px' }}
+                      >
+                        ×
+                      </button>
+                    </div>
                   </div>
-                  <div style={{ width: '110px', flexShrink: 0 }}>
-                    <div className="fs11 text3">End</div>
-                    <div className="fs13 mono">{c.dateEnd?.trim() ? c.dateEnd : '—'}</div>
-                  </div>
-                  <div style={{ width: '80px', flexShrink: 0 }}>
-                    <div className="fs11 text3">Weeks</div>
-                    <div className="fs13 fw5">{weeks !== null ? weeks : '—'}</div>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div className="fs11 text3">Description</div>
-                    <div className="fs13 fw5">{c.desc}</div>
-                  </div>
-                  <span className={`badge ${c.cat === 'Improvement' ? 'rented' : c.cat === 'Equipment' ? 'override' : 'pending'}`}>
-                    {c.cat}
-                  </span>
-                  <span className={`badge ${c.status === 'Completed' ? 'rented' : c.status === 'Ongoing' ? 'override' : 'pending'}`}>
-                    {c.status ?? 'To do'}
-                  </span>
-                  <div style={{ width: '130px', textAlign: 'right' }}>
-                    <div className="fs11 text3">Amount</div>
-                    <div className="fs13 fw6 neg">−{fmt(cx(c.amount))}</div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                    <button
-                      type="button"
-                      className="ghost"
-                      title="Edit CapEx entry"
-                      onClick={() => startEdit(c)}
-                      style={{ padding: '4px 8px', fontSize: 13 }}
-                    >
-                      ✎
-                    </button>
-                    <button
-                      type="button"
-                      className="ghost danger"
-                      title="Remove CapEx entry"
-                      onClick={() => removeItem(c.id)}
-                      style={{ padding: '4px 8px' }}
-                    >
-                      ×
-                    </button>
-                  </div>
+                  {schedule && progress && (
+                    <div>
+                      <div className="capex-progress-track">
+                        <div className="capex-progress-fill" style={{ width: `${progress.percent}%` }} />
+                      </div>
+                      <div className="fs11 text3">
+                        {Math.round(progress.percent)}% · Amortized {fmt(cx(progress.amountAmortized))} · {fmt(cx(progress.amountLeft))} left
+                      </div>
+                      <div className="fs11 text3">
+                        {linkedContract ? `Contract: ${linkedContract.tenant} · ` : ''}
+                        {progress.monthsElapsed} / {progress.totalMonths} mo
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             })}
