@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { CAPEX_AMORTIZE_BASES, CAPEX_CATS, CAPEX_STATUSES, CAPEX_TREATMENTS } from '../../lib/constants'
+import { CAPEX_AMORTIZE_BASES, CAPEX_CATS, CAPEX_STATUSES, CAPEX_TREATMENTS, MONTHS_FULL } from '../../lib/constants'
 import type { CapexAmortizeBasis, CapexItem, CapexStatus, CapexTreatment, Property } from '../../lib/types'
 import type { CurrencyCode } from '../../lib/currency'
 import { fmt, parseNum } from '../../lib/format'
-import { buildCapexAmortizationSchedule, capexAmortizationProgress } from '../../lib/capexAmortization'
+import { buildCapexAmortizationSchedule, capexAmortizationProgress, capexDepreciationForMonth } from '../../lib/capexAmortization'
 
 function capexDurationWeeks(start: string, end?: string): number | null {
   if (!end?.trim()) return null
@@ -440,6 +440,68 @@ function CapexLogSection({
   )
 }
 
+function CapexDepreciationTable({ prop, cx }: { prop: Property; cx: (n: number) => number }) {
+  const items = prop.capex.filter((c) => c.treatment === 'capitalize')
+  const monthlyByItem = items.map((c) =>
+    Array.from({ length: 12 }, (_, m) => capexDepreciationForMonth(c, prop.contracts, prop.year, m)),
+  )
+  const activeIdx = items.map((_, idx) => idx).filter((idx) => monthlyByItem[idx].some((v) => v > 0))
+  if (activeIdx.length === 0) return null
+
+  const sumFor = (predicate: (idx: number) => boolean) =>
+    Array.from({ length: 12 }, (_, m) => activeIdx.filter(predicate).reduce((a, idx) => a + monthlyByItem[idx][m], 0))
+  const nrTotals = sumFor((idx) => !items[idx].recurring)
+  const rTotals = sumFor((idx) => Boolean(items[idx].recurring))
+  const combined = Array.from({ length: 12 }, (_, m) => nrTotals[m] + rTotals[m])
+  const cell = (v: number) => (v > 0 ? `−${fmt(cx(v))}` : '—')
+  const sumAll = (arr: number[]) => arr.reduce((a, v) => a + v, 0)
+
+  return (
+    <div className="mb24">
+      <div className="sec-hdr mb12">
+        <span className="sec-title">CapEx Depreciation by Month · {prop.year}</span>
+      </div>
+      <div className="card" style={{ overflow: 'hidden' }}>
+        <table className="cf-table">
+          <thead>
+            <tr>
+              <th>Month</th>
+              {activeIdx.map((idx) => (
+                <th key={items[idx].id}>{items[idx].desc}</th>
+              ))}
+              <th>NR Total</th>
+              <th>R Total</th>
+              <th>Combined</th>
+            </tr>
+          </thead>
+          <tbody>
+            {MONTHS_FULL.map((name, m) => (
+              <tr key={name}>
+                <td>{name}</td>
+                {activeIdx.map((idx) => (
+                  <td key={items[idx].id}>{cell(monthlyByItem[idx][m])}</td>
+                ))}
+                <td>{cell(nrTotals[m])}</td>
+                <td>{cell(rTotals[m])}</td>
+                <td className="fw6">{cell(combined[m])}</td>
+              </tr>
+            ))}
+            <tr className="total-row">
+              <td>Total</td>
+              {activeIdx.map((idx) => (
+                <td key={items[idx].id}>{cell(sumAll(monthlyByItem[idx]))}</td>
+              ))}
+              <td>{cell(sumAll(nrTotals))}</td>
+              <td>{cell(sumAll(rTotals))}</td>
+              <td className="fw6">{cell(sumAll(combined))}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export function CapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
   return (
     <div>
@@ -465,6 +527,7 @@ export function CapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
         emptyTitle="No recurring CapEx entries"
         emptyHint="Track ongoing capital reserves, repairs, and equipment replacements"
       />
+      <CapexDepreciationTable prop={prop} cx={cx} />
     </div>
   )
 }
