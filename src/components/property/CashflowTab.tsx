@@ -31,7 +31,12 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
     }[] = []
     for (let i = 0; i < 12; i++) {
       const d = getMonthData(prop, i)
-      const mCapex = prop.capex.filter((c) => new Date(c.date).getMonth() === i).reduce((a, b) => a + b.amount, 0)
+      const mCapex = prop.capex
+        .filter((c) => {
+          const d = new Date(`${c.date}T12:00:00`)
+          return d.getFullYear() === prop.year && d.getMonth() === i
+        })
+        .reduce((a, b) => a + b.amount, 0)
       const mTax = (prop.taxes.items ?? [])
         .filter((t) => {
           if (!t.dueDate) return i === 11 // no date → December fallback
@@ -81,6 +86,10 @@ export function CashflowTab({ prop, cx = (n) => n, displayCurrency }: Props) {
         <div className="kpi-card">
           <div className="kpi-label">Net cashflow <KpiInfoIcon tip="Final cashflow after all income and expenses" /></div>
           <div className="kpi-value green">{fmtCurrencyM(cx(ann.netCf), dc)}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Net cashflow (Amortized) <KpiInfoIcon tip="Net cashflow with capitalized CapEx spread across its depreciation schedule instead of hitting the year it was paid" /></div>
+          <div className="kpi-value green">{fmtCurrencyM(cx(ann.netCfAmortized), dc)}</div>
         </div>
       </div>
       <div className="sec-hdr mb12">

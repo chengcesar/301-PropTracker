@@ -304,6 +304,10 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
           <div className="kpi-label">Net cashflow <KpiInfoIcon tip="Final cashflow after all income and expenses" /></div>
           <div className="kpi-value green">{fmtCurrencyM(cx(ann.netCf), dc)}</div>
         </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Net cashflow (Amortized) <KpiInfoIcon tip="Net cashflow with capitalized CapEx spread across its depreciation schedule instead of hitting the year it was paid" /></div>
+          <div className="kpi-value green">{fmtCurrencyM(cx(ann.netCfAmortized), dc)}</div>
+        </div>
       </div>
 
       <div className="overview-duo mb24">
