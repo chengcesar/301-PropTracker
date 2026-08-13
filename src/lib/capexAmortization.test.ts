@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildCapexAmortizationSchedule } from './capexAmortization'
+import { buildCapexAmortizationSchedule, capexDepreciationForMonth } from './capexAmortization'
 import type { CapexItem, Contract } from './types'
 
 function makeCapexItem(overrides: Partial<CapexItem> = {}): CapexItem {
@@ -99,5 +99,44 @@ describe('buildCapexAmortizationSchedule', () => {
       contractId: 999,
     })
     expect(buildCapexAmortizationSchedule(item, [])).toBeNull()
+  })
+})
+
+describe('capexDepreciationForMonth', () => {
+  const item = makeCapexItem({
+    dateEnd: '2023-11-01',
+    amount: 120000,
+    treatment: 'capitalize',
+    amortizeBasis: 'manual',
+    amortizeMonths: 12,
+  })
+
+  it('returns 0 before the schedule starts', () => {
+    expect(capexDepreciationForMonth(item, [], 2023, 9)).toBe(0) // October 2023
+  })
+
+  it('returns the monthly amount for months within the schedule', () => {
+    expect(capexDepreciationForMonth(item, [], 2023, 10)).toBe(10000) // November 2023 (month 1)
+    expect(capexDepreciationForMonth(item, [], 2024, 9)).toBe(10000) // October 2024 (month 12)
+  })
+
+  it('returns 0 after the schedule ends', () => {
+    expect(capexDepreciationForMonth(item, [], 2024, 10)).toBe(0) // November 2024 (month 13)
+  })
+
+  it('returns 0 for an expense-treated item in every month', () => {
+    const expenseItem = makeCapexItem({ treatment: 'expense', date: '2023-11-01', amount: 120000 })
+    expect(capexDepreciationForMonth(expenseItem, [], 2023, 10)).toBe(0)
+  })
+
+  it('spans multiple years correctly for a long schedule', () => {
+    const longItem = makeCapexItem({
+      dateEnd: '2011-06-01',
+      amount: 12000,
+      treatment: 'capitalize',
+      amortizeBasis: 'manual',
+      amortizeMonths: 180, // 15 years
+    })
+    expect(capexDepreciationForMonth(longItem, [], 2026, 0)).toBe(12000 / 180) // still depreciating in Jan 2026
   })
 })

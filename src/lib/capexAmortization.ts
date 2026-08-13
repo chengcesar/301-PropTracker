@@ -51,3 +51,17 @@ export function buildCapexAmortizationSchedule(
     startMonthIndex,
   }
 }
+
+/** Depreciation amount an item contributes to a given calendar month (0-based), or 0 if outside its schedule / not capitalized. */
+export function capexDepreciationForMonth(
+  item: CapexItem,
+  contracts: Contract[],
+  year: number,
+  monthIndex: number,
+): number {
+  const schedule = buildCapexAmortizationSchedule(item, contracts)
+  if (!schedule) return 0
+  const offset = year * 12 + monthIndex - (schedule.startYear * 12 + schedule.startMonthIndex)
+  if (offset < 0 || offset >= schedule.totalMonths) return 0
+  return schedule.monthlyAmount
+}
