@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { CAPEX_CATS, CAPEX_STATUSES } from '../../lib/constants'
-import type { CapexItem, CapexStatus, Property } from '../../lib/types'
+import { CAPEX_AMORTIZE_BASES, CAPEX_CATS, CAPEX_STATUSES, CAPEX_TREATMENTS } from '../../lib/constants'
+import type { CapexAmortizeBasis, CapexItem, CapexStatus, CapexTreatment, Property } from '../../lib/types'
 import type { CurrencyCode } from '../../lib/currency'
 import { fmt, parseNum } from '../../lib/format'
+import { buildCapexAmortizationSchedule, capexAmortizationProgress } from '../../lib/capexAmortization'
 
 function capexDurationWeeks(start: string, end?: string): number | null {
   if (!end?.trim()) return null
@@ -13,6 +14,15 @@ function capexDurationWeeks(start: string, end?: string): number | null {
   if (days < 1) return null
   if (days < 7) return 1
   return Math.ceil(days / 7)
+}
+
+const CAPEX_TREATMENT_LABELS: Record<CapexTreatment, string> = {
+  capitalize: 'Capitalize & Depreciate',
+  expense: 'Expense',
+}
+const CAPEX_AMORTIZE_BASIS_LABELS: Record<CapexAmortizeBasis, string> = {
+  manual: 'Manual months',
+  contract: 'Contract',
 }
 
 type Props = {
@@ -26,18 +36,28 @@ type CapexForm = {
   date: string
   dateEnd: string
   desc: string
+  provider: string
   cat: (typeof CAPEX_CATS)[number]
   amount: string
   status: CapexStatus
+  treatment: CapexTreatment
+  amortizeBasis: CapexAmortizeBasis
+  amortizeMonths: string
+  contractId: string
 }
 
 const emptyCapexForm = (): CapexForm => ({
   date: '',
   dateEnd: '',
   desc: '',
+  provider: '',
   cat: 'Improvement',
   amount: '',
   status: 'To do',
+  treatment: 'capitalize',
+  amortizeBasis: 'manual',
+  amortizeMonths: '',
+  contractId: '',
 })
 
 function CapexLogSection({
@@ -80,11 +100,38 @@ function CapexLogSection({
       date: c.date,
       dateEnd: c.dateEnd ?? '',
       desc: c.desc,
+      provider: c.provider ?? '',
       cat: c.cat,
       amount: String(Math.round(c.amount)),
       status: c.status ?? 'To do',
+      treatment: c.treatment ?? 'expense',
+      amortizeBasis: c.amortizeBasis ?? 'manual',
+      amortizeMonths: c.amortizeMonths ? String(c.amortizeMonths) : '',
+      contractId: c.contractId != null ? String(c.contractId) : '',
     })
     setShowForm(true)
+  }
+
+  const buildCapexItemFromForm = (id: number, preserveRecurring: boolean): CapexItem => {
+    const base: CapexItem = {
+      id,
+      date: form.date,
+      desc: form.desc,
+      cat: form.cat,
+      amount: parseNum(form.amount),
+      status: form.status,
+      treatment: form.treatment,
+      ...(preserveRecurring ? { recurring: true } : {}),
+      ...(form.provider.trim() ? { provider: form.provider.trim() } : {}),
+      ...(form.dateEnd.trim() ? { dateEnd: form.dateEnd.trim() } : {}),
+    }
+    if (form.treatment !== 'capitalize') return base
+    return {
+      ...base,
+      amortizeBasis: form.amortizeBasis,
+      ...(form.amortizeBasis === 'manual' ? { amortizeMonths: parseNum(form.amortizeMonths) } : {}),
+      ...(form.amortizeBasis === 'contract' && form.contractId ? { contractId: Number(form.contractId) } : {}),
+    }
   }
 
   const saveEdit = () => {
@@ -93,35 +140,14 @@ function CapexLogSection({
     const id = editingId
     onUpdateProp((p) => ({
       ...p,
-      capex: p.capex.map((x) => {
-        if (x.id !== id) return x
-        const base: CapexItem = {
-          id: x.id,
-          date: form.date,
-          desc: form.desc,
-          cat: form.cat,
-          amount: parseNum(form.amount),
-          status: form.status,
-          ...(x.recurring ? { recurring: true } : {}),
-        }
-        return form.dateEnd.trim() ? { ...base, dateEnd: form.dateEnd.trim() } : base
-      }),
+      capex: p.capex.map((x) => (x.id !== id ? x : buildCapexItemFromForm(id, Boolean(x.recurring)))),
     }))
     resetForm()
   }
 
   const addItem = () => {
     if (!form.desc || !form.amount) return
-    const item: CapexItem = {
-      id: Date.now(),
-      date: form.date,
-      desc: form.desc,
-      cat: form.cat,
-      amount: parseNum(form.amount),
-      status: form.status,
-      ...(form.dateEnd.trim() ? { dateEnd: form.dateEnd.trim() } : {}),
-      ...(recurring ? { recurring: true } : {}),
-    }
+    const item = buildCapexItemFromForm(Date.now(), recurring)
     onUpdateProp((p) => ({ ...p, capex: [...p.capex, item] }))
     resetForm()
   }
@@ -243,7 +269,7 @@ function CapexLogSection({
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '130px 130px 1fr 130px 140px 120px',
+                gridTemplateColumns: '130px 130px 1fr 1fr 130px 140px 120px',
                 gap: '10px',
               }}
             >
@@ -262,6 +288,15 @@ function CapexLogSection({
                   placeholder="Renovation"
                   value={form.desc}
                   onChange={(e) => setForm((p) => ({ ...p, desc: e.target.value }))}
+                />
+              </div>
+              <div className="field">
+                <label>Service provider</label>
+                <input
+                  type="text"
+                  placeholder="Contractor, company..."
+                  value={form.provider}
+                  onChange={(e) => setForm((p) => ({ ...p, provider: e.target.value }))}
                 />
               </div>
               <div className="field">
@@ -294,6 +329,65 @@ function CapexLogSection({
                 </select>
               </div>
             </div>
+
+            <div className="mt12">
+              <label className="fs11 text3" style={{ display: 'block', marginBottom: 6 }}>Treatment</label>
+              <div className="flex gap16">
+                {CAPEX_TREATMENTS.map((t) => (
+                  <label key={t} className="flex align-center gap8" style={{ cursor: 'pointer', fontSize: 13 }}>
+                    <input
+                      type="radio"
+                      name={`capex-treatment-${recurring ? 'r' : 'nr'}`}
+                      checked={form.treatment === t}
+                      onChange={() => setForm((p) => ({ ...p, treatment: t }))}
+                    />
+                    {CAPEX_TREATMENT_LABELS[t]}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {form.treatment === 'capitalize' && (
+              <div className="mt12" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: '10px' }}>
+                <div className="field">
+                  <label>Amortize against</label>
+                  <select
+                    value={form.amortizeBasis}
+                    onChange={(e) => setForm((p) => ({ ...p, amortizeBasis: e.target.value as CapexAmortizeBasis }))}
+                  >
+                    {CAPEX_AMORTIZE_BASES.map((b) => (
+                      <option key={b} value={b}>
+                        {CAPEX_AMORTIZE_BASIS_LABELS[b]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {form.amortizeBasis === 'manual' ? (
+                  <div className="field">
+                    <label>Months</label>
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="12"
+                      value={form.amortizeMonths}
+                      onChange={(e) => setForm((p) => ({ ...p, amortizeMonths: e.target.value }))}
+                    />
+                  </div>
+                ) : (
+                  <div className="field">
+                    <label>Contract</label>
+                    <select value={form.contractId} onChange={(e) => setForm((p) => ({ ...p, contractId: e.target.value }))}>
+                      <option value="">— Select —</option>
+                      {prop.contracts.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.tenant}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="flex gap8 mt12">
               <button type="button" className="primary" style={{ fontSize: 12, padding: '6px 16px' }} onClick={editingId ? saveEdit : addItem}>
                 {editingId ? 'Save changes' : 'Add CapEx'}
