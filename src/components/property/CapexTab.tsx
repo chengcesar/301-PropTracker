@@ -446,7 +446,26 @@ function CapexDepreciationTable({ prop, cx }: { prop: Property; cx: (n: number) 
     Array.from({ length: 12 }, (_, m) => capexDepreciationForMonth(c, prop.contracts, prop.year, m)),
   )
   const activeIdx = items.map((_, idx) => idx).filter((idx) => monthlyByItem[idx].some((v) => v > 0))
-  if (activeIdx.length === 0) return null
+  if (items.length === 0) return null
+  if (activeIdx.length === 0) {
+    return (
+      <div className="mb24">
+        <div className="sec-hdr mb12">
+          <span className="sec-title">CapEx Depreciation by Month · {prop.year}</span>
+        </div>
+        <div className="card">
+          <div className="card-inner">
+            <div className="empty-state" style={{ padding: 24 }}>
+              <div className="empty-title">No depreciation falls in {prop.year}</div>
+              <div className="fs12 text3" style={{ marginTop: 4 }}>
+                None of this property&apos;s capitalized CapEx schedules overlap the selected year.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const sumFor = (predicate: (idx: number) => boolean) =>
     Array.from({ length: 12 }, (_, m) => activeIdx.filter(predicate).reduce((a, idx) => a + monthlyByItem[idx][m], 0))
