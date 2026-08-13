@@ -40,17 +40,28 @@ export interface MonthData {
 }
 
 export type CapexStatus = 'To do' | 'Ongoing' | 'Completed'
+export type CapexTreatment = 'expense' | 'capitalize'
+export type CapexAmortizeBasis = 'manual' | 'contract'
 
 export interface CapexItem {
   id: number
   date: string
   dateEnd?: string
   desc: string
+  provider?: string
   cat: 'Improvement' | 'Equipment' | 'Repair' | 'Other'
   amount: number
   status?: CapexStatus
   /** Recurring capital reserve (repairs/upgrades/equipment) vs. a one-time non-recurring project. Defaults to non-recurring when absent. */
   recurring?: boolean
+  /** Accounting treatment. Absent/undefined is treated as 'expense' (matches all pre-existing items). */
+  treatment?: CapexTreatment
+  /** Only meaningful when treatment === 'capitalize'. */
+  amortizeBasis?: CapexAmortizeBasis
+  /** Manual month count when amortizeBasis === 'manual'. */
+  amortizeMonths?: number
+  /** Links into Property.contracts when amortizeBasis === 'contract'. */
+  contractId?: number
 }
 
 export type OccupantRelation = 'Owner' | 'Family' | 'Caretaker' | 'Other'
