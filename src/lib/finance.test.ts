@@ -371,3 +371,48 @@ describe('calcAnnual exposes maintenance without double-subtracting it', () => {
     expect(ann.netCf).toBe(ann.noi - ann.totalCapex - ann.taxes - ann.serviceOneTime)
   })
 })
+
+import type { CapexItem } from './types'
+
+function makeCapexItemForTest(overrides: Partial<CapexItem> = {}): CapexItem {
+  return {
+    id: 1,
+    date: '2026-03-01',
+    desc: 'Test capex',
+    cat: 'Improvement',
+    amount: 1000,
+    ...overrides,
+  }
+}
+
+describe('calcAnnual scopes totalCapex to prop.year', () => {
+  it('only counts CapEx items dated in the viewed year', () => {
+    const p = makeProperty({
+      year: 2026,
+      capex: [
+        makeCapexItemForTest({ id: 1, date: '2026-03-01', amount: 1000 }),
+        makeCapexItemForTest({ id: 2, date: '2025-06-01', amount: 5000 }), // different year — excluded
+        makeCapexItemForTest({ id: 3, date: '2027-01-01', amount: 9000 }), // different year — excluded
+      ],
+    })
+    expect(calcAnnual(p).totalCapex).toBe(1000)
+  })
+
+  it('counts a capitalized item in full in its start-date year (cash still leaves the bank)', () => {
+    const p = makeProperty({
+      year: 2026,
+      capex: [
+        makeCapexItemForTest({
+          id: 1,
+          date: '2026-02-01',
+          dateEnd: '2026-11-01',
+          amount: 120000,
+          treatment: 'capitalize',
+          amortizeBasis: 'manual',
+          amortizeMonths: 12,
+        }),
+      ],
+    })
+    expect(calcAnnual(p).totalCapex).toBe(120000)
+  })
+})

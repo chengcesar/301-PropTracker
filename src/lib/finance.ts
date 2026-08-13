@@ -500,7 +500,9 @@ export function calcAnnual(prop: Property): AnnualResult {
     totalOpex += m.totalOpex
   }
   const vacancy = Math.max(0, gpi - egi)
-  const totalCapex = prop.capex.reduce((a, b) => a + b.amount, 0)
+  const totalCapex = prop.capex
+    .filter((c) => new Date(`${c.date}T12:00:00`).getFullYear() === prop.year)
+    .reduce((a, b) => a + b.amount, 0)
   const taxes = (prop.taxes.items ?? []).reduce((a, t) => a + (t.amount ?? 0), 0)
   const serviceOneTime = sumServiceOneTimeAnnual(prop)
   const maintenance = sumMaintenanceAnnual(prop)
