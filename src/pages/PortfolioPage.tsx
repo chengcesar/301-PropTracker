@@ -16,6 +16,7 @@ import { KpiInfoIcon } from '../components/KpiInfoIcon'
 import { COUNTRIES, countryFlagUrl } from '../lib/countries'
 import { PropertyLeaderboardMap } from '../components/PropertyLeaderboardMap'
 import { AssetValueAppreciationCard } from '../components/AssetValueAppreciationCard'
+import { PortfolioCapexDepreciationCard } from '../components/PortfolioCapexDepreciationCard'
 // @ts-ignore — JS component, types inferred as any
 import PortfolioReport from '../../Temp/PortfolioReport'
 import { UpgradeModal } from '../components/modals/UpgradeModal'
@@ -744,7 +745,7 @@ function KpiAvgAssetYoYPill({ pct }: { pct: number | null }) {
   )
 }
 
-const KPI_KEYS = ['gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'net', 'assetValue', 'assetYoY', 'irrAnnualized', 'capRate', 'equityMultiplier'] as const
+const KPI_KEYS = ['gpi', 'egi', 'opex', 'noi', 'capex', 'taxes', 'net', 'netAmortized', 'assetValue', 'assetYoY', 'irrAnnualized', 'capRate', 'equityMultiplier'] as const
 type KpiKey = typeof KPI_KEYS[number]
 const KPI_META: Record<KpiKey, { label: string; cls?: string; negPrefix?: boolean; tip: string }> = {
   gpi: { label: 'GPI', tip: 'Gross Potential Income — full-year basis: contract rent when leased; otherwise Fact Sheet potential or, if unset, the highest monthly rent among leases overlapping the year (gaps between leases). Vacancy is potential minus actual collected rent.' },
@@ -754,6 +755,7 @@ const KPI_META: Record<KpiKey, { label: string; cls?: string; negPrefix?: boolea
   capex: { label: 'CAPEX', cls: 'red', negPrefix: true, tip: 'Capital Expenditures — major repairs & improvements' },
   taxes: { label: 'Taxes', cls: 'red', negPrefix: true, tip: 'Annual property and income taxes' },
   net: { label: 'Net CF', cls: 'green', tip: 'Final cashflow after all income and expenses' },
+  netAmortized: { label: 'Net CF (Amort.)', cls: 'green', tip: 'Net cashflow with capitalized CapEx spread across its depreciation schedule instead of hitting the year it was paid, aggregated across all properties' },
   assetValue: { label: 'Asset Value', cls: 'purple', tip: 'Sum of estimated values for the selected year (purchase + appreciation and price history, or manual appraisal), in display currency' },
   assetYoY: { label: 'Value YoY', tip: 'Average year-over-year % change across properties with a modeled value history; appraisal-only holdings are excluded' },
   irrAnnualized: { label: 'IRR (ann.)', tip: 'Internal Rate of Return annualized — equity-weighted average across properties with purchase data. Uses constant annual cashflow assumption based on selected year.' },
@@ -1384,7 +1386,7 @@ function PortfolioPropertyGridCard({
 }
 
 const STORAGE_KEY = 'kpi-visibility'
-const DEFAULT_KPI_ON = new Set<KpiKey>(['gpi', 'egi', 'opex', 'noi', 'capex', 'net'])
+const DEFAULT_KPI_ON = new Set<KpiKey>(['gpi', 'egi', 'opex', 'noi', 'capex', 'net', 'netAmortized'])
 function defaultKpiVisibility(): Record<KpiKey, boolean> {
   return Object.fromEntries(KPI_KEYS.map(k => [k, DEFAULT_KPI_ON.has(k)])) as Record<KpiKey, boolean>
 }
@@ -2191,6 +2193,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
         noiPct: null as number | null,
         taxesPct: null as number | null,
         netPct: null as number | null,
+        netAmortizedPct: null as number | null,
       }
     }
     return {
@@ -2199,8 +2202,9 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
       noiPct: (totals.noi / base) * 100,
       taxesPct: (totals.taxes / base) * 100,
       netPct: (totals.net / base) * 100,
+      netAmortizedPct: (totals.netAmortized / base) * 100,
     }
-  }, [kpiPctBase, portfolioProjectedGpi, totals.egi, totals.opex, totals.noi, totals.taxes, totals.net])
+  }, [kpiPctBase, portfolioProjectedGpi, totals.egi, totals.opex, totals.noi, totals.taxes, totals.net, totals.netAmortized])
 
   const advancedKpis = useMemo(() => {
     // Cap Rate = NOI / Total Asset Value
@@ -2699,7 +2703,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                     ? (advancedKpis.irrAnnualized == null ? '' : advancedKpis.irrAnnualized < 0 ? 'neg' : 'pos')
                     : KPI_META[key].cls || ''
               const cashflowPct =
-                key === 'gpi' || key === 'egi' || key === 'opex' || key === 'noi' || key === 'capex' || key === 'taxes' || key === 'net'
+                key === 'gpi' || key === 'egi' || key === 'opex' || key === 'noi' || key === 'capex' || key === 'taxes' || key === 'net' || key === 'netAmortized'
               let mainValue: string = '—'
               if (key === 'assetValue') {
                 mainValue = assetKpis.valuedCount > 0 ? fm(assetKpis.totalValue) : '—'
@@ -2742,6 +2746,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                   {key === 'noi' && <KpiPctOfEgiDelta pct={ratioRow.noiPct} kind="noi" base={kpiPctBase === 'gpi' ? 'GPI' : 'EGI'} />}
                   {key === 'taxes' && <KpiPctOfEgiDelta pct={ratioRow.taxesPct} kind="taxes" base={kpiPctBase === 'gpi' ? 'GPI' : 'EGI'} />}
                   {key === 'net' && <KpiPctOfEgiDelta pct={ratioRow.netPct} kind="net" base={kpiPctBase === 'gpi' ? 'GPI' : 'EGI'} />}
+                  {key === 'netAmortized' && <KpiPctOfEgiDelta pct={ratioRow.netAmortizedPct} kind="net" base={kpiPctBase === 'gpi' ? 'GPI' : 'EGI'} />}
                   {key === 'assetYoY' && <KpiAvgAssetYoYPill pct={assetKpis.avgYoYpct} />}
                 </div>
               )
@@ -4097,6 +4102,12 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
           properties={filteredProperties}
           displayCurrency={displayCurrency}
           fxRates={fxRates}
+        />
+        <PortfolioCapexDepreciationCard
+          properties={filteredProperties}
+          displayCurrency={displayCurrency}
+          fxRates={fxRates}
+          onSelectProperty={onSelectProperty}
         />
         <SharedWithMeSection />
       </div>

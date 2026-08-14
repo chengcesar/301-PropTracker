@@ -14,8 +14,16 @@ import { TaxesTab } from '../components/property/TaxesTab'
 import { ServicesTab } from '../components/property/ServicesTab'
 import { FactSheetTab } from '../components/property/FactSheetTab'
 import { ValueEquityTab } from '../components/property/ValueEquityTab'
+import { consumePendingPropertyTab } from '../lib/pendingTab'
 
 type TabId = 'overview' | 'contracts' | 'cashflow' | 'opex' | 'capex' | 'taxes' | 'services' | 'valuation' | 'factsheet'
+
+const TAB_IDS: readonly TabId[] = ['overview', 'contracts', 'cashflow', 'opex', 'capex', 'taxes', 'services', 'valuation', 'factsheet']
+
+function initialTab(): TabId {
+  const pending = consumePendingPropertyTab()
+  return pending && (TAB_IDS as readonly string[]).includes(pending) ? (pending as TabId) : 'overview'
+}
 
 type Props = {
   prop: Property
@@ -100,7 +108,7 @@ function PropertyTabPicker({ tab, setTab }: { tab: TabId; setTab: (id: TabId) =>
 
 export function PropertyPage({ prop, onUpdateProp }: Props) {
   const readOnly = useReadOnly()
-  const [tab, setTab] = useState<TabId>('overview')
+  const [tab, setTab] = useState<TabId>(initialTab)
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const active = activeContract(prop)

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { CAPEX_AMORTIZE_BASES, CAPEX_CATS, CAPEX_STATUSES, CAPEX_TREATMENTS, MONTHS_FULL } from '../../lib/constants'
 import type { CapexAmortizeBasis, CapexItem, CapexStatus, CapexTreatment, Property } from '../../lib/types'
 import type { CurrencyCode } from '../../lib/currency'
@@ -15,6 +15,29 @@ function capexDurationWeeks(start: string, end?: string): number | null {
   if (days < 7) return 1
   return Math.ceil(days / 7)
 }
+
+function formatMonthYear(dateStr?: string): string {
+  if (!dateStr?.trim()) return '—'
+  return new Date(`${dateStr}T12:00:00`).toLocaleDateString('en-US', {
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+function formatMonthDay(dateStr?: string): string {
+  if (!dateStr?.trim()) return '—'
+  return new Date(`${dateStr}T12:00:00`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: '2-digit',
+  })
+}
+
+const IconCopy = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+)
+const IconCheck = () => (
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#15803d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3.5 3.5L13 4"/></svg>
+)
 
 const CAPEX_TREATMENT_LABELS: Record<CapexTreatment, string> = {
   capitalize: 'Capitalize & Depreciate',
@@ -70,6 +93,7 @@ function CapexLogSection({
   addLabel,
   emptyTitle,
   emptyHint,
+  view,
 }: {
   prop: Property
   onUpdateProp: (fn: (p: Property) => Property) => void
@@ -80,6 +104,7 @@ function CapexLogSection({
   addLabel: string
   emptyTitle: string
   emptyHint: string
+  view: 'gallery' | 'table'
 }) {
   const items = prop.capex.filter((c) => Boolean(c.recurring) === recurring)
   const total = items.reduce((a, b) => a + b.amount, 0)
@@ -87,6 +112,36 @@ function CapexLogSection({
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<CapexForm>(emptyCapexForm())
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = useCallback(() => {
+    const headers = [
+      'Start', 'End', 'Description', 'Provider', 'Category', 'Status', 'Treatment',
+      'Amount', 'Amort. %', 'Months', 'Monthly Amort.',
+    ]
+    const today = new Date()
+    const rows = items.map((c) => {
+      const schedule = buildCapexAmortizationSchedule(c, prop.contracts)
+      const progress = schedule ? capexAmortizationProgress(schedule, today.getFullYear(), today.getMonth()) : null
+      return [
+        formatMonthDay(c.date),
+        formatMonthDay(c.dateEnd),
+        c.desc,
+        c.provider || '—',
+        c.cat,
+        c.status ?? 'To do',
+        c.treatment === 'capitalize' ? 'Capitalize' : 'Expense',
+        fmt(cx(c.amount)),
+        progress ? `${Math.round(progress.percent)}%` : '—',
+        schedule ? `${schedule.totalMonths} mo` : '—',
+        schedule ? fmt(cx(schedule.monthlyAmount)) : '—',
+      ].join('\t')
+    })
+    rows.push(['Total', '', '', '', '', '', '', fmt(cx(total)), '', '', ''].join('\t'))
+    navigator.clipboard.writeText([headers.join('\t'), ...rows].join('\n'))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }, [items, prop.contracts, total, cx])
 
   const resetForm = () => {
     setForm(emptyCapexForm())
@@ -209,7 +264,7 @@ function CapexLogSection({
         </div>
       )}
 
-      {items.length > 0 && (
+      {items.length > 0 && view === 'gallery' && (
         <div className="card">
           <div className="card-inner">
             {items.map((c) => {
@@ -219,77 +274,170 @@ function CapexLogSection({
               const progress = schedule ? capexAmortizationProgress(schedule, today.getFullYear(), today.getMonth()) : null
               const linkedContract = c.contractId != null ? prop.contracts.find((ct) => ct.id === c.contractId) : undefined
               return (
-                <div key={c.id} className="capex-item-wrap">
-                  <div className="capex-item">
-                    <div style={{ width: '110px', flexShrink: 0 }}>
-                      <div className="fs11 text3">Start</div>
-                      <div className="fs13 mono">{c.date || '—'}</div>
-                    </div>
-                    <div style={{ width: '110px', flexShrink: 0 }}>
-                      <div className="fs11 text3">End</div>
-                      <div className="fs13 mono">{c.dateEnd?.trim() ? c.dateEnd : '—'}</div>
-                    </div>
-                    <div style={{ width: '80px', flexShrink: 0 }}>
-                      <div className="fs11 text3">Weeks</div>
-                      <div className="fs13 fw5">{weeks !== null ? weeks : '—'}</div>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div className="fs11 text3">Description</div>
-                      <div className="fs13 fw5">{c.desc}</div>
-                      {c.provider && <div className="fs11 text3">{c.provider}</div>}
-                    </div>
-                    <span className={`badge ${c.cat === 'Improvement' ? 'rented' : c.cat === 'Equipment' ? 'override' : 'pending'}`}>
-                      {c.cat}
-                    </span>
-                    <span className={`badge ${c.status === 'Completed' ? 'rented' : c.status === 'Ongoing' ? 'override' : 'pending'}`}>
-                      {c.status ?? 'To do'}
-                    </span>
-                    <span className={`badge ${c.treatment === 'capitalize' ? 'override' : 'vacant'}`}>
-                      {CAPEX_TREATMENT_LABELS[c.treatment ?? 'expense']}
-                    </span>
-                    <div style={{ width: '130px', textAlign: 'right' }}>
-                      <div className="fs11 text3">Amount</div>
-                      <div className="fs13 fw6 neg">−{fmt(cx(c.amount))}</div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                      <button
-                        type="button"
-                        className="ghost"
-                        title="Edit CapEx entry"
-                        onClick={() => startEdit(c)}
-                        style={{ padding: '4px 8px', fontSize: 13 }}
-                      >
-                        ✎
-                      </button>
-                      <button
-                        type="button"
-                        className="ghost danger"
-                        title="Remove CapEx entry"
-                        onClick={() => removeItem(c.id)}
-                        style={{ padding: '4px 8px' }}
-                      >
-                        ×
-                      </button>
-                    </div>
+                <div key={c.id} className="capex-item">
+                  <div style={{ width: '90px', flexShrink: 0 }}>
+                    <div className="fs11 text3">Date</div>
+                    <div className="fs13 fw6">{formatMonthYear(c.date)}</div>
+                    <div className="fs13 text3">{formatMonthYear(c.dateEnd)}</div>
+                    {weeks !== null && <div className="fs11 text3" style={{ marginTop: 2 }}>{weeks} wks</div>}
                   </div>
-                  {schedule && progress && (
-                    <div>
-                      <div className="capex-progress-track">
-                        <div className="capex-progress-fill" style={{ width: `${progress.percent}%` }} />
+                  <div style={{ flex: 1 }}>
+                    <div className="fs11 text3">Description</div>
+                    <div className="fs13 fw5">{c.desc}</div>
+                    {c.provider && <div className="fs12 text3">{c.provider}</div>}
+                    {schedule && progress && (
+                      <div style={{ marginTop: 6 }}>
+                        <div className="flex align-center gap8" style={{ maxWidth: 280 }}>
+                          <span className="fs13 fw6" style={{ flexShrink: 0 }}>{Math.round(progress.percent)}%</span>
+                          <div className="capex-progress-track" style={{ flex: 1 }}>
+                            <div className="capex-progress-fill" style={{ width: `${progress.percent}%` }} />
+                          </div>
+                        </div>
+                        <div className="flex" style={{ justifyContent: 'space-between', maxWidth: 280, marginTop: 4 }}>
+                          <span className="fs11 text3">Amortized {fmt(cx(progress.amountAmortized))}</span>
+                          <span className="fs11 text3">{fmt(cx(progress.amountLeft))} left</span>
+                        </div>
+                        <div className="fs11 text3" style={{ marginTop: 2 }}>
+                          {linkedContract ? `Contract: ${linkedContract.tenant} · ` : ''}
+                          {progress.monthsElapsed} / {progress.totalMonths} mo
+                        </div>
                       </div>
-                      <div className="fs11 text3">
-                        {Math.round(progress.percent)}% · Amortized {fmt(cx(progress.amountAmortized))} · {fmt(cx(progress.amountLeft))} left
-                      </div>
-                      <div className="fs11 text3">
-                        {linkedContract ? `Contract: ${linkedContract.tenant} · ` : ''}
-                        {progress.monthsElapsed} / {progress.totalMonths} mo
-                      </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                  <span className={`badge ${c.cat === 'Improvement' ? 'rented' : c.cat === 'Equipment' ? 'override' : 'pending'}`}>
+                    {c.cat}
+                  </span>
+                  <span className={`badge ${c.status === 'Completed' ? 'rented' : c.status === 'Ongoing' ? 'override' : 'pending'}`}>
+                    {c.status ?? 'To do'}
+                  </span>
+                  <span className={`badge ${c.treatment === 'capitalize' ? 'override' : 'vacant'}`}>
+                    {c.treatment === 'capitalize' ? 'Capitalize' : 'Expense'}
+                  </span>
+                  <div style={{ width: '130px', textAlign: 'right' }}>
+                    <div className="fs11 text3">Amount</div>
+                    <div className="fs13 fw6 neg">−{fmt(cx(c.amount))}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      className="ghost"
+                      title="Edit CapEx entry"
+                      onClick={() => startEdit(c)}
+                      style={{ padding: '4px 8px', fontSize: 13 }}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost danger"
+                      title="Remove CapEx entry"
+                      onClick={() => removeItem(c.id)}
+                      style={{ padding: '4px 8px' }}
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
               )
             })}
           </div>
+        </div>
+      )}
+
+      {items.length > 0 && view === 'table' && (
+        <div className="card" style={{ overflow: 'hidden' }}>
+          <table className="cf-table">
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left' }}>Start</th>
+                <th style={{ textAlign: 'left' }}>End</th>
+                <th style={{ textAlign: 'left' }}>Description</th>
+                <th style={{ textAlign: 'left' }}>Provider</th>
+                <th style={{ textAlign: 'left' }}>Category</th>
+                <th style={{ textAlign: 'left' }}>Status</th>
+                <th style={{ textAlign: 'left' }}>Treatment</th>
+                <th>Amount</th>
+                <th>Amort. %</th>
+                <th>Months</th>
+                <th>Monthly Amort.</th>
+                <th style={{ width: 64, textAlign: 'center' }}>
+                  <button
+                    type="button"
+                    className="ghost"
+                    style={{ padding: 0, border: 'none', background: 'transparent', margin: '0 auto', display: 'block' }}
+                    title={copied ? 'Copied!' : 'Copy table'}
+                    onClick={handleCopy}
+                  >
+                    {copied ? <IconCheck /> : <IconCopy />}
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((c) => {
+                const schedule = buildCapexAmortizationSchedule(c, prop.contracts)
+                const today = new Date()
+                const progress = schedule ? capexAmortizationProgress(schedule, today.getFullYear(), today.getMonth()) : null
+                return (
+                  <tr key={c.id}>
+                    <td style={{ textAlign: 'left' }}>{formatMonthDay(c.date)}</td>
+                    <td style={{ textAlign: 'left' }}>{formatMonthDay(c.dateEnd)}</td>
+                    <td style={{ textAlign: 'left', fontWeight: 500 }}>{c.desc}</td>
+                    <td style={{ textAlign: 'left' }}>{c.provider || '—'}</td>
+                    <td style={{ textAlign: 'left' }}>
+                      <span className={`badge ${c.cat === 'Improvement' ? 'rented' : c.cat === 'Equipment' ? 'override' : 'pending'}`}>
+                        {c.cat}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'left' }}>
+                      <span className={`badge ${c.status === 'Completed' ? 'rented' : c.status === 'Ongoing' ? 'override' : 'pending'}`}>
+                        {c.status ?? 'To do'}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'left' }}>
+                      <span className={`badge ${c.treatment === 'capitalize' ? 'override' : 'vacant'}`}>
+                        {c.treatment === 'capitalize' ? 'Capitalize' : 'Expense'}
+                      </span>
+                    </td>
+                    <td className="neg">−{fmt(cx(c.amount))}</td>
+                    <td>{progress ? `${Math.round(progress.percent)}%` : '—'}</td>
+                    <td>{schedule ? `${schedule.totalMonths} mo` : '—'}</td>
+                    <td>{schedule ? fmt(cx(schedule.monthlyAmount)) : '—'}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+                        <button
+                          type="button"
+                          className="ghost"
+                          title="Edit CapEx entry"
+                          onClick={() => startEdit(c)}
+                          style={{ padding: '4px 8px', fontSize: 13 }}
+                        >
+                          ✎
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost danger"
+                          title="Remove CapEx entry"
+                          onClick={() => removeItem(c.id)}
+                          style={{ padding: '4px 8px' }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+              <tr className="total-row">
+                <td colSpan={7}>Total</td>
+                <td>−{fmt(cx(total))}</td>
+                <td />
+                <td />
+                <td />
+                <td />
+              </tr>
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -522,8 +670,42 @@ function CapexDepreciationTable({ prop, cx }: { prop: Property; cx: (n: number) 
 }
 
 export function CapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
+  const [view, setView] = useState<'gallery' | 'table'>('gallery')
+
   return (
     <div>
+      <div className="flex" style={{ justifyContent: 'flex-end', marginBottom: 12 }}>
+        <div className="view-toggle-group" role="group" aria-label="CapEx view">
+          <button
+            type="button"
+            className={`view-toggle-btn${view === 'gallery' ? ' active' : ''}`}
+            title="Gallery view"
+            aria-label="Gallery view"
+            aria-pressed={view === 'gallery'}
+            onClick={() => setView('gallery')}
+          >
+            <span
+              className="filter-bar-tool-mask-icon"
+              style={{ WebkitMaskImage: 'url("/Grid-view.svg")', maskImage: 'url("/Grid-view.svg")' }}
+              aria-hidden
+            />
+          </button>
+          <button
+            type="button"
+            className={`view-toggle-btn${view === 'table' ? ' active' : ''}`}
+            title="Table view"
+            aria-label="Table view"
+            aria-pressed={view === 'table'}
+            onClick={() => setView('table')}
+          >
+            <span
+              className="filter-bar-tool-mask-icon"
+              style={{ WebkitMaskImage: 'url("/List-view.svg")', maskImage: 'url("/List-view.svg")' }}
+              aria-hidden
+            />
+          </button>
+        </div>
+      </div>
       <CapexLogSection
         prop={prop}
         onUpdateProp={onUpdateProp}
@@ -534,6 +716,7 @@ export function CapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
         addLabel="+ Add Non-Recurring CapEx"
         emptyTitle="No non-recurring CapEx this year"
         emptyHint="Track one-time capital projects for this property"
+        view={view}
       />
       <CapexLogSection
         prop={prop}
@@ -545,6 +728,7 @@ export function CapexTab({ prop, onUpdateProp, cx = (n) => n }: Props) {
         addLabel="+ Add Recurring CapEx"
         emptyTitle="No recurring CapEx entries"
         emptyHint="Track ongoing capital reserves, repairs, and equipment replacements"
+        view={view}
       />
       <CapexDepreciationTable prop={prop} cx={cx} />
     </div>
