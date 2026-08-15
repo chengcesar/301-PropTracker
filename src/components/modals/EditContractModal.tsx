@@ -21,9 +21,9 @@ export function EditContractModal({ contract, currency, onSave, onClose }: Props
     paymentDay: contract.paymentDay,
     deposit: contract.deposit,
     increment: contract.increment,
-    ipcExtra: contract.ipcExtra,
-    fixedPct: contract.fixedPct,
-    cpiEstimatePct: contract.cpiEstimatePct,
+    ipcExtra: contract.ipcExtra ?? 1,
+    fixedPct: contract.fixedPct ?? 0,
+    cpiEstimatePct: contract.cpiEstimatePct ?? 0,
     adminFee: contract.adminFee,
     notes: contract.notes,
   })

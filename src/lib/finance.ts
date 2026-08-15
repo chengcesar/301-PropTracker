@@ -179,15 +179,20 @@ export function contractYearIndex(contract: Contract, date: Date): number {
   return years + 1
 }
 
+/** Treats a missing/non-finite stored percent (e.g. an older contract saved before a field existed) as 0 rather than letting it poison downstream arithmetic with NaN. */
+function finitePct(n: number | null | undefined): number {
+  return typeof n === 'number' && Number.isFinite(n) ? n : 0
+}
+
 /** Type-based increment %, ignoring any per-year override. Same value for every contract-year. */
 export function defaultIncrementPct(contract: Contract): number {
   switch (contract.increment) {
     case 'fixed':
-      return contract.fixedPct
+      return finitePct(contract.fixedPct)
     case 'ipc':
-      return contract.cpiEstimatePct
+      return finitePct(contract.cpiEstimatePct)
     case 'ipc+':
-      return contract.cpiEstimatePct + contract.ipcExtra
+      return finitePct(contract.cpiEstimatePct) + finitePct(contract.ipcExtra)
     case 'none':
     default:
       return 0
@@ -196,7 +201,8 @@ export function defaultIncrementPct(contract: Contract): number {
 
 /** Increment % actually applied for contract-year `yearIndex` — override if set, else the type-based default. */
 export function effectiveIncrementPct(contract: Contract, yearIndex: number): number {
-  return contract.yearOverrides?.[yearIndex] ?? defaultIncrementPct(contract)
+  const override = contract.yearOverrides?.[yearIndex]
+  return typeof override === 'number' && Number.isFinite(override) ? override : defaultIncrementPct(contract)
 }
 
 /** Rent for contract-year `yearIndex`, compounding the effective increment from year 1's base monthlyRent. */

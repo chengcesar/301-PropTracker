@@ -69,6 +69,16 @@ describe('defaultIncrementPct', () => {
   it('returns 0 for increment "none"', () => {
     expect(defaultIncrementPct(makeContract({ increment: 'none', fixedPct: 99 }))).toBe(0)
   })
+
+  it('treats a missing cpiEstimatePct (legacy/edited contract) as 0 instead of NaN', () => {
+    const c = makeContract({ increment: 'ipc', cpiEstimatePct: undefined })
+    expect(defaultIncrementPct(c)).toBe(0)
+  })
+
+  it('treats a missing ipcExtra as 0 when computing "ipc+"', () => {
+    const c = makeContract({ increment: 'ipc+', cpiEstimatePct: 5, ipcExtra: undefined })
+    expect(defaultIncrementPct(c)).toBe(5)
+  })
 })
 
 describe('effectiveIncrementPct', () => {
@@ -106,6 +116,15 @@ describe('rentForContractYear', () => {
     expect(rentForContractYear(c, 1)).toBe(1000)
     expect(rentForContractYear(c, 2)).toBe(1000) // override: 0% instead of 10%
     expect(rentForContractYear(c, 3)).toBeCloseTo(1100, 5) // year 3 has no override, +10% on top of year 2's 1000
+  })
+
+  it('does not go NaN in year 2+ when an "ipc" contract is missing cpiEstimatePct', () => {
+    // Reproduces a real portfolio bug: an edited/legacy contract with increment "ipc" but no
+    // cpiEstimatePct stored. Year 1 looked fine because the increment is never applied yet;
+    // crossing into year 2 turned the whole property's (and portfolio's) annual totals into NaN.
+    const c = makeContract({ monthlyRent: 4200, increment: 'ipc', cpiEstimatePct: undefined })
+    expect(rentForContractYear(c, 1)).toBe(4200)
+    expect(rentForContractYear(c, 2)).toBe(4200)
   })
 })
 
