@@ -19,6 +19,8 @@ import { AssetValueAppreciationCard } from '../components/AssetValueAppreciation
 import { PortfolioCapexDepreciationCard } from '../components/PortfolioCapexDepreciationCard'
 // @ts-ignore — JS component, types inferred as any
 import PortfolioReport from '../../Temp/PortfolioReport'
+// @ts-ignore — JS component, types inferred as any
+import DeferredMaintenanceCalculator from '../../Temp/deferred-maintenance-calculator'
 import { UpgradeModal } from '../components/modals/UpgradeModal'
 import { useEntitlements } from '../hooks/useEntitlements'
 import {
@@ -472,8 +474,8 @@ function AIAnalysisToolContent({ allProperties, initialFilters, year, displayCur
   return <PortfolioReport properties={propsToUse} year={year} displayCurrency={displayCurrency} onBack={onBack} onPaywall={onPaywall} />
 }
 
-const PORTFOLIO_TOOL_ICONS = ['/tool-icons/tool02.svg', '/tool-icons/tool01.svg', '/tool-icons/tool03.svg'] as const
-const PORTFOLIO_TOOL_LABELS = ['AI Analysis', 'Vacancy Calculator', 'Field Notes'] as const
+const PORTFOLIO_TOOL_ICONS = ['/tool-icons/tool02.svg', '/tool-icons/tool01.svg', '/tool-icons/tool03.svg', '/tool-icons/tool04.svg'] as const
+const PORTFOLIO_TOOL_LABELS = ['AI Analysis', 'Vacancy Calculator', 'Field Notes', 'Deferred Maintenance'] as const
 /** Properties table layout toggle — masked SVGs from `public/` */
 const FILTER_BAR_LIST_VIEW_ICON = '/List-view.svg' as const
 const FILTER_BAR_GRID_VIEW_ICON = '/Grid-view.svg' as const
@@ -2768,7 +2770,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                 aria-expanded={openToolModal === i}
                 onClick={() => {
                   setOpenToolModal(i)
-                  setToolModalMaximized(i === 0 && reportStep != null)
+                  setToolModalMaximized(i === 3 || (i === 0 && reportStep != null))
                 }}
               >
                 <span
@@ -4146,7 +4148,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                     <div className="modal-title" id="portfolio-tool-modal-title">
                       {PORTFOLIO_TOOL_LABELS[openToolModal]}
                     </div>
-                    <div className="modal-sub">{openToolModal === 0 ? 'Portfolio Performance Report' : 'Placeholder'}</div>
+                    <div className="modal-sub">{openToolModal === 0 ? 'Portfolio Performance Report' : openToolModal === 3 ? 'CapEx Deferral Analysis' : 'Placeholder'}</div>
                   </div>
                 </div>
               </div>
@@ -4174,7 +4176,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                 </button>
               </div>
             </div>
-            <div className="modal-body" style={{ minHeight: 100, paddingTop: openToolModal === 0 ? 0 : undefined }}>
+            <div className="modal-body" style={{ minHeight: 100, paddingTop: openToolModal === 0 || openToolModal === 3 ? 0 : undefined }}>
               {openToolModal === 0 ? (
                 <AIAnalysisToolContent
                   allProperties={properties}
@@ -4192,6 +4194,13 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                 <p style={{ fontSize: 14, color: 'var(--text3)', margin: 0, lineHeight: 1.5 }}>
                   New tool in progress
                 </p>
+              ) : openToolModal === 3 ? (
+                <DeferredMaintenanceCalculator
+                  properties={properties}
+                  displayCurrency={displayCurrency}
+                  fxRates={fxRates}
+                  year={selectedYear}
+                />
               ) : (
                 <p style={{ fontSize: 14, color: 'var(--text3)', margin: 0, lineHeight: 1.5 }}>
                   Tool content placeholder — connect UI here (see Temp/FundingRatioCalculator.jsx for a full goals table + breakdown).
