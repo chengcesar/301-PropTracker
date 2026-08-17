@@ -21,6 +21,8 @@ import { PortfolioCapexDepreciationCard } from '../components/PortfolioCapexDepr
 import PortfolioReport from '../../Temp/PortfolioReport'
 // @ts-ignore — JS component, types inferred as any
 import DeferredMaintenanceCalculator from '../../Temp/deferred-maintenance-calculator'
+// @ts-ignore — JS component, types inferred as any
+import DeferredMaintenanceCalculatorV2 from '../../Temp/deferred-maintenance-calculator-v2'
 import { UpgradeModal } from '../components/modals/UpgradeModal'
 import { useEntitlements } from '../hooks/useEntitlements'
 import {
@@ -474,8 +476,8 @@ function AIAnalysisToolContent({ allProperties, initialFilters, year, displayCur
   return <PortfolioReport properties={propsToUse} year={year} displayCurrency={displayCurrency} onBack={onBack} onPaywall={onPaywall} />
 }
 
-const PORTFOLIO_TOOL_ICONS = ['/tool-icons/tool02.svg', '/tool-icons/tool01.svg', '/tool-icons/tool03.svg', '/tool-icons/tool04.svg'] as const
-const PORTFOLIO_TOOL_LABELS = ['AI Analysis', 'Vacancy Calculator', 'Field Notes', 'Deferred Maintenance'] as const
+const PORTFOLIO_TOOL_ICONS = ['/tool-icons/tool02.svg', '/tool-icons/tool01.svg', '/tool-icons/tool03.svg', '/tool-icons/tool04.svg', '/tool-icons/tool04.svg'] as const
+const PORTFOLIO_TOOL_LABELS = ['AI Analysis', 'Vacancy Calculator', 'Field Notes', 'Deferred Maintenance', 'Deferred Maintenance V2'] as const
 /** Properties table layout toggle — masked SVGs from `public/` */
 const FILTER_BAR_LIST_VIEW_ICON = '/List-view.svg' as const
 const FILTER_BAR_GRID_VIEW_ICON = '/Grid-view.svg' as const
@@ -4148,7 +4150,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                     <div className="modal-title" id="portfolio-tool-modal-title">
                       {PORTFOLIO_TOOL_LABELS[openToolModal]}
                     </div>
-                    <div className="modal-sub">{openToolModal === 0 ? 'Portfolio Performance Report' : openToolModal === 3 ? 'CapEx Deferral Analysis' : 'Placeholder'}</div>
+                    <div className="modal-sub">{openToolModal === 0 ? 'Portfolio Performance Report' : openToolModal === 3 ? 'CapEx Deferral Analysis' : openToolModal === 4 ? 'Multi-Currency Prototype' : 'Placeholder'}</div>
                   </div>
                 </div>
               </div>
@@ -4176,7 +4178,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                 </button>
               </div>
             </div>
-            <div className="modal-body" style={{ minHeight: 100, paddingTop: openToolModal === 0 || openToolModal === 3 ? 0 : undefined }}>
+            <div className="modal-body" style={{ minHeight: 100, paddingTop: openToolModal === 0 || openToolModal === 3 || openToolModal === 4 ? 0 : undefined }}>
               {openToolModal === 0 ? (
                 <AIAnalysisToolContent
                   allProperties={properties}
@@ -4196,6 +4198,13 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                 </p>
               ) : openToolModal === 3 ? (
                 <DeferredMaintenanceCalculator
+                  properties={properties}
+                  displayCurrency={displayCurrency}
+                  fxRates={fxRates}
+                  year={selectedYear}
+                />
+              ) : openToolModal === 4 ? (
+                <DeferredMaintenanceCalculatorV2
                   properties={properties}
                   displayCurrency={displayCurrency}
                   fxRates={fxRates}
