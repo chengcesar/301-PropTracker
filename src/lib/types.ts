@@ -197,6 +197,8 @@ export interface Property {
   postalCode: string
   country: string
   currency: CurrencyCode
+  /** Cesar's economic ownership share (0–100). null = unknown (do NOT treat as 100). */
+  equityPct: number | null
   latitude?: number
   longitude?: number
   area: number

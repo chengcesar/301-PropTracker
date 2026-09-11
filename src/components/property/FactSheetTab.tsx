@@ -937,6 +937,21 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
                 <label>Custom ID</label>
                 <input type="text" placeholder="" value={fs.customId} onChange={(e) => set('customId', e.target.value)} />
               </div>
+              <div className="field">
+                <label>Equity %</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="e.g. 100"
+                  value={prop.equityPct != null ? String(prop.equityPct) : ''}
+                  onChange={(e) => {
+                    const t = e.target.value.trim()
+                    if (!t) { setProp('equityPct', null); return }
+                    const n = parseFloat(t.replace(/[^\d.]/g, ''))
+                    if (Number.isFinite(n) && n >= 0 && n <= 100) setProp('equityPct', n)
+                  }}
+                />
+              </div>
             </div>
           ) : (
             <div className="ct-fields">
@@ -944,6 +959,7 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
               <ReadOnlyField label="Cédula catastral" value={fs.cedulaCatastral} />
               <ReadOnlyField label="CHIP" value={fs.chip} />
               <ReadOnlyField label="Custom ID" value={fs.customId} />
+              <ReadOnlyField label="Equity %" value={prop.equityPct != null ? `${prop.equityPct}%` : null} />
             </div>
           )}
         </div>
