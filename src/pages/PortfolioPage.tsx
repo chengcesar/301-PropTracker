@@ -2437,6 +2437,10 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
           return y != null ? String(y) : ''
         },
       },
+      equityPct: {
+        label: 'Equity %',
+        value: (p) => p.equityPct != null ? `${p.equityPct}%` : '—',
+      },
       gpi: { label: `GPI (${dc})`, value: (p) => raw(convert(projectedGpiAnnual(withYear(p)), p.currency, dc, fxRates)) },
       egi: { label: `EGI (${dc})`, value: (_p, a) => raw(a.egi) },
       egiPerM2: {
