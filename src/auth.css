@@ -485,3 +485,146 @@
     width: 90vw;
   }
 }
+
+/* ── Grok Bot Modal ── */
+.grok-bot-modal {
+  max-width: 440px;
+}
+.grok-bot-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.grok-bot-header .auth-modal-title {
+  margin-bottom: 0;
+}
+.grok-bot-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.grok-bot-desc {
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+.grok-bot-key-display {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.grok-bot-key-display label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #15803d;
+  margin-bottom: 8px;
+}
+.grok-bot-key-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.grok-bot-key-value {
+  flex: 1;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  font-size: 11px;
+  color: #166534;
+  word-break: break-all;
+  background: #dcfce7;
+  padding: 8px 10px;
+  border-radius: 6px;
+  line-height: 1.4;
+}
+.grok-bot-copy-btn {
+  background: #22c55e;
+  border: none;
+  border-radius: 6px;
+  padding: 8px;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.grok-bot-copy-btn:hover {
+  background: #16a34a;
+}
+.grok-bot-key-warning {
+  font-size: 11px;
+  color: #b45309;
+  margin: 10px 0 0;
+  line-height: 1.4;
+}
+.grok-bot-status {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.grok-bot-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-bottom: 8px;
+}
+.grok-bot-status-active {
+  background: #dcfce7;
+  color: #15803d;
+}
+.grok-bot-status-inactive {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+.grok-bot-status-note {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.45;
+}
+.grok-bot-confirm-revoke {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.grok-bot-confirm-revoke p {
+  font-size: 13px;
+  color: #b91c1c;
+  margin: 0 0 12px;
+  line-height: 1.45;
+}
+.grok-bot-confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.grok-bot-revoke-btn {
+  background: #fef2f2 !important;
+  border-color: #fecaca !important;
+  color: #b91c1c !important;
+}
+.grok-bot-revoke-btn:hover:not(:disabled) {
+  background: #fee2e2 !important;
+  border-color: #f87171 !important;
+}
