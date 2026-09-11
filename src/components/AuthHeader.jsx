@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthConfirmDialog } from './AuthConfirmDialog';
 import { ChangePasswordModal } from './ChangePasswordModal';
+import GrokBotModal from './GrokBotModal';
 import { ACCENT_PRESETS, ACCENT_HEX_BY_PRESET } from '../lib/accentTheme';
 import { useContext } from 'react';
 import { AppStateContext } from '../context/app-state-context';
@@ -41,6 +42,7 @@ export default function AuthHeader() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [changePwOpen, setChangePwOpen] = useState(false);
+  const [grokBotOpen, setGrokBotOpen] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState('');
   const [verifyErr, setVerifyErr] = useState('');
   const [verifySending, setVerifySending] = useState(false);
@@ -236,6 +238,9 @@ export default function AuthHeader() {
                     Change password
                   </button>
                 )}
+                <button type="button" className="header-user-menu-btn" onClick={() => { setMenuOpen(false); setGrokBotOpen(true); }}>
+                  Connect Grok Bot
+                </button>
                 <button type="button" className="header-user-menu-btn header-user-menu-btn-danger" onClick={openDeleteModal}>
                   Delete account
                 </button>
@@ -256,6 +261,10 @@ export default function AuthHeader() {
         open={changePwOpen}
         onClose={() => setChangePwOpen(false)}
         changePassword={changePassword}
+      />
+      <GrokBotModal
+        open={grokBotOpen}
+        onClose={() => setGrokBotOpen(false)}
       />
       <AuthConfirmDialog
         open={deleteModalOpen}
