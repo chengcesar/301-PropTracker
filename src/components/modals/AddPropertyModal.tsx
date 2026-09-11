@@ -209,6 +209,7 @@ export function AddPropertyModal({ onSave, onClose }: Props) {
       postalCode: '',
       country: form.country,
       currency,
+      equityPct: null,
       latitude: pin?.lat,
       longitude: pin?.lng,
       area: parseNum(form.area),
