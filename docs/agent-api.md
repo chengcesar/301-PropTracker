@@ -104,7 +104,23 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
       "estValue": 185000.00,
       "capRate": 6.27,
       "vacancyMoRate": 0,
-      "margin": 70.83
+      "margin": 70.83,
+      "taxItems": [
+        {
+          "propertyId": "1",
+          "taxId": "CL 78 5 32 - AP 102",
+          "type": null,
+          "year": 2026,
+          "amount": 1400.00,
+          "amountPaid": null,
+          "currency": "USD",
+          "dueDate": "2026-03-31",
+          "paidDate": null,
+          "status": "paid",
+          "chip": null,
+          "label": null
+        }
+      ]
     }
   ],
   "totals": {
@@ -121,7 +137,8 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
   "meta": {
     "displayCurrencyNote": "All monetary values are converted to the display currency using embedded FX rates.",
     "fxRatesUpdatedAt": "2026-03-25",
-    "computedWith": "Same logic as PortfolioPage (calcAnnual, calcPortfolioTotalsIn)"
+    "computedWith": "Same logic as PortfolioPage (calcAnnual, calcPortfolioTotalsIn)",
+    "taxItemsNote": "Per-property taxes and totals.taxes equal sum of taxItems[].amount (impuesto a cargo). Fields type, amountPaid, paidDate, chip, and label are not yet stored in the data model and return null."
   }
 }
 ```
@@ -147,8 +164,9 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 | `opex` | Total operating expenses |
 | `noi` | Net Operating Income (EGI - OpEx) |
 | `capex` | Capital expenditures for the year |
-| `taxes` | Property taxes |
+| `taxes` | Property taxes (sum of taxItems amounts — see Tax Line Items) |
 | `net` | Net cash flow (NOI - CapEx - Taxes - One-time payments) |
+| `taxItems` | Array of tax line items for the requested year (see below) |
 | `netAmortized` | Net CF using amortized CapEx (book view) |
 | `estValue` | Estimated property value |
 | `capRate` | Capitalization rate (NOI / Value × 100) |
@@ -170,6 +188,97 @@ Aggregated values across all properties, converted to the display currency:
 | `net` | Total net cash flow |
 | `netAmortized` | Total net CF (amortized) |
 | `propertyCount` | Number of properties |
+
+#### Tax Line Items
+
+Each property includes a `taxItems` array with individual tax line items for the requested year (filtered by `dueDate` year when available).
+
+**Example taxItems array:**
+
+```json
+{
+  "taxItems": [
+    {
+      "propertyId": "1",
+      "taxId": "CL 78 5 32 - AP 102",
+      "type": null,
+      "year": 2026,
+      "amount": 815.42,
+      "amountPaid": null,
+      "currency": "USD",
+      "dueDate": "2026-03-31",
+      "paidDate": null,
+      "status": "paid",
+      "chip": null,
+      "label": null
+    },
+    {
+      "propertyId": "1",
+      "taxId": "CL 78 5 32 - PARK 1",
+      "type": null,
+      "year": 2026,
+      "amount": 112.50,
+      "amountPaid": null,
+      "currency": "USD",
+      "dueDate": "2026-03-31",
+      "paidDate": null,
+      "status": "pending",
+      "chip": null,
+      "label": null
+    }
+  ]
+}
+```
+
+**Example curl with tax items:**
+
+```bash
+curl -H "Authorization: Bearer YOUR_API_KEY" \
+  "https://your-app.vercel.app/api/agent-portfolio?year=2026&currency=COP"
+```
+
+**Tax Item Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `propertyId` | string | Property ID this tax item belongs to |
+| `taxId` | string | Stable identifier (from data or derived from item id) |
+| `type` | null | Tax type (e.g. "predial") — *not yet stored* |
+| `year` | number | Tax year (from dueDate or query parameter) |
+| `amount` | number \| null | Impuesto a cargo (tax liability), converted to display currency |
+| `amountPaid` | null | Amount paid — *not yet stored* |
+| `currency` | string | Display currency (matches query parameter) |
+| `dueDate` | string \| null | ISO date when tax is due |
+| `paidDate` | null | Payment date — *not yet stored* |
+| `status` | string | `paid`, `pending`, or `unknown` |
+| `chip` | null | Catastro CHIP code — *not yet stored per-item* |
+| `label` | null | Free-text notes — *not yet stored* |
+
+**Field Mapping from Data Model (TaxItem):**
+
+| API Field | Source | Notes |
+|-----------|--------|-------|
+| `propertyId` | `property.id` | Converted to string |
+| `taxId` | `TaxItem.taxId` | Falls back to `String(TaxItem.id)` if empty |
+| `type` | — | Not in data model, returns null |
+| `year` | `TaxItem.dueDate` | Extracted from dueDate; falls back to query year |
+| `amount` | `TaxItem.amount` | Converted to display currency |
+| `amountPaid` | — | Not in data model, returns null |
+| `dueDate` | `TaxItem.dueDate` | ISO date string |
+| `paidDate` | — | Not in data model, returns null |
+| `status` | `TaxItem.status` | `paid` or `pending`; defaults to `unknown` |
+| `chip` | — | Not stored per-item (factSheet.chip exists at property level) |
+| `label` | — | Not in data model, returns null |
+
+**Tax Totals Note:**
+
+The per-property `taxes` field and `totals.taxes` equal the sum of `taxItems[].amount` (impuesto a cargo — tax liability amounts), **not** `amountPaid`. This matches the behavior in PortfolioPage's `calcAnnual()` which sums `prop.taxes.items[].amount`.
+
+**Year Filtering:**
+
+Tax items are filtered by the `?year=` query parameter:
+- Items with a `dueDate` are included only if the dueDate's year matches the requested year
+- Items without a `dueDate` are always included (year is unknown)
 
 ## Error Responses
 
