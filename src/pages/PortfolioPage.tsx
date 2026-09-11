@@ -770,7 +770,7 @@ const KPI_META: Record<KpiKey, { label: string; cls?: string; negPrefix?: boolea
 const COL_KEYS = [
   'owner', 'country', 'status', 'nonLeaseOcc', 'endDate', 'taxStatus',
   'propertyType', 'bedrooms', 'area', 'bathrooms', 'parking', 'floor', 'estrato', 'yearBuilt', 'lastRenovation',
-  'estValue', 'valueYoY', 'ownedSince', 'debt', 'mtgYearsLeft',
+  'estValue', 'valueYoY', 'ownedSince', 'debt', 'mtgYearsLeft', 'equityPct',
   'gpi', 'egi', 'egiPerM2', 'vacancyMoRate', 'opex', 'noi', 'noiPerM2', 'valuePerM2', 'capRate', 'capex', 'yieldOnCapex', 'payback', 'taxes', 'netCf', 'netCfAmortized', 'margin',
 ] as const
 type ColKey = typeof COL_KEYS[number]
@@ -778,7 +778,7 @@ const COL_LABELS: Record<ColKey, string> = {
   owner: 'Owner', country: 'Country', status: 'Status', nonLeaseOcc: 'Occupancy', endDate: 'Months Left', taxStatus: 'Tax Status',
   propertyType: 'Type', bedrooms: 'Beds', area: 'Area', bathrooms: 'Baths', parking: 'Parking',
   floor: 'Floor', estrato: 'Estrato', yearBuilt: 'Year Built', lastRenovation: 'Renovation',
-  estValue: 'Est. value', valueYoY: 'Value YoY', ownedSince: 'Owned since', debt: 'Debt', mtgYearsLeft: 'Mortgage (yrs)',
+  estValue: 'Est. value', valueYoY: 'Value YoY', ownedSince: 'Owned since', debt: 'Debt', mtgYearsLeft: 'Mortgage (yrs)', equityPct: 'Equity %',
   gpi: 'GPI', egi: 'EGI', egiPerM2: '$/m²', vacancyMoRate: 'Vac. mo rate', opex: 'OPEX', noi: 'NOI',
   noiPerM2: 'NOI/m²', valuePerM2: 'Value/m²',
   capRate: 'Cap rate', capex: 'CAPEX', yieldOnCapex: 'Yield on CAPEX', payback: 'Payback (yrs)', taxes: 'Taxes', netCf: 'Net CF', netCfAmortized: 'Net CF (Amortized)', margin: 'Margin',
@@ -1006,6 +1006,8 @@ function formatCardMetricValue(
       if (y == null) return dash
       return { text: y === 0 ? '0' : String(y) }
     }
+    case 'equityPct':
+      return p.equityPct != null ? { text: `${p.equityPct}%` } : dash
     case 'gpi':
       return { text: fm(gpiRow) }
     case 'egi':
@@ -3545,6 +3547,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                       if (y == null) return <td key="mtgYearsLeft" className="text3">—</td>
                       return <td key="mtgYearsLeft">{y === 0 ? '0' : y}</td>
                     })(),
+                    equityPct: <td key="equityPct" className={p.equityPct != null ? '' : 'text3'}>{p.equityPct != null ? `${p.equityPct}%` : '—'}</td>,
                     gpi: <td key="gpi">{fm(gpiRow)}</td>,
                     egi: <td key="egi" className="pos">{fm(a.egi)}</td>,
                     egiPerM2: (() => {
@@ -3663,6 +3666,7 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                       </td>
                     ),
                     mtgYearsLeft: <td key="mtgYearsLeft" />,
+                    equityPct: <td key="equityPct" />,
                     gpi: <td key="gpi">{fm(portfolioProjectedGpi)}</td>,
                     egi: <td key="egi">{fm(totals.egi)}</td>,
                     egiPerM2: (
