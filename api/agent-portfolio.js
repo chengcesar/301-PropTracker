@@ -150,6 +150,9 @@ export default async function handler(req, res) {
     // Margin (Net CF / GPI)
     const margin = gpi > 0 ? (annualInDc.netCf / gpi) * 100 : null
 
+    // Process tax items for this property
+    const taxItems = processTaxItems(prop, year, displayCurrency, fxRates)
+
     return {
       // Identity fields
       id: prop.id,
@@ -191,6 +194,9 @@ export default async function handler(req, res) {
       capRate: capRate != null ? round2(capRate) : null,
       vacancyMoRate,
       margin: margin != null ? round2(margin) : null,
+
+      // Tax line items for the requested year
+      taxItems,
     }
   })
 
@@ -227,6 +233,7 @@ export default async function handler(req, res) {
       displayCurrencyNote: 'All monetary values are converted to the display currency using embedded FX rates.',
       fxRatesUpdatedAt: fxRates.updatedAt,
       computedWith: 'Same logic as PortfolioPage (calcAnnual, calcPortfolioTotalsIn)',
+      taxItemsNote: 'Per-property taxes and totals.taxes equal sum of taxItems[].amount (impuesto a cargo). Fields type, amountPaid, paidDate, chip, and label are not yet stored in the data model and return null.',
     },
   }
 
@@ -236,4 +243,50 @@ export default async function handler(req, res) {
 function round2(n) {
   if (n == null || !Number.isFinite(n)) return n
   return Math.round(n * 100) / 100
+}
+
+/**
+ * Process tax items for a property, filtering by year and converting currency.
+ * Year filtering: if item has dueDate, filter by dueDate's year; otherwise include (year unknown).
+ * 
+ * @param {Object} prop - The property object
+ * @param {number} year - The requested year
+ * @param {string} displayCurrency - Target currency for conversion
+ * @param {Object} fxRates - FX rates object
+ * @returns {Array} Array of processed tax items
+ */
+function processTaxItems(prop, year, displayCurrency, fxRates) {
+  const items = prop.taxes?.items ?? []
+  const propCurrency = prop.currency || 'USD'
+
+  return items
+    .filter(item => {
+      if (!item.dueDate) return true
+      const dueDateYear = new Date(item.dueDate + 'T12:00:00').getFullYear()
+      return dueDateYear === year
+    })
+    .map(item => {
+      const dueDateYear = item.dueDate
+        ? new Date(item.dueDate + 'T12:00:00').getFullYear()
+        : null
+
+      const convertedAmount = item.amount != null
+        ? convert(item.amount, propCurrency, displayCurrency, fxRates)
+        : null
+
+      return {
+        propertyId: String(prop.id),
+        taxId: item.taxId || String(item.id),
+        type: null,
+        year: dueDateYear ?? year,
+        amount: convertedAmount != null ? round2(convertedAmount) : null,
+        amountPaid: null,
+        currency: displayCurrency,
+        dueDate: item.dueDate || null,
+        paidDate: null,
+        status: item.status || 'unknown',
+        chip: null,
+        label: null,
+      }
+    })
 }
