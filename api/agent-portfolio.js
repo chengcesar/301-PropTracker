@@ -18,9 +18,9 @@ import {
   nonLeaseOccupancyLabel,
   estimatedPropertyValueAtYear,
   vacancyLossMonthCount,
-  DEFAULT_FX_RATES,
   normalizeCurrencyCode,
 } from './_finance.js'
+import { getFxRates } from './_fxHelper.js'
 
 function extractApiKey(req) {
   const authHeader = req.headers['authorization'] || req.headers['Authorization'] || ''
@@ -100,8 +100,8 @@ export default async function handler(req, res) {
   const queryCurrency = normalizeCurrencyCode(req.query.currency)
   const displayCurrency = queryCurrency || 'USD'
 
-  // Use default FX rates (could be enhanced to fetch live rates)
-  const fxRates = { ...DEFAULT_FX_RATES }
+  // Fetch live FX rates (with fallback to embedded defaults)
+  const { rates: fxRates, meta: fxMeta } = await getFxRates()
 
   // Process each property to include annual KPIs
   const propertyRows = properties.map(prop => {
@@ -231,8 +231,11 @@ export default async function handler(req, res) {
       propertyCount: properties.length,
     },
     meta: {
-      displayCurrencyNote: 'All monetary values are converted to the display currency using embedded FX rates.',
-      fxRatesUpdatedAt: fxRates.updatedAt,
+      displayCurrencyNote: `All monetary values are converted to the display currency using ${fxMeta.fxSource === 'live' ? 'live' : 'fallback'} FX rates.`,
+      fxSource: fxMeta.fxSource,
+      fxRatesUpdatedAt: fxMeta.fxRatesUpdatedAt,
+      fxRateCopPerUsd: fxMeta.fxRateCopPerUsd,
+      fxNote: fxMeta.fxNote,
       computedWith: 'Same logic as PortfolioPage (calcAnnual, calcPortfolioTotalsIn)',
       taxItemsNote: 'Per-property taxes and totals.taxes equal sum of taxItems[].amount (impuesto a cargo). Fields type, amountPaid, paidDate, chip, and label are not yet stored in the data model and return null.',
     },
