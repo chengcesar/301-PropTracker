@@ -1624,22 +1624,36 @@ const IconRefresh = () => (
   </svg>
 )
 
+const FX_EDITOR_CODES = ['COP', 'PEN', 'EUR', 'GBP', 'CHF'] as const
+
+function formatUnitsPerUsd(code: (typeof FX_EDITOR_CODES)[number], usdPerUnit: number): string {
+  if (usdPerUnit <= 0) return ''
+  const units = 1 / usdPerUnit
+  if (code === 'COP') return String(Math.round(units))
+  if (code === 'PEN') return String(Math.round(units * 100) / 100)
+  return units.toFixed(4)
+}
+
 function FxRateEditor({ rates, onRatesChange, onClose }: {
   rates: FxRates
   onRatesChange: (r: FxRates) => void
   onClose: () => void
 }) {
-  const [copDraft, setCopDraft] = useState('')
-  const [penDraft, setPenDraft] = useState('')
+  const [drafts, setDrafts] = useState<Record<(typeof FX_EDITOR_CODES)[number], string>>({
+    COP: '', PEN: '', EUR: '', GBP: '', CHF: '',
+  })
   const [refreshing, setRefreshing] = useState(false)
   const [updatedAt, setUpdatedAt] = useState(getRatesUpdatedAt())
-  const copOverride = hasRateOverride('COP')
-  const penOverride = hasRateOverride('PEN')
 
   useEffect(() => {
-    setCopDraft(rates.COP > 0 ? String(Math.round(1 / rates.COP)) : '')
-    setPenDraft(rates.PEN > 0 ? String(Math.round((1 / rates.PEN) * 100) / 100) : '')
-  }, [rates.COP, rates.PEN])
+    setDrafts({
+      COP: formatUnitsPerUsd('COP', rates.COP),
+      PEN: formatUnitsPerUsd('PEN', rates.PEN),
+      EUR: formatUnitsPerUsd('EUR', rates.EUR),
+      GBP: formatUnitsPerUsd('GBP', rates.GBP),
+      CHF: formatUnitsPerUsd('CHF', rates.CHF),
+    })
+  }, [rates.COP, rates.PEN, rates.EUR, rates.GBP, rates.CHF])
 
   const handleRefreshLive = async () => {
     setRefreshing(true)
@@ -1652,33 +1666,17 @@ function FxRateEditor({ rates, onRatesChange, onClose }: {
     }
   }
 
-  const handleSaveCopOverride = () => {
-    const copPerUsd = parseFloat(copDraft)
-    if (copPerUsd > 0) {
-      const usdPerCop = 1 / copPerUsd
-      setRateOverride('COP', usdPerCop)
-      onRatesChange({ ...rates, COP: usdPerCop })
+  const handleSave = (code: (typeof FX_EDITOR_CODES)[number]) => {
+    const unitsPerUsd = parseFloat(drafts[code])
+    if (unitsPerUsd > 0) {
+      const usdPerUnit = 1 / unitsPerUsd
+      setRateOverride(code, usdPerUnit)
+      onRatesChange({ ...rates, [code]: usdPerUnit })
     }
   }
 
-  const handleSavePenOverride = () => {
-    const penPerUsd = parseFloat(penDraft)
-    if (penPerUsd > 0) {
-      const usdPerPen = 1 / penPerUsd
-      setRateOverride('PEN', usdPerPen)
-      onRatesChange({ ...rates, PEN: usdPerPen })
-    }
-  }
-
-  const handleClearCopOverride = async () => {
-    clearRateOverride('COP')
-    const freshRates = await fetchExchangeRates(true)
-    onRatesChange(freshRates)
-    setUpdatedAt(freshRates.updatedAt)
-  }
-
-  const handleClearPenOverride = async () => {
-    clearRateOverride('PEN')
+  const handleClear = async (code: (typeof FX_EDITOR_CODES)[number]) => {
+    clearRateOverride(code)
     const freshRates = await fetchExchangeRates(true)
     onRatesChange(freshRates)
     setUpdatedAt(freshRates.updatedAt)
@@ -1688,10 +1686,10 @@ function FxRateEditor({ rates, onRatesChange, onClose }: {
     <div style={{
       position: 'absolute', right: 0, top: '100%', marginTop: 6,
       background: '#fff', border: '1px solid var(--border)', borderRadius: 12,
-      boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 300,
-      padding: 16, animation: 'selectSlideIn 0.15s ease-out',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 260,
+      padding: 10, animation: 'selectSlideIn 0.15s ease-out',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
           FX Rates (to USD)
         </div>
@@ -1699,98 +1697,58 @@ function FxRateEditor({ rates, onRatesChange, onClose }: {
           className="ghost"
           onClick={handleRefreshLive}
           disabled={refreshing}
-          style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: refreshing ? 0.5 : 1 }}
+          style={{ padding: '2px 6px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: refreshing ? 0.5 : 1 }}
           title="Refresh live rates"
         >
           <IconRefresh /> {refreshing ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
 
-      {/* COP Rate */}
-      <div style={{ marginBottom: 14, padding: 10, background: '#f9fafb', borderRadius: 8, border: copOverride ? '1px solid #f59e0b' : '1px solid transparent' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-          <img src={flagUrl('COP')} alt="" width={18} height={13} style={{ borderRadius: 2, objectFit: 'cover' }} />
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>COP</span>
-          <span style={{ fontSize: 12, color: '#6b7280' }}>Colombian Peso</span>
-          {copOverride && (
-            <span style={{ fontSize: 10, fontWeight: 600, color: '#f59e0b', background: '#fef3c7', padding: '2px 6px', borderRadius: 4, marginLeft: 'auto' }}>
-              Override
-            </span>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>1 USD =</span>
-          <input
-            type="text"
-            value={copDraft}
-            onChange={(e) => setCopDraft(e.target.value)}
-            placeholder={rates.COP > 0 ? String(Math.round(1 / rates.COP)) : ''}
-            style={{ flex: 1, padding: '6px 10px', fontSize: 13, background: '#fff', border: '1px solid #e8ecf2', borderRadius: 8, minWidth: 0 }}
-          />
-          <span style={{ fontSize: 12, color: '#6b7280' }}>COP</span>
-        </div>
-        <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
-          {copOverride && (
-            <button className="ghost" style={{ fontSize: 11, padding: '4px 8px', color: '#6b7280' }} onClick={handleClearCopOverride}>
-              Use live rate
-            </button>
-          )}
-          <button className="primary" style={{ fontSize: 11, padding: '4px 10px' }} onClick={handleSaveCopOverride}>
-            Save
-          </button>
-        </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {FX_EDITOR_CODES.map((code) => {
+          const isOverride = hasRateOverride(code)
+          const currentUnits = rates[code] > 0 ? 1 / rates[code] : NaN
+          const draftUnits = parseFloat(drafts[code])
+          const canSave = Number.isFinite(draftUnits) && draftUnits > 0 && (
+            !Number.isFinite(currentUnits) || Math.abs(draftUnits - currentUnits) > 1e-6
+          )
+          return (
+            <div key={code} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
+              <img src={flagUrl(code)} alt="" width={16} height={12} style={{ borderRadius: 2, objectFit: 'cover', flexShrink: 0 }} />
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#374151', width: 30, flexShrink: 0 }}>{code}</span>
+              <input
+                type="text"
+                value={drafts[code]}
+                onChange={(e) => setDrafts((d) => ({ ...d, [code]: e.target.value }))}
+                placeholder={formatUnitsPerUsd(code, rates[code])}
+                style={{ flex: 1, height: 26, padding: '0 8px', fontSize: 12, background: '#f7f9fc', border: `1px solid ${isOverride ? '#f59e0b' : '#e8ecf2'}`, borderRadius: 6, minWidth: 0 }}
+              />
+              {isOverride && (
+                <button className="ghost" style={{ fontSize: 10, padding: '2px 6px', color: '#6b7280', flexShrink: 0 }} onClick={() => handleClear(code)}>
+                  Live
+                </button>
+              )}
+              <button
+                className={canSave ? 'primary' : undefined}
+                disabled={!canSave}
+                onClick={() => handleSave(code)}
+                style={{
+                  fontSize: 11, padding: '0 8px', height: 26, flexShrink: 0, fontWeight: 600,
+                  borderRadius: 6,
+                  ...(canSave ? {} : {
+                    background: '#e5e7eb', color: '#9ca3af', border: 'none',
+                    cursor: 'default', opacity: 1,
+                  }),
+                }}
+              >
+                Save
+              </button>
+            </div>
+          )
+        })}
       </div>
 
-      {/* PEN Rate */}
-      <div style={{ marginBottom: 14, padding: 10, background: '#f9fafb', borderRadius: 8, border: penOverride ? '1px solid #f59e0b' : '1px solid transparent' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-          <img src={flagUrl('PEN')} alt="" width={18} height={13} style={{ borderRadius: 2, objectFit: 'cover' }} />
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>PEN</span>
-          <span style={{ fontSize: 12, color: '#6b7280' }}>Peruvian Sol</span>
-          {penOverride && (
-            <span style={{ fontSize: 10, fontWeight: 600, color: '#f59e0b', background: '#fef3c7', padding: '2px 6px', borderRadius: 4, marginLeft: 'auto' }}>
-              Override
-            </span>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>1 USD =</span>
-          <input
-            type="text"
-            value={penDraft}
-            onChange={(e) => setPenDraft(e.target.value)}
-            placeholder={rates.PEN > 0 ? String(Math.round((1 / rates.PEN) * 100) / 100) : ''}
-            style={{ flex: 1, padding: '6px 10px', fontSize: 13, background: '#fff', border: '1px solid #e8ecf2', borderRadius: 8, minWidth: 0 }}
-          />
-          <span style={{ fontSize: 12, color: '#6b7280' }}>PEN</span>
-        </div>
-        <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
-          {penOverride && (
-            <button className="ghost" style={{ fontSize: 11, padding: '4px 8px', color: '#6b7280' }} onClick={handleClearPenOverride}>
-              Use live rate
-            </button>
-          )}
-          <button className="primary" style={{ fontSize: 11, padding: '4px 10px' }} onClick={handleSavePenOverride}>
-            Save
-          </button>
-        </div>
-      </div>
-
-      {/* Other rates (read-only display) */}
-      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8, borderTop: '1px solid #e8ecf2', paddingTop: 10 }}>
-        Other rates (live)
-      </div>
-      {(['EUR', 'GBP', 'CHF'] as const).map(code => (
-        <div key={code} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <img src={flagUrl(code)} alt="" width={14} height={10} style={{ borderRadius: 2, objectFit: 'cover' }} />
-            {code}
-          </span>
-          <span>1 USD = {rates[code] > 0 ? (1 / rates[code]).toFixed(4) : '—'}</span>
-        </div>
-      ))}
-
-      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span>Updated: {updatedAt}</span>
         <button className="ghost" style={{ fontSize: 11, padding: '2px 6px' }} onClick={onClose}>Close</button>
       </div>
@@ -2725,16 +2683,12 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
             <div ref={fxRef} className="hide-mobile" style={{ position: 'relative' }}>
               <button
                 className="ghost"
-                style={{ padding: '5px 10px', fontSize: 12, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6, position: 'relative' }}
+                style={{ padding: '5px 8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
                 title="FX Rates"
                 onClick={() => setFxOpen(v => !v)}
               >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M1.5 8h13"/><path d="M8 1.5c1.86 2.08 2.92 4.78 2.92 6.5S9.86 12.42 8 14.5c-1.86-2.08-2.92-4.78-2.92-6.5S6.14 3.58 8 1.5z"/></svg>
-                <span style={{ color: '#374151', fontWeight: 600 }}>
-                  {fxRates.COP > 0 ? `$${Math.round(1 / fxRates.COP).toLocaleString()}` : '—'}
-                </span>
-                <span style={{ color: '#9ca3af', fontSize: 10 }}>COP/USD</span>
-                {(hasRateOverride('COP') || hasRateOverride('PEN')) && (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M1.5 8h13"/><path d="M8 1.5c1.86 2.08 2.92 4.78 2.92 6.5S9.86 12.42 8 14.5c-1.86-2.08-2.92-4.78-2.92-6.5S6.14 3.58 8 1.5z"/></svg>
+                {FX_EDITOR_CODES.some((code) => hasRateOverride(code)) && (
                   <span style={{
                     position: 'absolute', top: 2, right: 2,
                     width: 6, height: 6, borderRadius: '50%',
