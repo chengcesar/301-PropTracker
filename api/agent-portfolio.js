@@ -172,7 +172,6 @@ export default async function handler(req, res) {
       floors: prop.floors ?? null,
       latitude: prop.latitude ?? null,
       longitude: prop.longitude ?? null,
-      equityPct: prop.equityPct ?? null,
 
       // Occupancy / status
       status,

@@ -89,7 +89,6 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
       "floors": 1,
       "latitude": 4.6097,
       "longitude": -74.0817,
-      "equityPct": 100,
       "status": "Leased",
       "occupancy": "Leased",
       "monthsLeft": 8,
@@ -158,7 +157,6 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 | `area` | Area in square meters |
 | `bedrooms`, `bathrooms`, `parking`, `storageUnits`, `floors` | Property attributes |
 | `latitude`, `longitude` | Geo coordinates (if available) |
-| `equityPct` | Owner's economic share (0–100), or `null` when unknown |
 | `status` | `Leased`, `Vacant`, or `Occupied` |
 | `occupancy` | Detailed occupancy label |
 | `monthsLeft` | Months remaining on active lease (null if no lease) |
