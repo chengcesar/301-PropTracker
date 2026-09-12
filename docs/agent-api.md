@@ -126,6 +126,41 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
           "chip": null,
           "label": null
         }
+      ],
+      "services": [
+        {
+          "propertyId": "1",
+          "serviceId": "1694023456789",
+          "provider": "ETB",
+          "type": "Internet",
+          "accountNumber": "12634590",
+          "monthlyCost": 45.00,
+          "annualCost": 540.00,
+          "currency": "USD",
+          "year": 2026,
+          "notes": "Fibra 300 Mbps"
+        }
+      ],
+      "capexItems": [
+        {
+          "propertyId": "1",
+          "capexId": "1694023456800",
+          "desc": "Kitchen renovation",
+          "provider": "ABC Contractors",
+          "cat": "Improvement",
+          "date": "2025-06-15",
+          "dateEnd": "2025-08-01",
+          "amount": 15000.00,
+          "treatment": "capitalize",
+          "amortizeBasis": "contract",
+          "amortizeMonths": null,
+          "contractId": "1",
+          "yearDepreciation": 5000.00,
+          "currency": "USD",
+          "year": 2026,
+          "status": "Completed",
+          "recurring": false
+        }
       ]
     }
   ],
@@ -147,7 +182,9 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
     "fxRateCopPerUsd": 3105.8,
     "fxNote": "Live rates from exchangerate-api.com",
     "computedWith": "Same logic as PortfolioPage (calcAnnual, calcPortfolioTotalsIn)",
-    "taxItemsNote": "Per-property taxes and totals.taxes equal sum of taxItems[].amount (impuesto a cargo). Fields type, amountPaid, paidDate, chip, and label are not yet stored in the data model and return null."
+    "taxItemsNote": "Per-property taxes and totals.taxes equal sum of taxItems[].amount (impuesto a cargo). Fields type, amountPaid, paidDate, chip, and label are not yet stored in the data model and return null.",
+    "servicesNote": "services[] exposes recurring service/utility accounts. annualCost = monthlyCost × 12. opex is computed from actual monthly expense entries + maintenance events — it does NOT equal sum of services[].annualCost. Services act as metadata; actual monthly OpEx may differ. When services are inherited from another year (no entries for requested year), resolvedFromYear indicates the source year.",
+    "capexItemsNote": "capexItems[] exposes CapEx line items with depreciation. yearDepreciation is the amount landing in the requested year: for capitalize treatment, sum of 12 months of straight-line depreciation; for expense treatment, full amount if dated in the year. Sum of yearDepreciation should reconcile to property netAmortized capex component. amount is the original cash outlay."
   }
 }
 ```
@@ -182,6 +219,8 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 | `taxes` | Property taxes (sum of taxItems amounts — see Tax Line Items) |
 | `net` | Net cash flow (NOI - CapEx - Taxes - One-time payments) |
 | `taxItems` | Array of tax line items for the requested year (see below) |
+| `services` | Array of recurring service/utility line items (see Services Line Items) |
+| `capexItems` | Array of CapEx / depreciation line items (see CapEx Line Items) |
 | `netAmortized` | Net CF using amortized CapEx (book view) |
 | `estValue` | Estimated property value |
 | `capRate` | Capitalization rate (NOI / Value × 100) |
@@ -345,6 +384,205 @@ The per-property `taxes` field and `totals.taxes` equal the sum of `taxItems[].a
 Tax items are filtered by the `?year=` query parameter:
 - Items with a `dueDate` are included only if the dueDate's year matches the requested year
 - Items without a `dueDate` are always included (year is unknown)
+
+#### Services Line Items
+
+Each property includes a `services` array with recurring service/utility accounts. Services use the same year-scoping behavior as the UI: if no services exist for the requested year, they are inherited from the nearest year with service entries.
+
+**Example services array:**
+
+```json
+{
+  "services": [
+    {
+      "propertyId": "1",
+      "serviceId": "1694023456789",
+      "provider": "ETB",
+      "type": "Internet",
+      "accountNumber": "12634590",
+      "monthlyCost": 45.00,
+      "annualCost": 540.00,
+      "currency": "USD",
+      "year": 2026,
+      "notes": "Fibra 300 Mbps"
+    },
+    {
+      "propertyId": "1",
+      "serviceId": "1694023456790",
+      "provider": "EPM",
+      "type": "Electricity",
+      "accountNumber": null,
+      "monthlyCost": 85.00,
+      "annualCost": 1020.00,
+      "currency": "USD",
+      "year": 2026,
+      "notes": null,
+      "resolvedFromYear": 2025
+    }
+  ]
+}
+```
+
+**Example curl with services:**
+
+```bash
+curl -H "Authorization: Bearer YOUR_API_KEY" \
+  "https://your-app.vercel.app/api/agent-portfolio?year=2026&currency=USD"
+```
+
+**Service Item Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `propertyId` | string | Property ID this service belongs to |
+| `serviceId` | string | Stable identifier (from `ServiceEntry.id`) |
+| `provider` | string | Service provider name (e.g. "ETB", "EPM") |
+| `type` | string | Service category (e.g. "Internet", "Electricity", "Water", "Admin") |
+| `accountNumber` | string \| null | Account number, null if empty |
+| `monthlyCost` | number | Monthly cost, converted to display currency |
+| `annualCost` | number | Annual cost (`monthlyCost × 12`), converted to display currency |
+| `currency` | string | Display currency (matches query parameter) |
+| `year` | number | Requested year |
+| `notes` | string \| null | Free-text notes, null if empty |
+| `resolvedFromYear` | number \| undefined | Present only when services are inherited from a different year |
+
+**Field Mapping from Data Model (ServiceEntry):**
+
+| API Field | Source | Notes |
+|-----------|--------|-------|
+| `propertyId` | `property.id` | Converted to string |
+| `serviceId` | `ServiceEntry.id` | Converted to string |
+| `provider` | `ServiceEntry.provider` | Provider/company name |
+| `type` | `ServiceEntry.type` | Category as stored |
+| `accountNumber` | `ServiceEntry.accountNumber` | Null if empty |
+| `monthlyCost` | `ServiceEntry.monthlyCost` | Converted to display currency |
+| `annualCost` | `ServiceEntry.monthlyCost × 12` | Simple annualization |
+| `notes` | `ServiceEntry.notes` | Null if empty |
+| `resolvedFromYear` | — | Computed: present when services inherited from another year |
+
+**Services vs OpEx Note:**
+
+The `services[]` array exposes recurring service/utility account metadata. **Important**: the per-property `opex` field is computed from actual monthly expense entries plus maintenance events — it does **NOT** equal the sum of `services[].annualCost`. Services act as templates/metadata; actual monthly OpEx may differ based on manual expense entries in each month.
+
+**Year Resolution:**
+
+Services use the same inheritance behavior as the ServicesTab UI:
+1. If the property has services for the requested year, those are returned
+2. Otherwise, services are inherited from the nearest year with entries
+3. When inherited, the `resolvedFromYear` field indicates the source year
+4. If no services exist at all, `services` is an empty array
+
+#### CapEx Line Items
+
+Each property includes a `capexItems` array with capital expenditure details and depreciation for the requested year.
+
+**Example capexItems array:**
+
+```json
+{
+  "capexItems": [
+    {
+      "propertyId": "1",
+      "capexId": "1694023456800",
+      "desc": "Kitchen renovation",
+      "provider": "ABC Contractors",
+      "cat": "Improvement",
+      "date": "2025-06-15",
+      "dateEnd": "2025-08-01",
+      "amount": 15000.00,
+      "treatment": "capitalize",
+      "amortizeBasis": "contract",
+      "amortizeMonths": null,
+      "contractId": "1",
+      "yearDepreciation": 5000.00,
+      "currency": "USD",
+      "year": 2026,
+      "status": "Completed",
+      "recurring": false
+    },
+    {
+      "propertyId": "1",
+      "capexId": "1694023456801",
+      "desc": "Emergency plumbing repair",
+      "provider": null,
+      "cat": "Repair",
+      "date": "2026-03-10",
+      "dateEnd": null,
+      "amount": 800.00,
+      "treatment": "expense",
+      "amortizeBasis": null,
+      "amortizeMonths": null,
+      "contractId": null,
+      "yearDepreciation": 800.00,
+      "currency": "USD",
+      "year": 2026,
+      "status": "Completed",
+      "recurring": false
+    }
+  ]
+}
+```
+
+**Example curl with capexItems:**
+
+```bash
+curl -H "Authorization: Bearer YOUR_API_KEY" \
+  "https://your-app.vercel.app/api/agent-portfolio?year=2026&currency=USD"
+```
+
+**CapEx Item Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `propertyId` | string | Property ID this item belongs to |
+| `capexId` | string | Stable identifier from `CapexItem.id` |
+| `desc` | string | Description of the capital expenditure |
+| `provider` | string \| null | Service provider / contractor name |
+| `cat` | string | Category: `Improvement`, `Equipment`, `Repair`, or `Other` |
+| `date` | string \| null | Start date (ISO date string) |
+| `dateEnd` | string \| null | End date if multi-day project |
+| `amount` | number | Original cash outlay, converted to display currency |
+| `treatment` | string | `capitalize` (depreciate) or `expense` (immediate) |
+| `amortizeBasis` | string \| null | `manual` or `contract` (only when treatment = capitalize) |
+| `amortizeMonths` | number \| null | Manual depreciation months (only when amortizeBasis = manual) |
+| `contractId` | string \| null | Linked contract ID (only when amortizeBasis = contract) |
+| `yearDepreciation` | number | Depreciation/expense landing in requested year (see below) |
+| `currency` | string | Display currency |
+| `year` | number | Requested year |
+| `status` | string \| null | `To do`, `Ongoing`, or `Completed` |
+| `recurring` | boolean | Whether this is a recurring capital reserve item |
+
+**Field Mapping from Data Model (CapexItem):**
+
+| API Field | Source | Notes |
+|-----------|--------|-------|
+| `propertyId` | `property.id` | Converted to string |
+| `capexId` | `CapexItem.id` | Converted to string |
+| `desc` | `CapexItem.desc` | Description |
+| `provider` | `CapexItem.provider` | Null if empty |
+| `cat` | `CapexItem.cat` | Category |
+| `date` | `CapexItem.date` | ISO date string |
+| `dateEnd` | `CapexItem.dateEnd` | Null if not set |
+| `amount` | `CapexItem.amount` | Converted to display currency |
+| `treatment` | `CapexItem.treatment` | Defaults to `expense` if unset |
+| `amortizeBasis` | `CapexItem.amortizeBasis` | Only for capitalized items |
+| `amortizeMonths` | `CapexItem.amortizeMonths` | Only for manual basis |
+| `contractId` | `CapexItem.contractId` | Only for contract basis |
+| `yearDepreciation` | computed | See depreciation logic below |
+| `status` | `CapexItem.status` | Null if not set |
+| `recurring` | `CapexItem.recurring` | Defaults to false |
+
+**yearDepreciation Calculation:**
+
+The `yearDepreciation` field represents the amount of this CapEx item that lands in the requested year:
+
+- **`treatment = capitalize`**: Sum of 12 months of straight-line depreciation for the year. Monthly depreciation = `amount / totalMonths`. For `amortizeBasis = manual`, totalMonths comes from `amortizeMonths`. For `amortizeBasis = contract`, totalMonths is computed from the linked contract's duration.
+
+- **`treatment = expense`** (or unset): Full `amount` if the item's `date` falls within the requested year; otherwise 0.
+
+**Reconciliation Note:**
+
+The sum of `capexItems[].yearDepreciation` across all items for a property should equal the amortized CapEx component used to compute `netAmortized`. The aggregate `capex` field is the cash-basis total (items dated in the year), while `netAmortized` uses the depreciation/amortization view.
 
 ## FX Rates
 
