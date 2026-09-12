@@ -32,6 +32,9 @@ export function flagUrl(code: CurrencyCode, size: 20 | 40 = 20): string {
 export type FxRates = Record<CurrencyCode, number> & { updatedAt: string }
 
 const FX_STORAGE_KEY = 'proptracker-fx-rates'
+const FX_OVERRIDE_KEY = 'proptracker-fx-overrides'
+const EXCHANGE_RATE_API_URL = 'https://api.exchangerate-api.com/v4/latest/USD'
+const CACHE_TTL_MS = 60 * 60 * 1000 // 1 hour
 
 const DEFAULT_RATES: FxRates = {
   USD: 1,
@@ -43,22 +46,177 @@ const DEFAULT_RATES: FxRates = {
   updatedAt: '2026-03-25',
 }
 
-export function loadFxRates(): FxRates {
+/** Rate overrides (partial, only overridden currencies) */
+export type FxOverrides = Partial<Record<CurrencyCode, number>>
+
+/** Load raw cached live rates from localStorage (no overrides applied) */
+function loadCachedLiveRates(): FxRates | null {
   try {
     const raw = localStorage.getItem(FX_STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      if (parsed && typeof parsed.USD === 'number') {
-        // backfill any new currencies missing from stored rates
-        return { ...DEFAULT_RATES, ...parsed }
+      if (parsed && typeof parsed.USD === 'number' && parsed._fetchedAt) {
+        const age = Date.now() - parsed._fetchedAt
+        if (age < CACHE_TTL_MS) {
+          return { ...DEFAULT_RATES, ...parsed }
+        }
       }
     }
   } catch { /* ignore */ }
-  return { ...DEFAULT_RATES }
+  return null
 }
 
+/** Save live rates to localStorage cache (with timestamp) */
+function saveLiveRatesToCache(rates: FxRates): void {
+  localStorage.setItem(FX_STORAGE_KEY, JSON.stringify({ ...rates, _fetchedAt: Date.now() }))
+}
+
+/** Load user overrides from localStorage */
+export function getRateOverrides(): FxOverrides {
+  try {
+    const raw = localStorage.getItem(FX_OVERRIDE_KEY)
+    if (raw) {
+      return JSON.parse(raw) as FxOverrides
+    }
+  } catch { /* ignore */ }
+  return {}
+}
+
+/** Save a single rate override */
+export function setRateOverride(code: CurrencyCode, rate: number): void {
+  const overrides = getRateOverrides()
+  overrides[code] = rate
+  localStorage.setItem(FX_OVERRIDE_KEY, JSON.stringify(overrides))
+}
+
+/** Clear a single rate override (revert to live rate) */
+export function clearRateOverride(code: CurrencyCode): void {
+  const overrides = getRateOverrides()
+  delete overrides[code]
+  if (Object.keys(overrides).length === 0) {
+    localStorage.removeItem(FX_OVERRIDE_KEY)
+  } else {
+    localStorage.setItem(FX_OVERRIDE_KEY, JSON.stringify(overrides))
+  }
+}
+
+/** Clear all rate overrides */
+export function clearAllRateOverrides(): void {
+  localStorage.removeItem(FX_OVERRIDE_KEY)
+}
+
+/** Check if a currency has an active override */
+export function hasRateOverride(code: CurrencyCode): boolean {
+  return getRateOverrides()[code] !== undefined
+}
+
+/** Get updatedAt timestamp from cached rates */
+export function getRatesUpdatedAt(): string {
+  const cached = loadCachedLiveRates()
+  return cached?.updatedAt ?? DEFAULT_RATES.updatedAt
+}
+
+/**
+ * Fetch live FX rates from exchangerate-api.com.
+ * 
+ * API returns: { rates: { COP: 3105.8, EUR: 0.862, ... } }
+ *   - These are "units of currency per 1 USD"
+ * 
+ * PropTracker uses: { COP: 0.000322, EUR: 1.16, ... }
+ *   - These are "USD per 1 unit of currency" (for toUsd = amount * rates[from])
+ * 
+ * Conversion: propTrackerRate = 1 / apiRate
+ * 
+ * @param force - If true, bypass cache and fetch fresh rates
+ * @returns FX rates with overrides merged in
+ */
+export async function fetchExchangeRates(force = false): Promise<FxRates> {
+  if (!force) {
+    const cached = loadCachedLiveRates()
+    if (cached) {
+      return mergeWithOverrides(cached)
+    }
+  }
+
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+    
+    const response = await fetch(EXCHANGE_RATE_API_URL, {
+      signal: controller.signal,
+    })
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+
+    if (!data.rates || typeof data.rates !== 'object') {
+      throw new Error('Invalid API response: missing rates object')
+    }
+
+    const rates: FxRates = {
+      USD: 1,
+      EUR: DEFAULT_RATES.EUR,
+      GBP: DEFAULT_RATES.GBP,
+      CHF: DEFAULT_RATES.CHF,
+      COP: DEFAULT_RATES.COP,
+      PEN: DEFAULT_RATES.PEN,
+      updatedAt: data.date || new Date().toISOString().slice(0, 10),
+    }
+
+    for (const code of CURRENCY_LIST) {
+      const apiRate = data.rates[code]
+      if (typeof apiRate === 'number' && apiRate > 0) {
+        rates[code] = 1 / apiRate
+      }
+    }
+
+    saveLiveRatesToCache(rates)
+    return mergeWithOverrides(rates)
+  } catch (err) {
+    console.warn('FX rate fetch failed, using cached/default rates:', err instanceof Error ? err.message : err)
+    const cached = loadCachedLiveRates()
+    return mergeWithOverrides(cached ?? { ...DEFAULT_RATES })
+  }
+}
+
+/**
+ * Fetch the live rate for a single currency (bypasses overrides).
+ * Useful for showing the current market rate in the override UI.
+ */
+export async function fetchLiveRate(code: CurrencyCode): Promise<number> {
+  const rates = await fetchExchangeRates(true)
+  const overrides = getRateOverrides()
+  return overrides[code] !== undefined
+    ? (loadCachedLiveRates()?.[code] ?? DEFAULT_RATES[code])
+    : rates[code]
+}
+
+/** Merge live/cached rates with user overrides */
+function mergeWithOverrides(rates: FxRates): FxRates {
+  const overrides = getRateOverrides()
+  return { ...rates, ...overrides } as FxRates
+}
+
+/**
+ * Load effective FX rates (cached live + overrides, or defaults).
+ * Synchronous — for initial render before async fetch completes.
+ */
+export function loadFxRates(): FxRates {
+  const cached = loadCachedLiveRates()
+  const base = cached ?? { ...DEFAULT_RATES }
+  return mergeWithOverrides(base)
+}
+
+/**
+ * Save FX rates to localStorage.
+ * @deprecated - Use setRateOverride for overrides; live rates are auto-cached.
+ */
 export function saveFxRates(rates: FxRates): void {
-  localStorage.setItem(FX_STORAGE_KEY, JSON.stringify(rates))
+  localStorage.setItem(FX_STORAGE_KEY, JSON.stringify({ ...rates, _fetchedAt: Date.now() }))
 }
 
 /** Convert an amount to USD */

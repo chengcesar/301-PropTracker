@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useReadOnly } from '../context/ReadOnlyContext'
 import { activeContract, calcAnnual, calcIrr, calcPortfolioAssetKpis, calcPortfolioProjectedGpiIn, calcPortfolioTotalsIn, contractCoveringDate, contractForMonth, convertAnnual, estimatedPropertyValueAtYear, hasNonLeaseOccupant, negotiatedFollowOnAfterContract, nextNegotiatedLeaseNotYetStarted, nonLeaseOccupancyExportValue, nonLeaseOccupancyLabel, occupancyFilterBucket, projectedGpiAnnual, rentOnDate, vacancyLossMonthCount } from '../lib/finance'
 import { fmtCurrencyM } from '../lib/format'
-import { type CurrencyCode, type FxRates, CURRENCIES, CURRENCY_LIST, convert, loadFxRates, saveFxRates, flagUrl } from '../lib/currency'
+import { type CurrencyCode, type FxRates, CURRENCIES, CURRENCY_LIST, convert, loadFxRates, flagUrl, fetchExchangeRates, setRateOverride, clearRateOverride, hasRateOverride, getRatesUpdatedAt } from '../lib/currency'
 import { useAppState } from '../context/useAppState'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { getYearWindow } from '../lib/constants'
@@ -1617,36 +1617,182 @@ function CurrencyPicker({ value, onChange }: { value: CurrencyCode; onChange: (c
   )
 }
 
-function FxRateEditor({ rates, onSave, onClose }: { rates: FxRates; onSave: (r: FxRates) => void; onClose: () => void }) {
-  const [draft, setDraft] = useState({ ...rates })
-  const editableCurrencies = CURRENCY_LIST.filter(c => c !== 'USD')
+const IconRefresh = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1.5 8a6.5 6.5 0 0 1 11.2-4.5M14.5 8a6.5 6.5 0 0 1-11.2 4.5" />
+    <path d="M12.5 2.5v3h-3M3.5 13.5v-3h3" />
+  </svg>
+)
+
+function FxRateEditor({ rates, onRatesChange, onClose }: {
+  rates: FxRates
+  onRatesChange: (r: FxRates) => void
+  onClose: () => void
+}) {
+  const [copDraft, setCopDraft] = useState('')
+  const [penDraft, setPenDraft] = useState('')
+  const [refreshing, setRefreshing] = useState(false)
+  const [updatedAt, setUpdatedAt] = useState(getRatesUpdatedAt())
+  const copOverride = hasRateOverride('COP')
+  const penOverride = hasRateOverride('PEN')
+
+  useEffect(() => {
+    setCopDraft(rates.COP > 0 ? String(Math.round(1 / rates.COP)) : '')
+    setPenDraft(rates.PEN > 0 ? String(Math.round((1 / rates.PEN) * 100) / 100) : '')
+  }, [rates.COP, rates.PEN])
+
+  const handleRefreshLive = async () => {
+    setRefreshing(true)
+    try {
+      const freshRates = await fetchExchangeRates(true)
+      onRatesChange(freshRates)
+      setUpdatedAt(freshRates.updatedAt)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  const handleSaveCopOverride = () => {
+    const copPerUsd = parseFloat(copDraft)
+    if (copPerUsd > 0) {
+      const usdPerCop = 1 / copPerUsd
+      setRateOverride('COP', usdPerCop)
+      onRatesChange({ ...rates, COP: usdPerCop })
+    }
+  }
+
+  const handleSavePenOverride = () => {
+    const penPerUsd = parseFloat(penDraft)
+    if (penPerUsd > 0) {
+      const usdPerPen = 1 / penPerUsd
+      setRateOverride('PEN', usdPerPen)
+      onRatesChange({ ...rates, PEN: usdPerPen })
+    }
+  }
+
+  const handleClearCopOverride = async () => {
+    clearRateOverride('COP')
+    const freshRates = await fetchExchangeRates(true)
+    onRatesChange(freshRates)
+    setUpdatedAt(freshRates.updatedAt)
+  }
+
+  const handleClearPenOverride = async () => {
+    clearRateOverride('PEN')
+    const freshRates = await fetchExchangeRates(true)
+    onRatesChange(freshRates)
+    setUpdatedAt(freshRates.updatedAt)
+  }
+
   return (
     <div style={{
       position: 'absolute', right: 0, top: '100%', marginTop: 6,
       background: '#fff', border: '1px solid var(--border)', borderRadius: 12,
-      boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 280,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 300,
       padding: 16, animation: 'selectSlideIn 0.15s ease-out',
     }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10 }}>
-        FX Rates (to USD)
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+          FX Rates (to USD)
+        </div>
+        <button
+          className="ghost"
+          onClick={handleRefreshLive}
+          disabled={refreshing}
+          style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: refreshing ? 0.5 : 1 }}
+          title="Refresh live rates"
+        >
+          <IconRefresh /> {refreshing ? 'Refreshing...' : 'Refresh'}
+        </button>
       </div>
-      {editableCurrencies.map(code => (
-        <div key={code} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 500, width: 60, display: 'inline-flex', alignItems: 'center', gap: 4 }}><img src={flagUrl(code)} alt="" width={16} height={12} style={{ borderRadius: 2, objectFit: 'cover' }} />{code}</span>
+
+      {/* COP Rate */}
+      <div style={{ marginBottom: 14, padding: 10, background: '#f9fafb', borderRadius: 8, border: copOverride ? '1px solid #f59e0b' : '1px solid transparent' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+          <img src={flagUrl('COP')} alt="" width={18} height={13} style={{ borderRadius: 2, objectFit: 'cover' }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>COP</span>
+          <span style={{ fontSize: 12, color: '#6b7280' }}>Colombian Peso</span>
+          {copOverride && (
+            <span style={{ fontSize: 10, fontWeight: 600, color: '#f59e0b', background: '#fef3c7', padding: '2px 6px', borderRadius: 4, marginLeft: 'auto' }}>
+              Override
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>1 USD =</span>
           <input
             type="text"
-            value={draft[code]}
-            onChange={(e) => setDraft(d => ({ ...d, [code]: parseFloat(e.target.value) || 0 }))}
-            style={{ flex: 1, padding: '6px 10px', fontSize: 13, background: '#f7f9fc', border: '1px solid #e8ecf2', borderRadius: 8 }}
+            value={copDraft}
+            onChange={(e) => setCopDraft(e.target.value)}
+            placeholder={rates.COP > 0 ? String(Math.round(1 / rates.COP)) : ''}
+            style={{ flex: 1, padding: '6px 10px', fontSize: 13, background: '#fff', border: '1px solid #e8ecf2', borderRadius: 8, minWidth: 0 }}
           />
+          <span style={{ fontSize: 12, color: '#6b7280' }}>COP</span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
+          {copOverride && (
+            <button className="ghost" style={{ fontSize: 11, padding: '4px 8px', color: '#6b7280' }} onClick={handleClearCopOverride}>
+              Use live rate
+            </button>
+          )}
+          <button className="primary" style={{ fontSize: 11, padding: '4px 10px' }} onClick={handleSaveCopOverride}>
+            Save
+          </button>
+        </div>
+      </div>
+
+      {/* PEN Rate */}
+      <div style={{ marginBottom: 14, padding: 10, background: '#f9fafb', borderRadius: 8, border: penOverride ? '1px solid #f59e0b' : '1px solid transparent' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+          <img src={flagUrl('PEN')} alt="" width={18} height={13} style={{ borderRadius: 2, objectFit: 'cover' }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>PEN</span>
+          <span style={{ fontSize: 12, color: '#6b7280' }}>Peruvian Sol</span>
+          {penOverride && (
+            <span style={{ fontSize: 10, fontWeight: 600, color: '#f59e0b', background: '#fef3c7', padding: '2px 6px', borderRadius: 4, marginLeft: 'auto' }}>
+              Override
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>1 USD =</span>
+          <input
+            type="text"
+            value={penDraft}
+            onChange={(e) => setPenDraft(e.target.value)}
+            placeholder={rates.PEN > 0 ? String(Math.round((1 / rates.PEN) * 100) / 100) : ''}
+            style={{ flex: 1, padding: '6px 10px', fontSize: 13, background: '#fff', border: '1px solid #e8ecf2', borderRadius: 8, minWidth: 0 }}
+          />
+          <span style={{ fontSize: 12, color: '#6b7280' }}>PEN</span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
+          {penOverride && (
+            <button className="ghost" style={{ fontSize: 11, padding: '4px 8px', color: '#6b7280' }} onClick={handleClearPenOverride}>
+              Use live rate
+            </button>
+          )}
+          <button className="primary" style={{ fontSize: 11, padding: '4px 10px' }} onClick={handleSavePenOverride}>
+            Save
+          </button>
+        </div>
+      </div>
+
+      {/* Other rates (read-only display) */}
+      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8, borderTop: '1px solid #e8ecf2', paddingTop: 10 }}>
+        Other rates (live)
+      </div>
+      {(['EUR', 'GBP', 'CHF'] as const).map(code => (
+        <div key={code} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <img src={flagUrl(code)} alt="" width={14} height={10} style={{ borderRadius: 2, objectFit: 'cover' }} />
+            {code}
+          </span>
+          <span>1 USD = {rates[code] > 0 ? (1 / rates[code]).toFixed(4) : '—'}</span>
         </div>
       ))}
-      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
-        Updated: {draft.updatedAt}
-      </div>
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <button className="ghost" style={{ fontSize: 12, padding: '5px 10px' }} onClick={onClose}>Cancel</button>
-        <button className="primary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => onSave({ ...draft, updatedAt: new Date().toISOString().slice(0, 10) })}>Save</button>
+
+      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>Updated: {updatedAt}</span>
+        <button className="ghost" style={{ fontSize: 11, padding: '2px 6px' }} onClick={onClose}>Close</button>
       </div>
     </div>
   )
@@ -1707,6 +1853,14 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
   const [fxRates, setFxRates] = useState<FxRates>(loadFxRates)
   const [fxOpen, setFxOpen] = useState(false)
   const fxRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    let cancelled = false
+    fetchExchangeRates().then((rates) => {
+      if (!cancelled) setFxRates(rates)
+    }).catch(() => { /* ignore - fallback to cached/default */ })
+    return () => { cancelled = true }
+  }, [])
+
   const [displayCurrency, setDisplayCurrency] = useState<CurrencyCode>((_saved.displayCurrency as CurrencyCode) || 'USD')
   const fm = (n: number | null | undefined) => fmtCurrencyM(n, displayCurrency)
   const [deleteTarget, setDeleteTarget] = useState<Property | null>(null)
@@ -2571,16 +2725,27 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
             <div ref={fxRef} className="hide-mobile" style={{ position: 'relative' }}>
               <button
                 className="ghost"
-                style={{ padding: '5px 8px', fontSize: 12, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                style={{ padding: '5px 10px', fontSize: 12, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6, position: 'relative' }}
                 title="FX Rates"
                 onClick={() => setFxOpen(v => !v)}
               >
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M1.5 8h13"/><path d="M8 1.5c1.86 2.08 2.92 4.78 2.92 6.5S9.86 12.42 8 14.5c-1.86-2.08-2.92-4.78-2.92-6.5S6.14 3.58 8 1.5z"/></svg>
+                <span style={{ color: '#374151', fontWeight: 600 }}>
+                  {fxRates.COP > 0 ? `$${Math.round(1 / fxRates.COP).toLocaleString()}` : '—'}
+                </span>
+                <span style={{ color: '#9ca3af', fontSize: 10 }}>COP/USD</span>
+                {(hasRateOverride('COP') || hasRateOverride('PEN')) && (
+                  <span style={{
+                    position: 'absolute', top: 2, right: 2,
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: '#f59e0b',
+                  }} title="Manual override active" />
+                )}
               </button>
               {fxOpen && (
                 <FxRateEditor
                   rates={fxRates}
-                  onSave={(r) => { setFxRates(r); saveFxRates(r); setFxOpen(false) }}
+                  onRatesChange={(r) => setFxRates(r)}
                   onClose={() => setFxOpen(false)}
                 />
               )}
