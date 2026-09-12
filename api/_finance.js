@@ -240,7 +240,7 @@ function sumMaintenanceAnnual(prop) {
 
 // ── Capex Amortization ──
 
-function capexDepreciationForMonth(item, contracts, year, monthIdx) {
+export function capexDepreciationForMonth(item, contracts, year, monthIdx) {
   if (item.treatment !== 'capitalize') return 0
   const itemDate = new Date(`${item.date}T12:00:00`)
   const probeDate = new Date(year, monthIdx, 15, 12, 0, 0, 0)
@@ -261,6 +261,27 @@ function capexDepreciationForMonth(item, contracts, year, monthIdx) {
   const monthsSinceStart = (probeDate.getFullYear() - itemDate.getFullYear()) * 12 + (probeDate.getMonth() - itemDate.getMonth())
   if (monthsSinceStart < 0 || monthsSinceStart >= totalMonths) return 0
   return monthlyDep
+}
+
+/**
+ * Compute depreciation (or expense) for a CapEx item landing in a given year.
+ * - capitalize: sum of monthly depreciation for all 12 months
+ * - expense (or no treatment): full amount if item.date is in the year, else 0
+ */
+export function capexDepreciationForYear(item, contracts, year) {
+  if (item.treatment === 'capitalize') {
+    let sum = 0
+    for (let m = 0; m < 12; m++) {
+      sum += capexDepreciationForMonth(item, contracts, year, m)
+    }
+    return sum
+  }
+  // Expense treatment: full amount if dated in the year
+  const itemDate = new Date(`${item.date}T12:00:00`)
+  if (itemDate.getFullYear() === year) {
+    return item.amount
+  }
+  return 0
 }
 
 function totalCapexAmortizedForYear(capex, contracts, year) {

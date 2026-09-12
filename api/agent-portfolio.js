@@ -21,6 +21,7 @@ import {
   normalizeCurrencyCode,
   resolveServices,
   resolvedServicesYear,
+  capexDepreciationForYear,
 } from './_finance.js'
 import { getFxRates } from './_fxHelper.js'
 
@@ -167,6 +168,9 @@ export default async function handler(req, res) {
     // Process services for this property (recurring OpEx line items)
     const services = processServices(py, year, displayCurrency, fxRates)
 
+    // Process CapEx items for this property (depreciation table)
+    const capexItems = processCapexItems(py, year, displayCurrency, fxRates)
+
     return {
       // Identity fields
       id: prop.id,
@@ -222,6 +226,9 @@ export default async function handler(req, res) {
 
       // Service / utility line items (recurring OpEx)
       services,
+
+      // CapEx / depreciation line items
+      capexItems,
     }
   })
 
@@ -263,6 +270,7 @@ export default async function handler(req, res) {
       computedWith: 'Same logic as PortfolioPage (calcAnnual, calcPortfolioTotalsIn)',
       taxItemsNote: 'Per-property taxes and totals.taxes equal sum of taxItems[].amount (impuesto a cargo). Fields type, amountPaid, paidDate, chip, and label are not yet stored in the data model and return null.',
       servicesNote: 'services[] exposes recurring service/utility accounts. annualCost = monthlyCost × 12. opex is computed from actual monthly expense entries + maintenance events — it does NOT equal sum of services[].annualCost. Services act as metadata; actual monthly OpEx may differ. When services are inherited from another year (no entries for requested year), resolvedFromYear indicates the source year.',
+      capexItemsNote: 'capexItems[] exposes CapEx line items with depreciation. yearDepreciation is the amount landing in the requested year: for capitalize treatment, sum of 12 months of straight-line depreciation; for expense treatment, full amount if dated in the year. Sum of yearDepreciation should reconcile to property netAmortized capex component. amount is the original cash outlay.',
     },
   }
 
@@ -353,6 +361,55 @@ function processServices(prop, year, displayCurrency, fxRates) {
       year: year,
       notes: entry.notes?.trim() || null,
       resolvedFromYear: inherited ? fromYear : undefined,
+    }
+  })
+}
+
+/**
+ * Process CapEx items for a property, computing year depreciation/expense
+ * using the same logic as totalCapexAmortizedForYear.
+ * 
+ * @param {Object} prop - The property object (with year set)
+ * @param {number} year - The requested year
+ * @param {string} displayCurrency - Target currency for conversion
+ * @param {Object} fxRates - FX rates object
+ * @returns {Array} Array of processed capex items
+ */
+function processCapexItems(prop, year, displayCurrency, fxRates) {
+  const propCurrency = prop.currency || 'USD'
+  const capexItems = prop.capex || []
+  const contracts = prop.contracts || []
+
+  return capexItems.map(item => {
+    const convertedAmount = item.amount != null
+      ? convert(item.amount, propCurrency, displayCurrency, fxRates)
+      : 0
+
+    const yearDep = capexDepreciationForYear(item, contracts, year)
+    const convertedYearDep = convert(yearDep, propCurrency, displayCurrency, fxRates)
+
+    return {
+      propertyId: String(prop.id),
+      capexId: String(item.id),
+      desc: item.desc || '',
+      provider: item.provider?.trim() || null,
+      cat: item.cat || 'Other',
+      date: item.date || null,
+      dateEnd: item.dateEnd?.trim() || null,
+      amount: round2(convertedAmount),
+      treatment: item.treatment || 'expense',
+      amortizeBasis: item.treatment === 'capitalize' ? (item.amortizeBasis || null) : null,
+      amortizeMonths: item.treatment === 'capitalize' && item.amortizeBasis === 'manual' 
+        ? (item.amortizeMonths || null) 
+        : null,
+      contractId: item.treatment === 'capitalize' && item.amortizeBasis === 'contract'
+        ? (item.contractId != null ? String(item.contractId) : null)
+        : null,
+      yearDepreciation: round2(convertedYearDep),
+      currency: displayCurrency,
+      year: year,
+      status: item.status || null,
+      recurring: item.recurring ?? false,
     }
   })
 }
