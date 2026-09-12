@@ -126,6 +126,20 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
           "chip": null,
           "label": null
         }
+      ],
+      "services": [
+        {
+          "propertyId": "1",
+          "serviceId": "1694023456789",
+          "provider": "ETB",
+          "type": "Internet",
+          "accountNumber": "12634590",
+          "monthlyCost": 45.00,
+          "annualCost": 540.00,
+          "currency": "USD",
+          "year": 2026,
+          "notes": "Fibra 300 Mbps"
+        }
       ]
     }
   ],
@@ -147,7 +161,8 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
     "fxRateCopPerUsd": 3105.8,
     "fxNote": "Live rates from exchangerate-api.com",
     "computedWith": "Same logic as PortfolioPage (calcAnnual, calcPortfolioTotalsIn)",
-    "taxItemsNote": "Per-property taxes and totals.taxes equal sum of taxItems[].amount (impuesto a cargo). Fields type, amountPaid, paidDate, chip, and label are not yet stored in the data model and return null."
+    "taxItemsNote": "Per-property taxes and totals.taxes equal sum of taxItems[].amount (impuesto a cargo). Fields type, amountPaid, paidDate, chip, and label are not yet stored in the data model and return null.",
+    "servicesNote": "services[] exposes recurring service/utility accounts. annualCost = monthlyCost × 12. opex is computed from actual monthly expense entries + maintenance events — it does NOT equal sum of services[].annualCost. Services act as metadata; actual monthly OpEx may differ. When services are inherited from another year (no entries for requested year), resolvedFromYear indicates the source year."
   }
 }
 ```
@@ -182,6 +197,7 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 | `taxes` | Property taxes (sum of taxItems amounts — see Tax Line Items) |
 | `net` | Net cash flow (NOI - CapEx - Taxes - One-time payments) |
 | `taxItems` | Array of tax line items for the requested year (see below) |
+| `services` | Array of recurring service/utility line items (see Services Line Items) |
 | `netAmortized` | Net CF using amortized CapEx (book view) |
 | `estValue` | Estimated property value |
 | `capRate` | Capitalization rate (NOI / Value × 100) |
@@ -345,6 +361,93 @@ The per-property `taxes` field and `totals.taxes` equal the sum of `taxItems[].a
 Tax items are filtered by the `?year=` query parameter:
 - Items with a `dueDate` are included only if the dueDate's year matches the requested year
 - Items without a `dueDate` are always included (year is unknown)
+
+#### Services Line Items
+
+Each property includes a `services` array with recurring service/utility accounts. Services use the same year-scoping behavior as the UI: if no services exist for the requested year, they are inherited from the nearest year with service entries.
+
+**Example services array:**
+
+```json
+{
+  "services": [
+    {
+      "propertyId": "1",
+      "serviceId": "1694023456789",
+      "provider": "ETB",
+      "type": "Internet",
+      "accountNumber": "12634590",
+      "monthlyCost": 45.00,
+      "annualCost": 540.00,
+      "currency": "USD",
+      "year": 2026,
+      "notes": "Fibra 300 Mbps"
+    },
+    {
+      "propertyId": "1",
+      "serviceId": "1694023456790",
+      "provider": "EPM",
+      "type": "Electricity",
+      "accountNumber": null,
+      "monthlyCost": 85.00,
+      "annualCost": 1020.00,
+      "currency": "USD",
+      "year": 2026,
+      "notes": null,
+      "resolvedFromYear": 2025
+    }
+  ]
+}
+```
+
+**Example curl with services:**
+
+```bash
+curl -H "Authorization: Bearer YOUR_API_KEY" \
+  "https://your-app.vercel.app/api/agent-portfolio?year=2026&currency=USD"
+```
+
+**Service Item Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `propertyId` | string | Property ID this service belongs to |
+| `serviceId` | string | Stable identifier (from `ServiceEntry.id`) |
+| `provider` | string | Service provider name (e.g. "ETB", "EPM") |
+| `type` | string | Service category (e.g. "Internet", "Electricity", "Water", "Admin") |
+| `accountNumber` | string \| null | Account number, null if empty |
+| `monthlyCost` | number | Monthly cost, converted to display currency |
+| `annualCost` | number | Annual cost (`monthlyCost × 12`), converted to display currency |
+| `currency` | string | Display currency (matches query parameter) |
+| `year` | number | Requested year |
+| `notes` | string \| null | Free-text notes, null if empty |
+| `resolvedFromYear` | number \| undefined | Present only when services are inherited from a different year |
+
+**Field Mapping from Data Model (ServiceEntry):**
+
+| API Field | Source | Notes |
+|-----------|--------|-------|
+| `propertyId` | `property.id` | Converted to string |
+| `serviceId` | `ServiceEntry.id` | Converted to string |
+| `provider` | `ServiceEntry.provider` | Provider/company name |
+| `type` | `ServiceEntry.type` | Category as stored |
+| `accountNumber` | `ServiceEntry.accountNumber` | Null if empty |
+| `monthlyCost` | `ServiceEntry.monthlyCost` | Converted to display currency |
+| `annualCost` | `ServiceEntry.monthlyCost × 12` | Simple annualization |
+| `notes` | `ServiceEntry.notes` | Null if empty |
+| `resolvedFromYear` | — | Computed: present when services inherited from another year |
+
+**Services vs OpEx Note:**
+
+The `services[]` array exposes recurring service/utility account metadata. **Important**: the per-property `opex` field is computed from actual monthly expense entries plus maintenance events — it does **NOT** equal the sum of `services[].annualCost`. Services act as templates/metadata; actual monthly OpEx may differ based on manual expense entries in each month.
+
+**Year Resolution:**
+
+Services use the same inheritance behavior as the ServicesTab UI:
+1. If the property has services for the requested year, those are returned
+2. Otherwise, services are inherited from the nearest year with entries
+3. When inherited, the `resolvedFromYear` field indicates the source year
+4. If no services exist at all, `services` is an empty array
 
 ## FX Rates
 

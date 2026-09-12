@@ -19,6 +19,8 @@ import {
   estimatedPropertyValueAtYear,
   vacancyLossMonthCount,
   normalizeCurrencyCode,
+  resolveServices,
+  resolvedServicesYear,
 } from './_finance.js'
 import { getFxRates } from './_fxHelper.js'
 
@@ -162,6 +164,9 @@ export default async function handler(req, res) {
     // Process tax items for this property
     const taxItems = processTaxItems(prop, year, displayCurrency, fxRates)
 
+    // Process services for this property (recurring OpEx line items)
+    const services = processServices(py, year, displayCurrency, fxRates)
+
     return {
       // Identity fields
       id: prop.id,
@@ -214,6 +219,9 @@ export default async function handler(req, res) {
 
       // Tax line items for the requested year
       taxItems,
+
+      // Service / utility line items (recurring OpEx)
+      services,
     }
   })
 
@@ -254,6 +262,7 @@ export default async function handler(req, res) {
       fxNote: fxMeta.fxNote,
       computedWith: 'Same logic as PortfolioPage (calcAnnual, calcPortfolioTotalsIn)',
       taxItemsNote: 'Per-property taxes and totals.taxes equal sum of taxItems[].amount (impuesto a cargo). Fields type, amountPaid, paidDate, chip, and label are not yet stored in the data model and return null.',
+      servicesNote: 'services[] exposes recurring service/utility accounts. annualCost = monthlyCost × 12. opex is computed from actual monthly expense entries + maintenance events — it does NOT equal sum of services[].annualCost. Services act as metadata; actual monthly OpEx may differ. When services are inherited from another year (no entries for requested year), resolvedFromYear indicates the source year.',
     },
   }
 
@@ -309,4 +318,41 @@ function processTaxItems(prop, year, displayCurrency, fxRates) {
         label: null,
       }
     })
+}
+
+/**
+ * Process service entries for a property, resolving from the requested year or
+ * inheriting from the nearest year with services (same behavior as ServicesTab).
+ * 
+ * @param {Object} prop - The property object (with year set)
+ * @param {number} year - The requested year
+ * @param {string} displayCurrency - Target currency for conversion
+ * @param {Object} fxRates - FX rates object
+ * @returns {Array} Array of processed service items
+ */
+function processServices(prop, year, displayCurrency, fxRates) {
+  const propCurrency = prop.currency || 'USD'
+  const services = resolveServices(prop)
+  const fromYear = resolvedServicesYear(prop)
+  const inherited = fromYear !== null && fromYear !== year
+
+  return services.map(entry => {
+    const convertedMonthlyCost = entry.monthlyCost != null
+      ? convert(entry.monthlyCost, propCurrency, displayCurrency, fxRates)
+      : 0
+
+    return {
+      propertyId: String(prop.id),
+      serviceId: String(entry.id),
+      provider: entry.provider || '',
+      type: entry.type || '',
+      accountNumber: entry.accountNumber?.trim() || null,
+      monthlyCost: round2(convertedMonthlyCost),
+      annualCost: round2(convertedMonthlyCost * 12),
+      currency: displayCurrency,
+      year: year,
+      notes: entry.notes?.trim() || null,
+      resolvedFromYear: inherited ? fromYear : undefined,
+    }
+  })
 }

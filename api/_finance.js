@@ -131,7 +131,7 @@ function yearMonths(prop) {
   return prop.months[prop.year] ?? {}
 }
 
-function resolveServices(prop) {
+export function resolveServices(prop) {
   const all = prop.services ?? {}
   if (all[prop.year]?.length) return all[prop.year]
   const years = Object.keys(all)
@@ -140,6 +140,17 @@ function resolveServices(prop) {
   if (years.length === 0) return []
   years.sort((a, b) => Math.abs(a - prop.year) - Math.abs(b - prop.year))
   return all[years[0]]
+}
+
+export function resolvedServicesYear(prop) {
+  const all = prop.services ?? {}
+  if (all[prop.year]?.length) return prop.year
+  const years = Object.keys(all)
+    .map(Number)
+    .filter((y) => y !== prop.year && (all[y]?.length ?? 0) > 0)
+  if (years.length === 0) return null
+  years.sort((a, b) => Math.abs(a - prop.year) - Math.abs(b - prop.year))
+  return years[0]
 }
 
 // ── GPI helpers ──
