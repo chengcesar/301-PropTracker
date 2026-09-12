@@ -136,8 +136,11 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
     "propertyCount": 3
   },
   "meta": {
-    "displayCurrencyNote": "All monetary values are converted to the display currency using embedded FX rates.",
-    "fxRatesUpdatedAt": "2026-03-25",
+    "displayCurrencyNote": "All monetary values are converted to the display currency using live FX rates.",
+    "fxSource": "live",
+    "fxRatesUpdatedAt": "2026-09-12",
+    "fxRateCopPerUsd": 3105.8,
+    "fxNote": "Live rates from exchangerate-api.com",
     "computedWith": "Same logic as PortfolioPage (calcAnnual, calcPortfolioTotalsIn)",
     "taxItemsNote": "Per-property taxes and totals.taxes equal sum of taxItems[].amount (impuesto a cargo). Fields type, amountPaid, paidDate, chip, and label are not yet stored in the data model and return null."
   }
@@ -281,6 +284,73 @@ The per-property `taxes` field and `totals.taxes` equal the sum of `taxItems[].a
 Tax items are filtered by the `?year=` query parameter:
 - Items with a `dueDate` are included only if the dueDate's year matches the requested year
 - Items without a `dueDate` are always included (year is unknown)
+
+## FX Rates
+
+The API fetches live exchange rates from [exchangerate-api.com](https://www.exchangerate-api.com) for currency conversions. This ensures accurate translations when requesting data in a different currency (e.g., `?currency=USD` for COP-denominated properties).
+
+### Behavior
+
+1. **Default (live)**: Fetches current rates from exchangerate-api.com
+2. **Fallback**: On fetch failure, uses embedded fallback rates (dated 2026-03-25)
+3. **Caching**: Rates are cached in-memory for ~1 hour per serverless instance
+
+### Meta Fields
+
+The response `meta` object includes FX rate information:
+
+| Field | Description |
+|-------|-------------|
+| `fxSource` | `"live"` if rates were fetched successfully; `"fallback"` if using embedded rates |
+| `fxRatesUpdatedAt` | ISO date of the FX rates (from API or fallback) |
+| `fxRateCopPerUsd` | COP per 1 USD rate (useful for agents working with Colombian properties) |
+| `fxNote` | Human-readable status message |
+
+### Example (live rates)
+
+```json
+{
+  "meta": {
+    "fxSource": "live",
+    "fxRatesUpdatedAt": "2026-09-12",
+    "fxRateCopPerUsd": 3105.8,
+    "fxNote": "Live rates from exchangerate-api.com"
+  }
+}
+```
+
+### Example (fallback rates)
+
+```json
+{
+  "meta": {
+    "fxSource": "fallback",
+    "fxRatesUpdatedAt": "2026-03-25",
+    "fxRateCopPerUsd": 4255,
+    "fxNote": "Fallback to embedded rates (fetch failed: Network error)"
+  }
+}
+```
+
+### Verifying FX Rate Status
+
+```bash
+# Check that live rates are being used
+curl -H "Authorization: Bearer YOUR_KEY" \
+  "https://your-app.vercel.app/api/agent-portfolio?currency=USD" \
+  | jq '.meta | {fxSource, fxRatesUpdatedAt, fxRateCopPerUsd}'
+
+# Compare COP vs USD requests (COP totals should be identical)
+curl -H "Authorization: Bearer YOUR_KEY" \
+  "https://your-app.vercel.app/api/agent-portfolio?currency=COP" | jq '.totals'
+curl -H "Authorization: Bearer YOUR_KEY" \
+  "https://your-app.vercel.app/api/agent-portfolio?currency=USD" | jq '.totals'
+```
+
+### Future Enhancements
+
+- Firestore-based manual FX rate overrides (for admin control)
+- Frontend live FX fetch in `currency.ts`
 
 ## Error Responses
 
