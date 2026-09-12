@@ -162,6 +162,7 @@ export default async function handler(req, res) {
       city: prop.city || '',
       country: prop.country || '',
       owner: prop.owner || '',
+      equityPct: prop.equityPct ?? prop.factSheet?.owners?.[0]?.equityPct ?? null,
       currency: prop.currency || 'USD',
       area: prop.area ?? null,
       bedrooms: prop.bedrooms ?? null,

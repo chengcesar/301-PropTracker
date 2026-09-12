@@ -500,7 +500,8 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
 
   const primary = ownersResolved[0]
   const ownerName = primary?.name ?? ''
-  const ownerEquityPct = primary != null ? primary.equityPct : 100
+  /** Resolved equity %: prop.equityPct takes precedence, then primary owner's equityPct */
+  const ownerEquityPct: number | null = prop.equityPct ?? primary?.equityPct ?? null
 
   const patchPrimaryOwner = (patch: Partial<Pick<OwnershipEntry, 'name' | 'equityPct'>>) => {
     onUpdateProp((p) => {
@@ -508,7 +509,7 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
       const current: OwnershipEntry[] = f.owners?.length
         ? [...f.owners]
         : p.owner
-          ? [{ id: 0, name: p.owner, idNumber: '', equityPct: 100, notes: '' }]
+          ? [{ id: 0, name: p.owner, idNumber: '', equityPct: patch.equityPct ?? 100, notes: '' }]
           : []
 
       let next: OwnershipEntry[]
@@ -533,6 +534,7 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
       return {
         ...p,
         owner: ownerDisplay || p.owner,
+        equityPct: patch.equityPct !== undefined ? patch.equityPct : p.equityPct,
         factSheet: { ...f, owners: next } as FactSheet,
       } as Property
     })
@@ -681,7 +683,7 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
                       type="text"
                       inputMode="decimal"
                       placeholder="100"
-                      value={primary != null ? String(ownerEquityPct) : ''}
+                      value={ownerEquityPct != null ? String(ownerEquityPct) : ''}
                       onChange={(e) => {
                         const n = parseFloat(e.target.value.replace(/[^\d.]/g, ''))
                         patchPrimaryOwner({ equityPct: Number.isFinite(n) ? n : 0 })
@@ -703,7 +705,7 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
                   <ReadOnlyField label="Owner name" value={ownerName || undefined} />
                   <ReadOnlyField
                     label="Equity %"
-                    value={primary != null ? `${ownerEquityPct}` : '—'}
+                    value={ownerEquityPct != null ? `${ownerEquityPct}%` : undefined}
                   />
                 </div>
               )}

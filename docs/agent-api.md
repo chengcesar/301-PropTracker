@@ -79,6 +79,7 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
       "city": "Bogotá",
       "country": "Colombia",
       "owner": "John Doe",
+      "equityPct": 100,
       "currency": "COP",
       "area": 72,
       "bedrooms": 2,
@@ -152,6 +153,7 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 | `name` | Property name |
 | `address`, `neighbourhood`, `city`, `country` | Location details |
 | `owner` | Property owner name |
+| `equityPct` | Owner's equity share (ownership %) — resolves from `prop.equityPct` or primary `factSheet.owners[].equityPct` |
 | `currency` | Property's functional currency |
 | `area` | Area in square meters |
 | `bedrooms`, `bathrooms`, `parking`, `storageUnits`, `floors` | Property attributes |
