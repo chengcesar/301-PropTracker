@@ -92,6 +92,11 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
       "status": "Leased",
       "occupancy": "Leased",
       "monthsLeft": 8,
+      "leaseStart": "2024-06-01",
+      "leaseEnd": "2027-05-31",
+      "tenant": "María García",
+      "monthlyRent": 1200.00,
+      "contractStatus": "active",
       "year": 2026,
       "gpi": 14400.00,
       "vacancy": 0.00,
@@ -163,6 +168,11 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 | `status` | `Leased`, `Vacant`, or `Occupied` |
 | `occupancy` | Detailed occupancy label |
 | `monthsLeft` | Months remaining on active lease (null if no lease) |
+| `leaseStart` | Active lease start date (ISO date string, null if no active lease) |
+| `leaseEnd` | Active lease end date (ISO date string, null if no active lease) |
+| `tenant` | Tenant name from active lease (null if no active lease or empty) |
+| `monthlyRent` | Monthly rent from active lease, converted to display currency (null if no active lease) |
+| `contractStatus` | Active lease contract status (`active`, null if no lease) |
 | `gpi` | Gross Potential Income — full-year potential rent |
 | `vacancy` | Vacancy loss (GPI - EGI) |
 | `egi` | Effective Gross Income — actual rent collected |
@@ -177,6 +187,57 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 | `capRate` | Capitalization rate (NOI / Value × 100) |
 | `vacancyMoRate` | Vacancy month rate (% of months with vacancy) |
 | `margin` | Net CF / GPI × 100 |
+
+#### Active Lease Fields
+
+Each property includes fields from its **active** lease contract (the same contract used to compute `monthsLeft` and `status`). These fields are `null` when the property has no active lease.
+
+**Field Mapping from Data Model (Contract):**
+
+| API Field | Source | Notes |
+|-----------|--------|-------|
+| `leaseStart` | `Contract.startDate` | ISO date string (e.g. `"2024-06-01"`) |
+| `leaseEnd` | `Contract.endDate` | ISO date string; same value used to compute `monthsLeft` |
+| `tenant` | `Contract.tenant` | Tenant name; `null` if empty or no active lease |
+| `monthlyRent` | `Contract.monthlyRent` | Converted to display currency (via `?currency=` param) |
+| `contractStatus` | `Contract.status` | Always `"active"` for active contracts; `null` if no lease |
+
+**Example property with active lease:**
+
+```json
+{
+  "id": "property-id",
+  "name": "Apto 101",
+  "status": "Leased",
+  "monthsLeft": 8,
+  "leaseStart": "2024-06-01",
+  "leaseEnd": "2027-05-31",
+  "tenant": "María García",
+  "monthlyRent": 1200.00,
+  "contractStatus": "active"
+}
+```
+
+**Example property without active lease:**
+
+```json
+{
+  "id": "property-id",
+  "name": "Casa Verde",
+  "status": "Vacant",
+  "monthsLeft": null,
+  "leaseStart": null,
+  "leaseEnd": null,
+  "tenant": null,
+  "monthlyRent": null,
+  "contractStatus": null
+}
+```
+
+**Notes:**
+- The active contract is determined by the `activeContract()` helper, which finds the contract with `status: 'active'` covering the current date.
+- `monthlyRent` is converted to the display currency using the same FX rates as other monetary fields.
+- Full contract arrays are not exposed in v1 to maintain privacy and limit response size.
 
 #### Portfolio Totals
 
