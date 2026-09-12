@@ -132,6 +132,15 @@ export default async function handler(req, res) {
       monthsLeft = Math.max(0, Math.round((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 30)))
     }
 
+    // Active lease contract fields
+    const leaseStart = contract?.startDate || null
+    const leaseEnd = contract?.endDate || null
+    const tenant = contract?.tenant || null
+    const monthlyRent = contract?.monthlyRent != null
+      ? convert(contract.monthlyRent, prop.currency || 'USD', displayCurrency, fxRates)
+      : null
+    const contractStatus = contract?.status || null
+
     // Value estimation
     const valEst = estimatedPropertyValueAtYear(py, year)
     const estValue = valEst.value != null
@@ -177,6 +186,13 @@ export default async function handler(req, res) {
       status,
       occupancy: occupancyLabel,
       monthsLeft,
+
+      // Active lease contract fields
+      leaseStart,
+      leaseEnd,
+      tenant,
+      monthlyRent: monthlyRent != null ? round2(monthlyRent) : null,
+      contractStatus,
 
       // Annual KPIs (in display currency)
       year,
