@@ -1006,8 +1006,11 @@ function formatCardMetricValue(
       if (y == null) return dash
       return { text: y === 0 ? '0' : String(y) }
     }
-    case 'equityPct':
-      return p.equityPct != null ? { text: `${p.equityPct}%` } : dash
+    case 'equityPct': {
+      const eq = p.equityPct ?? p.factSheet?.owners?.[0]?.equityPct ?? null
+      if (eq == null) return dash
+      return { text: `${eq}%` }
+    }
     case 'gpi':
       return { text: fm(gpiRow) }
     case 'egi':
@@ -2439,7 +2442,10 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
       },
       equityPct: {
         label: 'Equity %',
-        value: (p) => p.equityPct != null ? `${p.equityPct}%` : '—',
+        value: (p) => {
+          const eq = p.equityPct ?? p.factSheet?.owners?.[0]?.equityPct ?? null
+          return eq != null ? String(eq) : ''
+        },
       },
       gpi: { label: `GPI (${dc})`, value: (p) => raw(convert(projectedGpiAnnual(withYear(p)), p.currency, dc, fxRates)) },
       egi: { label: `EGI (${dc})`, value: (_p, a) => raw(a.egi) },
@@ -3551,7 +3557,11 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                       if (y == null) return <td key="mtgYearsLeft" className="text3">—</td>
                       return <td key="mtgYearsLeft">{y === 0 ? '0' : y}</td>
                     })(),
-                    equityPct: <td key="equityPct" className={p.equityPct != null ? '' : 'text3'}>{p.equityPct != null ? `${p.equityPct}%` : '—'}</td>,
+                    equityPct: (() => {
+                      const eq = p.equityPct ?? p.factSheet?.owners?.[0]?.equityPct ?? null
+                      if (eq == null) return <td key="equityPct" className="text3">—</td>
+                      return <td key="equityPct">{eq}%</td>
+                    })(),
                     gpi: <td key="gpi">{fm(gpiRow)}</td>,
                     egi: <td key="egi" className="pos">{fm(a.egi)}</td>,
                     egiPerM2: (() => {

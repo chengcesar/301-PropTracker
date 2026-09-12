@@ -79,6 +79,7 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
       "city": "Bogotá",
       "country": "Colombia",
       "owner": "John Doe",
+      "equityPct": 100,
       "currency": "COP",
       "area": 72,
       "bedrooms": 2,
@@ -88,7 +89,6 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
       "floors": 1,
       "latitude": 4.6097,
       "longitude": -74.0817,
-      "equityPct": 100,
       "status": "Leased",
       "occupancy": "Leased",
       "monthsLeft": 8,
@@ -152,11 +152,11 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 | `name` | Property name |
 | `address`, `neighbourhood`, `city`, `country` | Location details |
 | `owner` | Property owner name |
+| `equityPct` | Owner's equity share (ownership %) — resolves from `prop.equityPct` or primary `factSheet.owners[].equityPct` |
 | `currency` | Property's functional currency |
 | `area` | Area in square meters |
 | `bedrooms`, `bathrooms`, `parking`, `storageUnits`, `floors` | Property attributes |
 | `latitude`, `longitude` | Geo coordinates (if available) |
-| `equityPct` | Owner's economic share (0–100), or `null` when unknown |
 | `status` | `Leased`, `Vacant`, or `Occupied` |
 | `occupancy` | Detailed occupancy label |
 | `monthsLeft` | Months remaining on active lease (null if no lease) |

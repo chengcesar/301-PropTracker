@@ -143,6 +143,21 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
     setProp(k, (parseFloat(raw.replace(/[^\d.]/g, '')) || 0) as Property[keyof Property])
   }
 
+  const setEquityPct = (v: number | null) => {
+    onUpdateProp((p) => {
+      const f = (p.factSheet ?? EMPTY) as FactSheet
+      const owners = f.owners?.length ? [...f.owners] : []
+      if (owners.length > 0 && v != null) {
+        owners[0] = { ...owners[0], equityPct: v }
+      }
+      return {
+        ...p,
+        equityPct: v,
+        factSheet: owners.length > 0 ? { ...f, owners } : f,
+      }
+    })
+  }
+
   const contacts = fs.contacts ?? []
 
   const [showContactForm, setShowContactForm] = useState(false)
@@ -946,9 +961,9 @@ export function FactSheetTab({ prop, onUpdateProp, cx: _cx = (n: number) => n }:
                   value={prop.equityPct != null ? String(prop.equityPct) : ''}
                   onChange={(e) => {
                     const t = e.target.value.trim()
-                    if (!t) { setProp('equityPct', null); return }
+                    if (!t) { setEquityPct(null); return }
                     const n = parseFloat(t.replace(/[^\d.]/g, ''))
-                    if (Number.isFinite(n) && n >= 0 && n <= 100) setProp('equityPct', n)
+                    if (Number.isFinite(n) && n >= 0 && n <= 100) setEquityPct(n)
                   }}
                 />
               </div>
