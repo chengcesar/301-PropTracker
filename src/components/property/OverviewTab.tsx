@@ -5,6 +5,7 @@ import { activeContract, calcAnnual, contractForMonth, estimatedPropertyValueAtY
 import { capexDepreciationForMonth } from '../../lib/capexAmortization'
 import { type CurrencyCode } from '../../lib/currency'
 import { fmt, fmtCurrencyM } from '../../lib/format'
+import { renamePrimaryOwner } from '../../lib/ownership'
 import { MonthModal } from '../modals/MonthModal'
 import { OccupantModal } from '../modals/OccupantModal'
 import { KpiInfoIcon } from '../KpiInfoIcon'
@@ -506,14 +507,14 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                         onChange={(e) => setOwnerDraft(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
-                            onUpdateProp((p) => ({ ...p, owner: ownerDraft.trim() }))
+                            onUpdateProp((p) => renamePrimaryOwner(p, ownerDraft.trim()))
                             setEditingOwner(false)
                           }
                           if (e.key === 'Escape') setEditingOwner(false)
                         }}
                         style={{ fontSize: 13, padding: '3px 8px', borderRadius: 6, border: '1px solid #e8ecf2', background: '#f7f9fc', width: 180 }}
                       />
-                      <button type="button" className="primary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => { onUpdateProp((p) => ({ ...p, owner: ownerDraft.trim() })); setEditingOwner(false) }}>Save</button>
+                      <button type="button" className="primary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => { onUpdateProp((p) => renamePrimaryOwner(p, ownerDraft.trim())); setEditingOwner(false) }}>Save</button>
                       <button type="button" className="ghost" style={{ fontSize: 12 }} onClick={() => setEditingOwner(false)}>Cancel</button>
                     </div>
                   ) : (
