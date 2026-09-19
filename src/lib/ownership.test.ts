@@ -40,3 +40,24 @@ describe('patchPrimaryOwner', () => {
     expect(p.factSheet?.owners?.[0].equityPct).toBe(50)
   })
 })
+
+// Mirrors api/agent-portfolio.js: equityPct: prop.equityPct ?? prop.factSheet?.owners?.[0]?.equityPct ?? null
+const apiEquityPct = (p: Property) => p.equityPct ?? p.factSheet?.owners?.[0]?.equityPct ?? null
+
+describe('agent-portfolio equityPct resolution', () => {
+  it('reports 30 after setting 30% on Value & Equity, for both new and structured properties', () => {
+    expect(apiEquityPct(patchPrimaryOwner(base({ owner: 'A' }), { equityPct: 30 }))).toBe(30)
+    const structured = base({ owner: 'A', factSheet: { owners: [{ id: 1, name: 'A', idNumber: '', equityPct: 100, notes: '' }] } } as Partial<Property>)
+    expect(apiEquityPct(patchPrimaryOwner(structured, { equityPct: 30 }))).toBe(30)
+  })
+
+  it('keeps 30 when the owner is renamed afterwards (Overview or Value & Equity)', () => {
+    const p30 = patchPrimaryOwner(base({ owner: 'A' }), { equityPct: 30 })
+    expect(apiEquityPct(renamePrimaryOwner(p30, 'B'))).toBe(30)
+    expect(apiEquityPct(patchPrimaryOwner(p30, { name: 'C' }))).toBe(30)
+  })
+
+  it('stays null for a property that never had equity set and is only renamed', () => {
+    expect(apiEquityPct(renamePrimaryOwner(base({ owner: 'A' }), 'B'))).toBeNull()
+  })
+})
