@@ -9,6 +9,14 @@ export type ContractStatus = 'active' | 'archived' | 'draft'
 
 export type IncrementType = 'ipc+' | 'ipc' | 'fixed' | 'none'
 
+export interface ContractDocument {
+  id: string
+  url: string
+  name: string
+  /** ISO timestamp */
+  uploadedAt: string
+}
+
 export interface Contract {
   id: number
   status: ContractStatus
@@ -29,6 +37,8 @@ export interface Contract {
   yearOverrides?: Record<number, number>
   adminFee: number
   notes: string
+  contractDocs?: ContractDocument[]
+  insuranceDocs?: ContractDocument[]
 }
 
 export interface MonthData {

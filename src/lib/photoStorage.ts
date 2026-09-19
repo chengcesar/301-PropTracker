@@ -76,6 +76,26 @@ export async function deletePropertyDocument(url: string): Promise<void> {
   return deletePropertyPhoto(url)
 }
 
+/** Upload a contract-related file (lease PDF, insurance PDF), returns the download URL.
+ *  Stored under the same photos/ path (which already has Storage rules), namespaced by
+ *  contract id and kind so files stay traceable back to the contract that owns them. */
+export async function uploadContractFile(
+  propertyId: number,
+  contractId: number,
+  kind: 'contract' | 'insurance',
+  file: File,
+): Promise<string> {
+  const name = `${kind}-${contractId}-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+  const fileRef = ref(photosRef(propertyId).storage, `${photosRef(propertyId).fullPath}/${name}`)
+  await uploadBytes(fileRef, file, { contentType: file.type })
+  return getDownloadURL(fileRef)
+}
+
+/** Delete a contract file by its download URL. */
+export async function deleteContractFile(url: string): Promise<void> {
+  return deletePropertyPhoto(url)
+}
+
 /** Delete all photos for a property. */
 export async function deleteAllPropertyPhotos(propertyId: number): Promise<void> {
   const folder = photosRef(propertyId)

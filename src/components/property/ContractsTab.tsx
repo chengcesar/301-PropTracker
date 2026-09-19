@@ -6,6 +6,7 @@ import { fmtCurrency } from '../../lib/format'
 import { EditContractModal } from '../modals/EditContractModal'
 import { NewContractModal } from '../modals/NewContractModal'
 import { ActiveContractCard } from './ActiveContractCard'
+import { ContractDocsControls } from './ContractDocsControls'
 
 type Props = {
   prop: Property
@@ -160,6 +161,9 @@ export function ContractsTab({ prop, onUpdateProp, cx, displayCurrency }: Props)
                     <button type="button" className="danger fs12" onClick={() => setConfirmDelete(c.id)}>
                       Delete
                     </button>
+                    <div className="flex align-center gap4" style={{ marginLeft: 'auto' }}>
+                      <ContractDocsControls prop={prop} contract={c} onUpdateProp={onUpdateProp} />
+                    </div>
                   </div>
                 </div>
               </div>
