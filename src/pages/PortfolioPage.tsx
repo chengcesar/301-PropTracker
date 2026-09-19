@@ -771,7 +771,7 @@ const COL_KEYS = [
   'owner', 'country', 'status', 'nonLeaseOcc', 'endDate', 'taxStatus',
   'propertyType', 'bedrooms', 'area', 'bathrooms', 'parking', 'floor', 'estrato', 'yearBuilt', 'lastRenovation',
   'estValue', 'valueYoY', 'ownedSince', 'debt', 'mtgYearsLeft', 'equityPct',
-  'gpi', 'egi', 'egiPerM2', 'vacancyMoRate', 'opex', 'noi', 'noiPerM2', 'valuePerM2', 'capRate', 'capex', 'yieldOnCapex', 'payback', 'taxes', 'netCf', 'netCfAmortized', 'margin',
+  'gpi', 'egi', 'egiPerM2', 'egiPerM2Mo', 'vacancyMoRate', 'opex', 'noi', 'noiPerM2', 'valuePerM2', 'capRate', 'capex', 'yieldOnCapex', 'payback', 'taxes', 'netCf', 'netCfAmortized', 'margin',
 ] as const
 type ColKey = typeof COL_KEYS[number]
 const COL_LABELS: Record<ColKey, string> = {
@@ -779,7 +779,7 @@ const COL_LABELS: Record<ColKey, string> = {
   propertyType: 'Type', bedrooms: 'Beds', area: 'Area', bathrooms: 'Baths', parking: 'Parking',
   floor: 'Floor', estrato: 'Estrato', yearBuilt: 'Year Built', lastRenovation: 'Renovation',
   estValue: 'Est. value', valueYoY: 'Value YoY', ownedSince: 'Owned since', debt: 'Debt', mtgYearsLeft: 'Mortgage (yrs)', equityPct: 'Equity %',
-  gpi: 'GPI', egi: 'EGI', egiPerM2: '$/m²', vacancyMoRate: 'Vac. mo rate', opex: 'OPEX', noi: 'NOI',
+  gpi: 'GPI', egi: 'EGI', egiPerM2: '$/m²', egiPerM2Mo: '$/m²/mo', vacancyMoRate: 'Vac. mo rate', opex: 'OPEX', noi: 'NOI',
   noiPerM2: 'NOI/m²', valuePerM2: 'Value/m²',
   capRate: 'Cap rate', capex: 'CAPEX', yieldOnCapex: 'Yield on CAPEX', payback: 'Payback (yrs)', taxes: 'Taxes', netCf: 'Net CF', netCfAmortized: 'Net CF (Amortized)', margin: 'Margin',
 }
@@ -1019,6 +1019,11 @@ function formatCardMetricValue(
       const ar = p.area
       if (ar == null || ar <= 0) return dash
       return { text: fm(a.egi / ar), tone: 'pos' }
+    }
+    case 'egiPerM2Mo': {
+      const ar = p.area
+      if (ar == null || ar <= 0) return dash
+      return { text: fm(a.egi / ar / 12), tone: 'pos' }
     }
     case 'vacancyMoRate': {
       const m = vacancyLossMonthCount(py)
@@ -2091,6 +2096,11 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
           va = arA > 0 ? aa.egi / arA : -Infinity
           vb = arB > 0 ? ab.egi / arB : -Infinity
         }
+        else if (sortKey === 'egiPerM2Mo') {
+          const arA = a.area ?? 0, arB = b.area ?? 0
+          va = arA > 0 ? aa.egi / arA / 12 : -Infinity
+          vb = arB > 0 ? ab.egi / arB / 12 : -Infinity
+        }
         else if (sortKey === 'opex') { va = aa.totalOpex; vb = ab.totalOpex }
         else if (sortKey === 'noi') { va = aa.noi; vb = ab.noi }
         else if (sortKey === 'noiPerM2') {
@@ -2567,6 +2577,14 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
           const ar = p.area
           if (ar == null || ar <= 0) return ''
           return raw(a.egi / ar)
+        },
+      },
+      egiPerM2Mo: {
+        label: `$/m²/mo (${dc})`,
+        value: (p, a) => {
+          const ar = p.area
+          if (ar == null || ar <= 0) return ''
+          return raw(a.egi / ar / 12)
         },
       },
       vacancyMoRate: {
@@ -3692,6 +3710,15 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                         </td>
                       )
                     })(),
+                    egiPerM2Mo: (() => {
+                      const ar = p.area
+                      if (ar == null || ar <= 0) return <td key="egiPerM2Mo" className="text3">—</td>
+                      return (
+                        <td key="egiPerM2Mo" className="pos" title="Effective gross income for the selected year ÷ area ÷ 12 months">
+                          {fm(a.egi / ar / 12)}
+                        </td>
+                      )
+                    })(),
                     vacancyMoRate: (() => {
                       const m = vacancyLossMonthCount(withYear(p))
                       const pct = (m / 12) * 100
@@ -3805,6 +3832,11 @@ export function PortfolioPage({ properties, onSelectProperty, onAddProperty }: P
                     egiPerM2: (
                       <td key="egiPerM2" title="Sum of EGI ÷ sum of area (properties with area only)">
                         {portfolioPerM2Footer.egiPerM2 != null ? fm(portfolioPerM2Footer.egiPerM2) : '—'}
+                      </td>
+                    ),
+                    egiPerM2Mo: (
+                      <td key="egiPerM2Mo" title="Sum of EGI ÷ sum of area ÷ 12 (properties with area only)">
+                        {portfolioPerM2Footer.egiPerM2 != null ? fm(portfolioPerM2Footer.egiPerM2 / 12) : '—'}
                       </td>
                     ),
                     vacancyMoRate: (
