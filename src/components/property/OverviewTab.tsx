@@ -2,8 +2,10 @@ import { useRef, useState } from 'react'
 import { MONTHS, MONTHS_FULL } from '../../lib/constants'
 import type { MonthData, Occupant, Property } from '../../lib/types'
 import { activeContract, calcAnnual, contractForMonth, estimatedPropertyValueAtYear, expenseRowsForYear, getMonthData, projectedGpiAnnual, rentOnDate, resolveServices, sumMaintenanceForMonth, sumServiceOneTimeForMonth, vacancyLossMonthCount, yearMonths } from '../../lib/finance'
+import { capexDepreciationForMonth } from '../../lib/capexAmortization'
 import { type CurrencyCode } from '../../lib/currency'
 import { fmt, fmtCurrencyM } from '../../lib/format'
+import { renamePrimaryOwner } from '../../lib/ownership'
 import { MonthModal } from '../modals/MonthModal'
 import { OccupantModal } from '../modals/OccupantModal'
 import { KpiInfoIcon } from '../KpiInfoIcon'
@@ -40,6 +42,8 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
       : null
   const [monthModal, setMonthModal] = useState<number | null>(null)
   const [view, setView] = useState<'cards' | 'table'>('cards')
+  const [chartMode, setChartMode] = useState<'opex' | 'capex' | 'both'>('opex')
+  const [capexBasis, setCapexBasis] = useState<'cash' | 'amortized'>('cash')
   const [editCell, setEditCell] = useState<{ row: string; col: number } | null>(null)
   const [editValue, setEditValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -253,13 +257,25 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
       })
       .reduce((a, t) => a + (t.amount ?? 0), 0)
     const oneTime = sumServiceOneTimeForMonth(prop, i)
-    return { income: m.income, expense: m.totalOpex, tax, oneTime }
+    const capex = prop.capex.reduce((a, c) => {
+      if (capexBasis === 'amortized' && c.treatment === 'capitalize') {
+        return a + capexDepreciationForMonth(c, prop.contracts, prop.year, i)
+      }
+      const d = new Date(`${c.date}T12:00:00`)
+      return d.getFullYear() === prop.year && d.getMonth() === i ? a + c.amount : a
+    }, 0)
+    return { income: m.income, expense: m.totalOpex, tax, oneTime, capex }
   })
-  const maxVal = Math.max(
-    ...monthlyData.map((d) => d.income),
-    ...monthlyData.map((d) => d.expense + d.tax + d.oneTime),
-    1,
-  )
+  const showOpex = chartMode !== 'capex'
+  const showCapex = chartMode !== 'opex'
+  const outflow = (d: (typeof monthlyData)[number]) =>
+    (showOpex ? d.expense + d.tax + d.oneTime : 0) + (showCapex ? d.capex : 0)
+  const maxVal = Math.max(...monthlyData.map((d) => d.income), ...monthlyData.map(outflow), 1)
+  const chartModes = [
+    { key: 'opex', label: 'OpEx' },
+    { key: 'capex', label: 'CapEx' },
+    { key: 'both', label: 'Both' },
+  ] as const
 
   return (
     <div>
@@ -368,8 +384,42 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
 
         <div className="card">
           <div className="card-inner">
-            <div className="fw6 mb12" style={{ fontSize: '14px' }}>
-              Income vs expenses — {prop.year} monthly ({displayCurrency ?? prop.currency})
+            <div className="flex align-center mb12" style={{ justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+              <div className="fw6" style={{ fontSize: '14px' }}>
+                {chartMode === 'opex' ? 'Income vs expenses' : chartMode === 'capex' ? 'Income vs CapEx' : 'Income vs expenses + CapEx'} — {prop.year} monthly ({displayCurrency ?? prop.currency})
+              </div>
+              <div className="flex align-center gap8">
+                {showCapex && (
+                  <div className="view-toggle-group" role="group" aria-label="CapEx basis" title="Cash: full amount in the month paid. Amortized: capitalized items spread over their depreciation schedule.">
+                    {(['cash', 'amortized'] as const).map((b) => (
+                      <button
+                        key={b}
+                        type="button"
+                        className={`view-toggle-btn${capexBasis === b ? ' active' : ''}`}
+                        style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', color: capexBasis === b ? 'var(--accent-bg)' : undefined }}
+                        aria-pressed={capexBasis === b}
+                        onClick={() => setCapexBasis(b)}
+                      >
+                        {b === 'cash' ? 'Cash' : 'Amortized'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="view-toggle-group" role="group" aria-label="Chart outflow">
+                  {chartModes.map((m) => (
+                    <button
+                      key={m.key}
+                      type="button"
+                      className={`view-toggle-btn${chartMode === m.key ? ' active' : ''}`}
+                      style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', color: chartMode === m.key ? 'var(--accent-bg)' : undefined }}
+                      aria-pressed={chartMode === m.key}
+                      onClick={() => setChartMode(m.key)}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
             <div className="ie-chart">
               <div className="ie-axis">
@@ -382,10 +432,14 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
               <div className="ie-bars">
                 {monthlyData.map((d, i) => {
                   const incPct = maxVal > 0 ? (d.income / maxVal) * 100 : 0
-                  const expPct = maxVal > 0 ? (d.expense / maxVal) * 100 : 0
-                  const taxPct = maxVal > 0 ? (d.tax / maxVal) * 100 : 0
-                  const oneTimePct = maxVal > 0 ? (d.oneTime / maxVal) * 100 : 0
-                  const stackH = expPct + taxPct + oneTimePct
+                  const pct = (v: number) => (maxVal > 0 ? (v / maxVal) * 100 : 0)
+                  const segments = [
+                    { key: 'opex', color: '#fca5a5', value: showOpex ? pct(d.expense) : 0 },
+                    { key: 'tax', color: '#c4b5fd', value: showOpex ? pct(d.tax) : 0 },
+                    { key: 'oneTime', color: '#fdba74', value: showOpex ? pct(d.oneTime) : 0 },
+                    { key: 'capex', color: '#7dd3fc', value: showCapex ? pct(d.capex) : 0 },
+                  ].filter((s) => s.value > 0)
+                  const stackH = segments.reduce((a, s) => a + s.value, 0)
                   return (
                     <div key={i} className="ie-col ie-col-hover">
                       <div className="ie-col-upper">
@@ -396,49 +450,36 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                       </div>
                       <div className="ie-col-lower" style={{ alignItems: 'stretch' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', height: `${stackH}%` }}>
-                          {expPct > 0 && (
+                          {segments.map((s, si) => (
                             <div
+                              key={s.key}
                               className="ie-bar"
                               style={{
-                                flex: expPct,
-                                background: '#fca5a5',
-                                borderRadius: taxPct || oneTimePct ? '3px 3px 0 0' : '3px',
+                                flex: s.value,
+                                background: s.color,
+                                borderRadius:
+                                  segments.length === 1 ? '3px' : si === 0 ? '3px 3px 0 0' : si === segments.length - 1 ? '0 0 3px 3px' : 0,
                                 minHeight: 1,
                               }}
                             />
-                          )}
-                          {taxPct > 0 && (
-                            <div
-                              className="ie-bar"
-                              style={{
-                                flex: taxPct,
-                                background: '#c4b5fd',
-                                borderRadius: oneTimePct ? 0 : expPct ? '0 0 3px 3px' : '3px',
-                                minHeight: 1,
-                              }}
-                            />
-                          )}
-                          {oneTimePct > 0 && (
-                            <div
-                              className="ie-bar"
-                              style={{
-                                flex: oneTimePct,
-                                background: '#fdba74',
-                                borderRadius: '0 0 3px 3px',
-                                minHeight: 1,
-                              }}
-                            />
-                          )}
+                          ))}
                         </div>
                       </div>
                       <span className="ie-label">{MONTHS[i]}</span>
                       <div className="ie-tip">
                         <div style={{ fontWeight: 600, marginBottom: 4 }}>{MONTHS_FULL[i]}</div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#86efac' }}>Income</span><span>{fmt(cx(d.income))}</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#fca5a5' }}>OPEX</span><span>{fmt(cx(d.expense))}</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#c4b5fd' }}>Taxes</span><span>{fmt(cx(d.tax))}</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#fdba74' }}>One-time</span><span>{fmt(cx(d.oneTime))}</span></div>
-                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: 4, paddingTop: 4, display: 'flex', justifyContent: 'space-between', gap: 12, fontWeight: 600 }}><span>Net</span><span>{fmt(cx(d.income - d.expense - d.tax - d.oneTime))}</span></div>
+                        {showOpex && (
+                          <>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#fca5a5' }}>OPEX</span><span>{fmt(cx(d.expense))}</span></div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#c4b5fd' }}>Taxes</span><span>{fmt(cx(d.tax))}</span></div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#fdba74' }}>One-time</span><span>{fmt(cx(d.oneTime))}</span></div>
+                          </>
+                        )}
+                        {showCapex && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ color: '#7dd3fc' }}>{capexBasis === 'amortized' ? 'CapEx (amort.)' : 'CapEx'}</span><span>{fmt(cx(d.capex))}</span></div>
+                        )}
+                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: 4, paddingTop: 4, display: 'flex', justifyContent: 'space-between', gap: 12, fontWeight: 600 }}><span>Net</span><span>{fmt(cx(d.income - outflow(d)))}</span></div>
                       </div>
                     </div>
                   )
@@ -466,14 +507,14 @@ export function OverviewTab({ prop, onUpdateProp, cx = (n) => n, displayCurrency
                         onChange={(e) => setOwnerDraft(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
-                            onUpdateProp((p) => ({ ...p, owner: ownerDraft.trim() }))
+                            onUpdateProp((p) => renamePrimaryOwner(p, ownerDraft.trim()))
                             setEditingOwner(false)
                           }
                           if (e.key === 'Escape') setEditingOwner(false)
                         }}
                         style={{ fontSize: 13, padding: '3px 8px', borderRadius: 6, border: '1px solid #e8ecf2', background: '#f7f9fc', width: 180 }}
                       />
-                      <button type="button" className="primary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => { onUpdateProp((p) => ({ ...p, owner: ownerDraft.trim() })); setEditingOwner(false) }}>Save</button>
+                      <button type="button" className="primary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => { onUpdateProp((p) => renamePrimaryOwner(p, ownerDraft.trim())); setEditingOwner(false) }}>Save</button>
                       <button type="button" className="ghost" style={{ fontSize: 12 }} onClick={() => setEditingOwner(false)}>Cancel</button>
                     </div>
                   ) : (

@@ -3,6 +3,7 @@ import type { Property, MortgageInfo, OwnershipEntry, FactSheet } from '../../li
 import { CURRENCIES, normalizeCurrencyCode, resolveFunctionalCurrency, type CurrencyCode } from '../../lib/currency'
 import { CurrencySelect } from '../CurrencySelect'
 import { fmtCurrency } from '../../lib/format'
+import { patchPrimaryOwner as patchPrimaryOwnerOf } from '../../lib/ownership'
 import { buildAmortScheduleYearly, buildOutrightProjectionRows } from '../../lib/mortgageSchedule'
 import {
   Area,
@@ -504,40 +505,7 @@ export function ValueEquityTab({ prop, cx = (n) => n, displayCurrency, onUpdateP
   const ownerEquityPct: number | null = prop.equityPct ?? primary?.equityPct ?? null
 
   const patchPrimaryOwner = (patch: Partial<Pick<OwnershipEntry, 'name' | 'equityPct'>>) => {
-    onUpdateProp((p) => {
-      const f = (p.factSheet ?? {}) as FactSheet
-      const current: OwnershipEntry[] = f.owners?.length
-        ? [...f.owners]
-        : p.owner
-          ? [{ id: 0, name: p.owner, idNumber: '', equityPct: patch.equityPct ?? 100, notes: '' }]
-          : []
-
-      let next: OwnershipEntry[]
-      if (current.length === 0) {
-        next = [{
-          id: Date.now(),
-          name: patch.name ?? '',
-          idNumber: '',
-          equityPct:
-            patch.equityPct !== undefined && Number.isFinite(patch.equityPct) ? patch.equityPct : 100,
-          notes: '',
-        }]
-      } else {
-        next = current.map((o, i) => (i === 0 ? { ...o, ...patch } : o))
-      }
-
-      const primaryOwner = next[0]?.name || ''
-      const ownerDisplay = next.length <= 2
-        ? next.map((o) => o.name).filter(Boolean).join(', ')
-        : `${primaryOwner} +${next.length - 1}`
-
-      return {
-        ...p,
-        owner: ownerDisplay || p.owner,
-        equityPct: patch.equityPct !== undefined ? patch.equityPct : p.equityPct,
-        factSheet: { ...f, owners: next } as FactSheet,
-      } as Property
-    })
+    onUpdateProp((p) => patchPrimaryOwnerOf(p, patch))
   }
 
   const tableTh: CSSProperties = {
